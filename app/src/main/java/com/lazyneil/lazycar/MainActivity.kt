@@ -103,6 +103,7 @@ class MainActivity : AppCompatActivity() {
             .filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (want.isNotEmpty()) ActivityCompat.requestPermissions(this, want.toTypedArray(), 1)
         com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
+        if (Role.isTablet(this)) com.lazyneil.lazycar.audio.StreamReceiver.sync(this)
 
         findViewById<ImageButton>(R.id.settingsBtn).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))

@@ -1,0 +1,207 @@
+package com.lazyneil.lazycar.audio
+
+import android.app.Activity
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioPlaybackCaptureConfiguration
+import android.media.AudioRecord
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
+import android.net.wifi.WifiManager
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
+import android.os.SystemClock
+import android.util.Log
+import com.lazyneil.lazycar.R
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetSocketAddress
+import java.net.SocketAddress
+import java.nio.ByteBuffer
+import kotlin.concurrent.thread
+import kotlin.math.sqrt
+
+/** Phone side: captures media playback (what goes to the JBL) and streams raw PCM to the tablet. */
+class StreamSender : Service() {
+    companion object {
+        @Volatile var running = false
+        @Volatile var tablet = ""       // tablet ip once its beacon arrives
+        @Volatile var kbps = 0
+        @Volatile var rms = 0           // capture level, 0 = silence (app blocks capture or nothing playing)
+        @Volatile var error = ""
+        @Volatile var outMs = 0         // mixer to JBL latency, from the monitor track
+        @Volatile var capMs = 0         // mixer to our read() latency, from the AudioRecord timestamp
+
+        /** ms from writing a frame to it leaving the device, from the track's own timestamp. */
+        fun latencyMs(t: android.media.AudioTrack, written: Long): Int? {
+            val ts = android.media.AudioTimestamp()
+            if (!t.getTimestamp(ts)) return null
+            val heard = ts.framePosition + (System.nanoTime() - ts.nanoTime) * Wire.RATE / 1_000_000_000
+            return ((written - heard) * 1000 / Wire.RATE).toInt()
+        }
+
+        /** GO entry: needs the MediaProjection consent, which only an activity can ask for. */
+        fun start(ctx: Context) {
+            if (running) return
+            ctx.startActivity(Intent(ctx, Consent::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+
+        fun stop(ctx: Context) { ctx.stopService(Intent(ctx, StreamSender::class.java)) }
+    }
+
+    /** Invisible: asks mic permission if missing, then the capture consent (auto-granted with appops PROJECT_MEDIA allow). */
+    class Consent : Activity() {
+        override fun onCreate(savedInstanceState: Bundle?) {
+            super.onCreate(savedInstanceState)
+            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+                requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
+            else ask()
+        }
+        override fun onRequestPermissionsResult(rc: Int, p: Array<out String>, r: IntArray) {
+            if (r.firstOrNull() == PackageManager.PERMISSION_GRANTED) ask() else { error = "Microphone permission needed"; finish() }
+        }
+        // The consent is per session on Android 14+; TapService taps it so GO stays zero-touch.
+        private fun ask() = com.lazyneil.lazycar.TapService.armButtons(listOf("Start now", "Share screen", "Start")).let { val mpm = getSystemService(MediaProjectionManager::class.java)
+            // Whole display, so the dialog skips the "Share one app" picker.
+            startActivityForResult(if (android.os.Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(
+                android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent(), 2) }
+        override fun onActivityResult(rc: Int, res: Int, data: Intent?) {
+            if (res == RESULT_OK && data != null)
+                startForegroundService(Intent(this, StreamSender::class.java).putExtra("data", data))
+            else error = "Capture consent denied"
+            finish()
+        }
+    }
+
+    @Volatile private var alive = false
+    private var projection: MediaProjection? = null
+    private var socket: DatagramSocket? = null
+    private var lock: WifiManager.MulticastLock? = null
+    private var wake: PowerManager.WakeLock? = null
+
+    override fun onBind(intent: Intent?) = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val data = intent?.getParcelableExtra("data", Intent::class.java) ?: run { stopSelf(); return START_NOT_STICKY }
+        if (running) return START_NOT_STICKY
+        getSystemService(NotificationManager::class.java)
+            .createNotificationChannel(NotificationChannel("speaker", "Tablet speaker", NotificationManager.IMPORTANCE_LOW))
+        startForeground(47475, Notification.Builder(this, "speaker").setContentTitle("Tablet speaker")
+            .setContentText("Streaming media audio to the tablet").setSmallIcon(R.drawable.ic_car_glyph).setOngoing(true).build(),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+        try {
+            val mp = getSystemService(MediaProjectionManager::class.java).getMediaProjection(Activity.RESULT_OK, data)
+            mp.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, Handler(Looper.getMainLooper()))
+            projection = mp
+            alive = true; running = true; error = ""; tablet = ""
+            lock = getSystemService(WifiManager::class.java).createMulticastLock("speaker").apply { acquire() }
+            wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "carapp:speaker").apply { acquire() }
+            capture(mp)
+        } catch (e: Exception) { error = e.message ?: e.toString(); Log.e("LazyCar", "speaker send", e); stopSelf() }
+        return START_NOT_STICKY
+    }
+
+    private fun capture(mp: MediaProjection) {
+        val cfg = AudioPlaybackCaptureConfiguration.Builder(mp)
+            .addMatchingUsage(AudioAttributes.USAGE_MEDIA).addMatchingUsage(AudioAttributes.USAGE_GAME)
+            .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN).build()
+        val fmt = AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(Wire.RATE)
+            .setChannelMask(AudioFormat.CHANNEL_IN_STEREO).build()
+        val rec = AudioRecord.Builder().setAudioFormat(fmt).setAudioPlaybackCaptureConfig(cfg)
+            .setBufferSizeInBytes(Wire.CHUNK * 16).build()
+        val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; bind(InetSocketAddress(Wire.PHONE_PORT)) }
+        socket = s
+        var dest: SocketAddress? = null
+        var beaconT = 0L; var beaconAt = 0L
+
+        // Tablet beacons once a second; its source address is where audio goes.
+        thread(name = "speaker-beacon") {
+            val buf = ByteArray(64)
+            while (alive) try {
+                val p = DatagramPacket(buf, buf.size); s.receive(p)
+                if (p.length == 14 && String(buf, 0, 6) == Wire.MAGIC) {
+                    beaconT = ByteBuffer.wrap(buf, 6, 8).long; beaconAt = SystemClock.elapsedRealtime()
+                    dest = p.socketAddress; tablet = p.address.hostAddress ?: ""
+                }
+            } catch (_: Exception) {}
+        }
+        thread(name = "speaker-capture") {
+            rec.startRecording()
+            val pkt = ByteArray(Wire.HEADER + Wire.CHUNK)
+            val bb = ByteBuffer.wrap(pkt)
+            var seq = 0; var bytes = 0L; var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
+            var readFrames = 0L; val rts = android.media.AudioTimestamp()
+            while (alive) {
+                val r = rec.read(pkt, Wire.HEADER, Wire.CHUNK)
+                if (r <= 0) { if (r < 0) { error = "Capture read $r"; break }; continue }
+                for (i in 0 until r / 2) { val v = bb.getShort(Wire.HEADER + i * 2).toInt(); sq += v * v.toDouble() }
+                n += r / 2; readFrames += r / 4
+                val now = SystemClock.elapsedRealtime()
+                val d = dest
+                if (d != null && now - beaconAt < 5000) {
+                    bb.putInt(0, seq++).putLong(4, beaconT).putInt(12, (now - beaconAt).toInt()).putInt(16, outMs - capMs)
+                    try { s.send(DatagramPacket(pkt, Wire.HEADER + r, d)); bytes += Wire.HEADER + r } catch (_: Exception) {}
+                } else tablet = ""
+                if (now - secAt >= 1000) {
+                    rms = sqrt(sq / maxOf(n, 1)).toInt(); kbps = (bytes * 8 / (now - secAt)).toInt()
+                    if (rec.getTimestamp(rts, android.media.AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS)
+                        capMs = ((rts.framePosition - readFrames) * 1000 / Wire.RATE + (System.nanoTime() - rts.nanoTime) / 1_000_000).toInt()
+                    Log.e("LazyCar", "speaker send rms=$rms kbps=$kbps out=$outMs cap=$capMs tablet=$tablet")
+                    sq = 0.0; n = 0; bytes = 0; secAt = now
+                }
+            }
+            rec.stop(); rec.release()
+        }
+        // Silent media track on the same route as the music: its timestamp is the real phone to JBL latency,
+        // A2DP delay reporting included. ponytail: SBC-ish 150 ms added when the HAL hides the BT part.
+        thread(name = "speaker-monitor") {
+            val t = android.media.AudioTrack.Builder()
+                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build())
+                .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(Wire.RATE)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build()).build()
+            val zero = ByteArray(Wire.CHUNK * 4); var written = 0L; var at = 0L
+            t.play()
+            while (alive) {
+                written += t.write(zero, 0, zero.size).coerceAtLeast(0) / 4
+                val now = SystemClock.elapsedRealtime()
+                if (now - at > 1000) { at = now
+                    val bt = t.routedDevice?.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+                    // Blocking writes keep the client buffer full; the music is captured after it, so drop it.
+                    latencyMs(t, written)?.let { val mix = it - t.bufferSizeInFrames * 1000 / Wire.RATE
+                        outMs = if (bt && mix < 100) mix + 150 else mix }
+                }
+            }
+            t.stop(); t.release()
+        }
+    }
+
+    override fun onDestroy() {
+        alive = false; running = false; tablet = ""; kbps = 0; rms = 0
+        socket?.close(); socket = null
+        projection?.stop(); projection = null
+        lock?.release(); lock = null
+        wake?.release(); wake = null
+        super.onDestroy()
+    }
+}
+
+/** Shared wire format: tablet beacons "CARSPK"+time to PHONE_PORT, phone answers with PCM packets. */
+object Wire {
+    const val MAGIC = "CARSPK"
+    const val PHONE_PORT = 47476
+    const val TABLET_PORT = 47475
+    const val RATE = 48000
+    const val CHUNK = 960          // 5 ms of 48 kHz stereo 16-bit, fits one Wi-Fi frame
+    const val CHUNK_MS = 5
+    const val HEADER = 20          // seq int, echoed beacon time long, ms held since beacon int, phone output latency int
+}

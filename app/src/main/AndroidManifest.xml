@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Tablet speaker over Wi-Fi (audio/) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <!-- GPS link (phone sends, tablet receives and mocks) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -190,6 +192,25 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- Tablet speaker over Wi-Fi: phone captures media audio, tablet plays it -->
+        <activity
+            android:name=".audio.StreamSender$Consent"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Translucent" />
+        <service
+            android:name=".audio.StreamSender"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+        <service
+            android:name=".audio.StreamReceiver"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="plays the phone's media audio on the head unit speaker" />
+        </service>
 
     </application>
 </manifest>

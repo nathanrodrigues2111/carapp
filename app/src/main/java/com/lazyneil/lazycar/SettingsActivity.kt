@@ -165,6 +165,7 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.gpsCaption).text = if (tablet)
             "Receives the phone's location over its hotspot and feeds it to every app"
         else "Broadcasts this phone's location to the head unit tablet over the hotspot"
+        com.lazyneil.lazycar.audio.TabletSpeaker.addSettings(this, findViewById(R.id.gpsCaption))
     }
 
     // ---- launch on widget tap ----
