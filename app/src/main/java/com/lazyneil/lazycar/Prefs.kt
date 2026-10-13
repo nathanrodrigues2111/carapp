@@ -16,6 +16,8 @@ class Prefs(ctx: Context) {
     var name2: String get() = s("name2"); set(v) = put("name2", v)
     var name3: String get() = s("name3"); set(v) = put("name3", v)
     var headunitIp: String get() = s("ip"); set(v) = put("ip", v)
+    // Tablet joins this phone hotspot on start (saved network on the tablet).
+    var hotspotSsid: String get() = sp.getString("hotspotSsid", null) ?: "Nathan's Oneplus"; set(v) = put("hotspotSsid", v)
     private fun b(k: String, def: Boolean) = sp.getBoolean(k, def)
     private fun putB(k: String, v: Boolean) = sp.edit().putBoolean(k, v).apply()
 

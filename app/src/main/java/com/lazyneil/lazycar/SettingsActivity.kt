@@ -118,6 +118,8 @@ class SettingsActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         p.headunitIp = findViewById<TextInputEditText>(R.id.ipField).text.toString().trim()
+        val ssid = findViewById<TextInputEditText>(R.id.ssidField).text.toString().trim()
+        if (Role.isTablet(this) && ssid.isNotEmpty() && ssid != p.hotspotSsid) { p.hotspotSsid = ssid; TapService.joinHotspot() }
     }
 
     private fun bindDevice() {
@@ -126,6 +128,8 @@ class SettingsActivity : AppCompatActivity() {
         intArrayOf(R.id.dualSwitch, R.id.dualCaption, R.id.headunitSwitch, R.id.headunitDetected,
             R.id.headunitExtra, R.id.hotspotSwitch, R.id.hotspotCaption, R.id.mobileSwitch, R.id.a11yRow)
             .forEach { if (tablet) findViewById<View>(it).visibility = View.GONE }
+        findViewById<View>(R.id.ssidBox).visibility = if (tablet) View.VISIBLE else View.GONE
+        findViewById<TextInputEditText>(R.id.ssidField).setText(p.hotspotSsid)
         findViewById<View>(R.id.camRow).apply {
             visibility = if (tablet) View.VISIBLE else View.GONE
             setOnClickListener { startActivity(Intent(this@SettingsActivity, com.lazyneil.lazycar.rear.RearSettingsActivity::class.java)) }

@@ -54,7 +54,10 @@ class DashboardActivity : AppCompatActivity() {
         val openCam = View.OnClickListener { startActivity(Intent(this, RearActivity::class.java)) }
         findViewById<View>(R.id.camCard).setOnClickListener(openCam)
         findViewById<MaterialButton>(R.id.camOpen).setOnClickListener(openCam)
-        findViewById<MaterialButton>(R.id.setupBtn).setOnClickListener { requestPermissions(missing(), 1) }
+        findViewById<MaterialButton>(R.id.setupBtn).setOnClickListener {
+            if (missing().isNotEmpty()) requestPermissions(missing(), 1)
+            else startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
         Role.applyComponents(this)
         if (missing().isNotEmpty()) requestPermissions(missing(), 1)
     }
@@ -64,6 +67,7 @@ class DashboardActivity : AppCompatActivity() {
         if (!Role.isTablet(this)) { startActivity(Intent(this, MainActivity::class.java)); finish(); return }
         if (p.amoled != amoledApplied || p.accent != accentApplied) { recreate(); return }
         GpsService.startIfIdle(this)
+        TapService.joinHotspot()
         handler.post(tick)
     }
 
@@ -80,9 +84,13 @@ class DashboardActivity : AppCompatActivity() {
 
     private fun render() {
         val miss = missing()
-        findViewById<View>(R.id.setupCard).visibility = if (miss.isEmpty()) View.GONE else View.VISIBLE
-        findViewById<TextView>(R.id.setupBody).text = "Allow " + miss.joinToString(", ") {
+        // The accessibility service is what turns Wi-Fi on and joins the phone hotspot.
+        val a11y = (android.provider.Settings.Secure.getString(contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: "").contains("$packageName/")
+        findViewById<View>(R.id.setupCard).visibility = if (miss.isEmpty() && a11y) View.GONE else View.VISIBLE
+        findViewById<TextView>(R.id.setupBody).text = if (miss.isNotEmpty()) "Allow " + miss.joinToString(", ") {
             it.substringAfterLast('.').lowercase().replace('_', ' ') }
+            else "Turn on CarApp in Accessibility so it can join the phone hotspot"
 
         val green = 0xFF2EB872.toInt(); val amber = 0xFFF2A93B.toInt(); val off = getColor(R.color.secondaryText)
 

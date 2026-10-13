@@ -2,6 +2,12 @@ package com.lazyneil.lazycar
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -55,6 +61,91 @@ class TapService : AccessibilityService() {
             instance?.startTilePoll()
         }
         fun disarmTiles() { tileArmedUntil = 0L; tiles = emptyList() }
+
+        /** Tablet: get onto the phone hotspot. Safe to call often, it restarts the retry window. */
+        fun joinHotspot() { instance?.let { it.h.post { it.startJoin() } } }
+    }
+
+    // ---- tablet: join the phone hotspot ----
+    // Android 16 blocks setWifiEnabled for normal apps, so this drives the Wi-Fi panel instead:
+    // tap the toggle if Wi-Fi is off, then tap the hotspot row. Checked every 15 s for 3 min,
+    // the panel only opens when Wi-Fi is off or the hotspot is visible but not joined.
+    @Volatile private var wifiSsid = ""
+    private var joinCb: ConnectivityManager.NetworkCallback? = null
+    private var joinTries = 0
+    private var panelUntil = 0L
+    private var panelTapped = false
+    private fun target() = Prefs(this).hotspotSsid.trim()
+
+    private fun startJoin() {
+        if (!Role.isTablet(this) || target().isEmpty()) return
+        if (joinCb == null) try {
+            joinCb = object : ConnectivityManager.NetworkCallback(FLAG_INCLUDE_LOCATION_INFO) {
+                override fun onCapabilitiesChanged(n: Network, c: NetworkCapabilities) {
+                    wifiSsid = (c.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"") ?: ""
+                }
+                override fun onLost(n: Network) { wifiSsid = "" }
+            }.also {
+                getSystemService(ConnectivityManager::class.java).registerNetworkCallback(
+                    NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), it)
+            }
+        } catch (e: Exception) { android.util.Log.e("LazyCar", "wifi callback: $e") }
+        joinTries = 0
+        h.removeCallbacks(joinTick)
+        h.postDelayed(joinTick, 1500)   // let the callback report the current network first
+    }
+
+    private val joinTick = object : Runnable {
+        override fun run() {
+            val wm = getSystemService(WifiManager::class.java)
+            val t = target()
+            if (wm.isWifiEnabled && wifiSsid == t) { android.util.Log.e("LazyCar", "join: on hotspot"); return }
+            if (joinTries++ >= 12) { android.util.Log.e("LazyCar", "join: gave up"); return }
+            @Suppress("DEPRECATION") val visible = wm.isWifiEnabled && wm.scanResults.any { it.SSID == t }
+            android.util.Log.e("LazyCar", "join: try $joinTries wifi=${wm.isWifiEnabled} visible=$visible")
+            if (!wm.isWifiEnabled || visible) openWifiPanel()
+            h.postDelayed(this, 15000)
+        }
+    }
+
+    private fun openWifiPanel() {
+        if (SystemClock.uptimeMillis() < panelUntil) return
+        try {
+            startActivity(Intent(android.provider.Settings.Panel.ACTION_WIFI).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) { android.util.Log.e("LazyCar", "join: panel $e"); return }
+        panelUntil = SystemClock.uptimeMillis() + 10000; panelTapped = false
+        h.removeCallbacks(panelPoll); h.postDelayed(panelPoll, 600)
+    }
+
+    private val panelPoll = object : Runnable {
+        override fun run() {
+            if (SystemClock.uptimeMillis() >= panelUntil) { closePanel(); return }
+            val root = windows?.mapNotNull { it.root }?.firstOrNull { it.packageName == "com.android.settings" }
+            if (root != null) {
+                val sw = find(root) { it.isCheckable && it.className?.contains("Switch") == true }
+                if (sw != null && !sw.isChecked) {
+                    val ok = (if (sw.isClickable) sw else clickableAncestor(sw) ?: sw).performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    android.util.Log.e("LazyCar", "join: tapped Wi-Fi toggle ok=$ok")
+                } else if (sw != null && wifiSsid == target()) { closePanel(); return }
+                else if (sw != null && !panelTapped) {
+                    val row = find(root) { it.text?.toString() == target() }
+                    if (row != null) {
+                        val ok = (clickableAncestor(row) ?: row).performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        android.util.Log.e("LazyCar", "join: tapped hotspot row ok=$ok")
+                        panelTapped = true
+                        panelUntil = SystemClock.uptimeMillis() + 2500   // give the connect a moment, then close
+                    }
+                }
+            }
+            h.postDelayed(this, 400)
+        }
+    }
+
+    private fun closePanel() {
+        h.removeCallbacks(panelPoll)
+        panelUntil = 0L
+        val settingsOnTop = windows?.any { it.isActive && it.root?.packageName == "com.android.settings" } == true
+        if (settingsOnTop) performGlobalAction(GLOBAL_ACTION_BACK)
     }
 
     private val h = Handler(Looper.getMainLooper())
@@ -65,8 +156,12 @@ class TapService : AccessibilityService() {
     private var tileFinished = false
     private val tileDone = Collections.synchronizedSet(mutableSetOf<String>())
 
-    override fun onServiceConnected() { instance = this }
-    override fun onDestroy() { if (instance === this) instance = null; super.onDestroy() }
+    override fun onServiceConnected() { instance = this; startJoin() }   // the system binds us at boot
+    override fun onDestroy() {
+        if (instance === this) instance = null
+        joinCb?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }
+        super.onDestroy()
+    }
     override fun onInterrupt() {}
 
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {
