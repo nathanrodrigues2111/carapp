@@ -71,6 +71,9 @@ class GpsService : Service(), LocationListener {
     private lateinit var lm: LocationManager
     private var socket: DatagramSocket? = null
     private var wifiLock: WifiManager.MulticastLock? = null
+    // Doze with the screen off otherwise sleeps the CPU and Wi-Fi radio and drops the broadcasts.
+    private var wake: android.os.PowerManager.WakeLock? = null
+    private var radio: WifiManager.WifiLock? = null
     private var targets = setOf<InetAddress>()
     private var targetsAt = 0L
     private var notifiedAt = 0L
@@ -198,7 +201,11 @@ class GpsService : Service(), LocationListener {
     private fun startReceive() {
         mocking = true; setMocking(false)   // drop test providers a previous process left behind
         // Some Wi-Fi drivers drop broadcast frames without this lock.
-        wifiLock = getSystemService(WifiManager::class.java).createMulticastLock("lazygps").apply { acquire() }
+        val wm = getSystemService(WifiManager::class.java)
+        wifiLock = wm.createMulticastLock("lazygps").apply { setReferenceCounted(false); acquire() }
+        radio = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "lazygps").apply { setReferenceCounted(false); acquire() }
+        wake = getSystemService(android.os.PowerManager::class.java)
+            .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "lazycar:gps").apply { setReferenceCounted(false); acquire() }
         val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; soTimeout = 1000; bind(InetSocketAddress(PORT)) }
         socket = s
         val holdMs = holdSec(this) * 1000L
@@ -239,6 +246,8 @@ class GpsService : Service(), LocationListener {
         tick.removeCallbacks(repeat); last = null
         socket?.close(); socket = null
         wifiLock?.release(); wifiLock = null
+        radio?.release(); radio = null
+        wake?.release(); wake = null
         if (::lm.isInitialized) {
             lm.removeUpdates(this)
             lm.unregisterGnssStatusCallback(gnss)

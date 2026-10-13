@@ -137,7 +137,7 @@ object GoAction {
             if (p.volOn) main.postDelayed({ enforceStartVolume(ctx, p.vol, 12000L) }, maxOf(settle, 300L))
 
             if (musicActive) log("skipped MEDIA_PLAY (music active)")
-            else { main.postDelayed({ playMedia(ctx) }, shareAt + 1500); doneAt = maxOf(doneAt, shareAt + 1500) }
+            else { main.postDelayed({ playMedia(ctx, p.playerPkg) }, shareAt + 1500); doneAt = maxOf(doneAt, shareAt + 1500) }
 
             if (p.headunit) { main.postDelayed({ launchHeadunit(ctx, p.headunitIp) }, shareAt + 2000); doneAt = maxOf(doneAt, shareAt + 2000) }
             main.postDelayed({ if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0); TapService.launchApps(ctx) } }, doneAt + 300L)
@@ -438,7 +438,18 @@ object GoAction {
     }
 
     private fun pauseMedia(ctx: Context) = mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PAUSE)
-    private fun playMedia(ctx: Context) = mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PLAY)
+    /** Pause whatever holds the media keys (e.g. a video app), then PLAY straight to the chosen player's receiver. */
+    private fun playMedia(ctx: Context, pkg: String) {
+        if (pkg.isEmpty()) { mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PLAY); return }
+        mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PAUSE)
+        Handler(Looper.getMainLooper()).postDelayed({
+            val t = SystemClock.uptimeMillis()
+            for (a in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP))
+                ctx.sendBroadcast(Intent(Intent.ACTION_MEDIA_BUTTON).setPackage(pkg)
+                    .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(t, t, a, KeyEvent.KEYCODE_MEDIA_PLAY, 0)))
+            log("sent MEDIA_PLAY to $pkg")
+        }, 400)
+    }
     private fun mediaKey(ctx: Context, code: Int) {
         val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val t = SystemClock.uptimeMillis()
