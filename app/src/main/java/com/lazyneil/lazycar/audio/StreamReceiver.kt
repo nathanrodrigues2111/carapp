@@ -63,7 +63,9 @@ class StreamReceiver : Service() {
                 .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
             .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
             .setBufferSizeInBytes(AudioTrack.getMinBufferSize(Wire.RATE, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT) * 2)
-            .build().apply { setPreferredDevice(device); setVolume(0.2f) }   // user rule: keep the copy quiet
+            .build().apply { setPreferredDevice(device); setVolume(1f) }
+        // ponytail: fixed +6 dB boost, no setting; add a slider if it needs tuning
+        private val boost = try { android.media.audiofx.LoudnessEnhancer(track.audioSessionId).apply { setTargetGain(600); enabled = true } } catch (e: Exception) { null }
         val routed get() = track.routedDevice?.productName?.toString() + " (" + (track.routedDevice?.type ?: -1) + ")"
 
         fun run(alive: () -> Boolean) = thread(name = "speaker-$name") {
@@ -82,7 +84,7 @@ class StreamReceiver : Service() {
                 val times = if (total < target - 30) 2 else 1           // too early: repeat 5 ms
                 repeat(times) { written += track.write(c, 0, c.size).coerceAtLeast(0) }
             }
-            track.stop(); track.release()
+            track.stop(); boost?.release(); track.release()
         }
     }
 
