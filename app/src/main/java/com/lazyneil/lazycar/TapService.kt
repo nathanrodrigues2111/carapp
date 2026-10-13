@@ -239,7 +239,14 @@ class TapService : AccessibilityService() {
     private var tileFinished = false
     private val tileDone = Collections.synchronizedSet(mutableSetOf<String>())
 
-    override fun onServiceConnected() { instance = this; startJoin() }   // the system binds us at boot
+    override fun onServiceConnected() {   // the system binds us at boot, after an update and after a process restart
+        instance = this; startJoin()
+        if (!Role.isTablet(this) && SystemClock.elapsedRealtime() > 120_000) h.postDelayed({
+            val p = Prefs(this)
+            if (GoAction.effectiveState(p) == GoAction.ON && com.lazyneil.lazycar.audio.TabletSpeaker.enabled(this) &&
+                !com.lazyneil.lazycar.audio.StreamSender.running) com.lazyneil.lazycar.audio.TabletSpeaker.onGo(this)
+        }, 2000)
+    }
     override fun onDestroy() {
         if (instance === this) instance = null
         joinCb?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }

@@ -139,7 +139,10 @@ class StreamReceiver : Service() {
                 val seq = bb.getInt(0)
                 netMs = ((now - bb.getLong(4) - bb.getInt(12)) / 2).toInt()
                 phoneOutMs = bb.getInt(16)
-                if (now - lastAt > 2000) last = seq - 1                    // fresh stream (phone restarted)
+                if (now - lastAt > 2000) {                                  // fresh stream (phone restarted)
+                    last = seq - 1
+                    com.lazyneil.lazycar.media.Volumes.applyTablet(ctx, com.lazyneil.lazycar.media.Volumes.tabletSaved(ctx))
+                }
                 if (seq <= last) continue                                   // late duplicate or reordered
                 val chunk = buf.copyOfRange(Wire.HEADER, p.length)
                 for (i in Wire.HEADER until p.length - 1 step 8) { val v = bb.getShort(i).toDouble(); sq += v * v; n++ }

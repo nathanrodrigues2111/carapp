@@ -140,11 +140,16 @@ class MainActivity : AppCompatActivity() {
         stateReceiver = null
     }
 
+    private var volumesAdded = false
+
     override fun onResume() {
         super.onResume()
         if (isFinishing) return
         if (p.amoled != amoledApplied || p.accent != accentApplied) { recreate(); return }   // AMOLED/accent changed in Settings
         refreshSetup()
+        if (!volumesAdded) { volumesAdded = true
+            val row = findViewById<View>(R.id.tabletValue).parent as View
+            (row.parent as android.view.ViewGroup).let { com.lazyneil.lazycar.media.Volumes.attach(this, it, it.indexOfChild(row) + 1) } }
         buildOutputs()                       // reflect BT state changes made in Settings
         refreshGoButton()
         GoAction.deriveState(applicationContext, p) { refreshGoButton() }   // match reality after reboot

@@ -63,6 +63,7 @@ class DashboardActivity : AppCompatActivity() {
             else startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
         setupNowPlaying()
+        findViewById<android.view.ViewGroup>(R.id.npVol).let { com.lazyneil.lazycar.media.Volumes.attach(this, it, 0) }
         Role.applyComponents(this)
         if (missing().isNotEmpty()) requestPermissions(missing(), 1)
     }
@@ -118,7 +119,6 @@ class DashboardActivity : AppCompatActivity() {
         }
         findViewById<TextView>(R.id.npPos).text = if (dur > 0) clock(pos) else ""
         findViewById<TextView>(R.id.npDur).text = if (dur > 0) clock(dur) else ""
-        findViewById<TextView>(R.id.npVol).text = if (PhoneMedia.connected) "Phone volume ${np.optInt("vol")} of ${np.optInt("volMax")}" else ""
         for (id in intArrayOf(R.id.npPrev, R.id.npPlay, R.id.npNext, R.id.npVolDown, R.id.npVolUp, R.id.npLibrary))
             findViewById<View>(id).isEnabled = PhoneMedia.connected
     }

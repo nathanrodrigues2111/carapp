@@ -37,7 +37,7 @@ object TabletSpeaker {
         when {
             !r.running -> "Off"
             SystemClock.elapsedRealtime() - r.lastAt > 2000 -> "Waiting for the phone"
-            else -> "Connected to ${r.phone}, ${r.kbps} kbps, level ${r.rms}, network ${r.netMs} ms, JBL plays ${r.phoneOutMs} ms after send, auto delay ${r.phoneOutMs - r.netMs} ms" +
+            else -> "Connected to ${r.phone}, ${Wire.FORMAT}, tablet native ${android.media.AudioTrack.getNativeOutputSampleRate(android.media.AudioManager.STREAM_MUSIC)} Hz, ${r.kbps} kbps, level ${r.rms}, network ${r.netMs} ms, JBL plays ${r.phoneOutMs} ms after send, auto delay ${r.phoneOutMs - r.netMs} ms" +
                 r.outputs.joinToString("") { ". ${it.name}: buffer ${it.queueMs} ms, track ${it.trackMs} ms, behind capture ${r.netMs + it.queueMs + it.trackMs} ms, underruns ${it.underruns}" } +
                 ", lost ${r.lost}"
         }
@@ -47,7 +47,7 @@ object TabletSpeaker {
             s.error.isNotEmpty() && !s.running -> s.error
             !s.running -> "Starts with GO"
             s.tablet.isEmpty() -> "Capturing, waiting for the tablet"
-            else -> "Streaming to ${s.tablet}, ${s.kbps} kbps, level ${s.rms}, JBL latency ${s.outMs} ms, capture ${s.capMs} ms" + players(ctx).let { p ->
+            else -> "Streaming to ${s.tablet}, ${Wire.FORMAT}, ${s.kbps} kbps, level ${s.rms}, JBL latency ${s.outMs} ms, capture ${s.capMs} ms" + players(ctx).let { p ->
                 if (p.isEmpty()) ", nothing playing" else if (s.rms == 0) ". Silent, blocking capture: $p" else ". Capturing: $p"
             }
         }

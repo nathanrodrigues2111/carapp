@@ -172,12 +172,12 @@
                         <com.google.android.material.button.MaterialButton android:id="@+id/npLibrary" style="@style/NpButton"
                             android:contentDescription="Library" app:icon="@drawable/ic_library" />
                     </LinearLayout>
-                    <TextView
+                    <LinearLayout
                         android:id="@+id/npVol"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/secondaryText"
-                        android:textSize="14sp" />
+                        android:layout_marginTop="8dp"
+                        android:orientation="vertical" />
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

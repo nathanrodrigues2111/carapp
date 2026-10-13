@@ -203,5 +203,6 @@ object Wire {
     const val RATE = 48000
     const val CHUNK = 960          // 5 ms of 48 kHz stereo 16-bit, fits one Wi-Fi frame
     const val CHUNK_MS = 5
+    const val FORMAT = "lossless PCM 48 kHz 16-bit stereo"
     const val HEADER = 20          // seq int, echoed beacon time long, ms held since beacon int, phone output latency int
 }

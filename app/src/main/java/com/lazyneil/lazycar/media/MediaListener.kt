@@ -43,15 +43,19 @@ class MediaListener : NotificationListenerService() {
         @Volatile var bound = false
         @Volatile var clients = 0
         @Volatile var player = ""
+        @Volatile var tabletPct = -1     // tablet speaker level, reported by the tablet
+        private var self: MediaListener? = null
+        /** Phone slider: tell every tablet to set its speaker level. */
+        fun setTablet(pct: Int) { tabletPct = pct; self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "tvol").put("pct", pct).toString()) } } }
         fun granted(ctx: Context) = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
         fun settingsIntent() = Intent("android.settings.NOTIFICATION_LISTENER_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
-    private class Client(val s: Socket) { val w: Writer = s.getOutputStream().bufferedWriter(); var artKey: String? = null }
+    class Client(val s: Socket) { val w: Writer = s.getOutputStream().bufferedWriter(); var artKey: String? = null }
 
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
-    private val out = CopyOnWriteArrayList<Client>()
+    val out = CopyOnWriteArrayList<Client>()
     @Volatile private var alive = false
     private var server: ServerSocket? = null
     private var probe: DatagramSocket? = null
@@ -65,11 +69,11 @@ class MediaListener : NotificationListenerService() {
     }
     private val sessions = MediaSessionManager.OnActiveSessionsChangedListener { pick() }
     private val tick = object : Runnable {
-        override fun run() { if (ctl?.playbackState?.state == PlaybackState.STATE_PLAYING) push(); main.postDelayed(this, 1000) }
+        override fun run() { push(); main.postDelayed(this, 1000) }
     }
 
     override fun onListenerConnected() {
-        bound = true; alive = true
+        bound = true; alive = true; self = this
         val msm = getSystemService(MediaSessionManager::class.java)
         msm.addOnActiveSessionsChangedListener(sessions, ComponentName(this, MediaListener::class.java), main)
         pick(); main.post(tick)
@@ -78,7 +82,7 @@ class MediaListener : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
-        bound = false; alive = false
+        bound = false; alive = false; self = null
         getSystemService(MediaSessionManager::class.java).removeOnActiveSessionsChangedListener(sessions)
         ctl?.unregisterCallback(cb); ctl = null
         main.removeCallbacks(tick)
@@ -145,7 +149,7 @@ class MediaListener : NotificationListenerService() {
         }
     }
 
-    private fun send(cl: Client, line: String) = io.execute {
+    fun send(cl: Client, line: String) = io.execute {
         try { cl.w.write(line); cl.w.write("\n"); cl.w.flush() } catch (_: Exception) { drop(cl) }
     }
 
@@ -189,6 +193,8 @@ class MediaListener : NotificationListenerService() {
             "seek" -> t?.seekTo(j.optLong("pos"))
             "vol" -> getSystemService(AudioManager::class.java).adjustStreamVolume(AudioManager.STREAM_MUSIC,
                 if (j.optInt("d") > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER, 0).also { main.postDelayed({ push() }, 150) }
+            "volSet" -> com.lazyneil.lazycar.media.Volumes.setJblLocal(this, j.optInt("pct")).also { main.postDelayed({ push() }, 150) }
+            "tvol" -> tabletPct = j.optInt("pct")
             "browse" -> browse(cl, j)
             "playId" -> withBrowser(cl, j) { b -> MediaController(this, b.sessionToken).transportControls.playFromMediaId(j.optString("id"), null) }
             "files" -> io.execute { reply(cl, j, Files.list(this, j.optString("id"), j.optString("q"))) }

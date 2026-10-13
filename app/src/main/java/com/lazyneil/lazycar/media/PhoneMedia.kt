@@ -82,13 +82,18 @@ object PhoneMedia {
         }
     }
 
+    private var sentTvol = -1
+
     private fun handle(ctx: Context, j: JSONObject) {
         when (j.optString("t")) {
+            "tvol" -> { Volumes.applyTablet(ctx, j.optInt("pct")); sentTvol = -1 }
             "np" -> {
                 val old = np
                 if (j.has("art")) art = j.optString("art").takeIf { it.isNotEmpty() }?.let { decode(it) }
                 else j.put("art", "")
                 np = j; npAt = SystemClock.elapsedRealtime()
+                // Report our speaker level so the phone slider is live; hardware buttons included.
+                Volumes.localPct(ctx).let { if (it != sentTvol) { sentTvol = it; Volumes.saveTablet(ctx, it); cmd("tvol") { put("pct", it) } } }
                 val big = old.optString("title") != j.optString("title") || old.optInt("state") != j.optInt("state") || j.has("art") && j.optString("art").isNotEmpty()
                 main.post { onChange?.invoke(); if (big) notifyMedia(ctx) }
             }
