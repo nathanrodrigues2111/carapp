@@ -301,26 +301,35 @@ class TapService : AccessibilityService() {
             if (SystemClock.uptimeMillis() >= armedUntil) { finishPoll(); return }
             pollN++
             var winCount = 0; var adds = 0; var removes = 0; var sawDialog = false
+            val names = Prefs(applicationContext).let { p -> listOf(p.name1, p.name2, p.name3) }.map { it.trim() }.filter { it.isNotEmpty() }
+            val seen = mutableSetOf<String>()
             for (w in (windows ?: emptyList())) {
                 val root = w.root ?: continue
                 winCount++
                 if (root.packageName != "com.android.systemui") continue
+                if (find(root) { it.viewIdResourceName?.let { id -> id.endsWith("/media_output_dialog") || id.endsWith("/list_result") } == true } != null) sawDialog = true
                 forEach(root) { n ->
-                    if (n.viewIdResourceName?.endsWith("/check_box_area") != true) return@forEach
-                    val d = n.contentDescription?.toString()?.trim() ?: return@forEach
-                    if (d.equals("Add device to group.", true)) {
-                        sawDialog = true; adds++
-                        val title = rowTitle(n) ?: n.hashCode().toString()
-                        if (title !in clicked) {
-                            val target = if (n.isClickable) n else clickableAncestor(n) ?: n
-                            val ok = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            clicked.add(title)
-                            android.util.Log.e("LazyCar", "TapService poll#$pollN click add '$title' ok=$ok")
+                    // Match by desc first, then by tick state, so an id or wording change in a OnePlus update does not break it.
+                    if (n.viewIdResourceName?.endsWith("/check_box_area") != true && !n.isCheckable) return@forEach
+                    val title = rowTitle(n) ?: return@forEach
+                    if (!seen.add(title)) return@forEach
+                    when (groupState(n, title, names)) {
+                        1 -> {
+                            sawDialog = true; adds++
+                            if (title !in clicked) {
+                                val target = if (n.isClickable) n else clickableAncestor(n) ?: n
+                                val ok = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                                clicked.add(title)
+                                android.util.Log.e("LazyCar", "TapService poll#$pollN click add '$title' ok=$ok")
+                            }
                         }
-                    } else if (d.equals("Remove device from group.", true)) { sawDialog = true; removes++ }
+                        -1 -> { sawDialog = true; removes++ }
+                    }
                 }
             }
             if (sawDialog) dialogSeen = true
+            else if (pollN == 6) (windows ?: emptyList()).forEach { w ->   // diagnostics for the next OnePlus UI change
+                android.util.Log.e("LazyCar", "WINDOW type=${w.type} title=${w.title} pkg=${w.root?.packageName}"); dump(w.root, 0) }
             android.util.Log.e("LazyCar", "TapService poll#$pollN windows=$winCount add=$adds remove=$removes clicked=${clicked.size}")
 
             // Dialog never showed up -> re-open it once (~1.6s in).
@@ -402,11 +411,30 @@ class TapService : AccessibilityService() {
         } catch (e: Exception) { android.util.Log.e("LazyCar", "re-send failed ${e.message}") }
     }
 
-    /** Title text of the device row (id .../main_content) that contains node [n]. */
-    private fun rowTitle(n: AccessibilityNodeInfo): String? {
+    /** 1 = can be added to the group, -1 = already grouped, 0 = neither (phone speaker, the active device alone). */
+    private fun groupState(n: AccessibilityNodeInfo, title: String, names: List<String>): Int {
+        val d = n.contentDescription?.toString() ?: ""
+        if (d.contains("remove", true) && d.contains("group", true)) return -1
+        if (d.contains("add", true) && d.contains("group", true)) return 1
+        val box = if (n.isCheckable) n else find(n) { it.isCheckable || it.viewIdResourceName?.endsWith("/check_box") == true }
+        if (box?.isChecked == true) return -1
+        val row = rowOf(n)
+        val inUse = row != null && find(row) { it.viewIdResourceName?.endsWith("/subtitle") == true &&
+            it.text?.toString()?.contains("in use", true) == true } != null
+        val known = names.any { title.contains(it, true) || it.contains(title, true) }
+        // Post-update OnePlus UI: no add/remove desc, box not checkable; an "In use" row is already playing.
+        return if (inUse) -1 else if (known) 1 else 0
+    }
+
+    private fun rowOf(n: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         var row: AccessibilityNodeInfo? = n
         while (row != null && row.viewIdResourceName?.endsWith("/main_content") != true) row = row.parent
-        val r = row ?: return null
+        return row
+    }
+
+    /** Title text of the device row (id .../main_content) that contains node [n]. */
+    private fun rowTitle(n: AccessibilityNodeInfo): String? {
+        val r = rowOf(n) ?: return null
         return find(r) { it.viewIdResourceName?.endsWith("/title") == true }?.text?.toString()
     }
 
