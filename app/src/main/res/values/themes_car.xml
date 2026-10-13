@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The one CarApp theme, applied by Ui.apply on top of Theme.LazyCar. -->
+    <!-- The one CarApp theme, applied by Ui.apply on top of Theme.LazyCar. Colors = tokens.css roles. -->
     <style name="CarTheme.Midnight" parent="">
         <item name="carBg">#FF000000</item>
-        <item name="carSurface">#14FFFFFF</item>
-        <item name="carStroke">#1FFFFFFF</item>
-        <item name="carText">#FFFFFFFF</item>
-        <item name="carTextDim">#99FFFFFF</item>
+        <item name="carSurface">#0FFFFFFF</item>
+        <item name="carSurfaceHigh">#1CFFFFFF</item>
+        <item name="carStroke">#14FFFFFF</item>
+        <item name="carText">#FFF5F5F7</item>
+        <item name="carTextDim">#8FF5F5F7</item>
         <item name="carAccent">#FF00E5FF</item>
         <item name="carScrim">#B3000000</item>
         <item name="android:windowBackground">#FF000000</item>
@@ -14,34 +15,47 @@
         <item name="colorPrimary">#FF00E5FF</item>
         <item name="colorOnPrimary">#FF000000</item>
         <item name="colorSecondary">#FF00E5FF</item>
-        <item name="colorOnSurface">#FFFFFFFF</item>
-        <item name="colorOnSurfaceVariant">#99FFFFFF</item>
+        <item name="colorOnSurface">#FFF5F5F7</item>
+        <item name="colorOnSurfaceVariant">#8FF5F5F7</item>
     </style>
-    <!-- Type: three sizes, heavy display with tight tracking. -->
-    <style name="T" />
-    <style name="T.Display">
-        <item name="android:textSize">@dimen/car_display</item>
-        <item name="android:textColor">?attr/carText</item>
+    <!-- Type: six styles, one family (sans-serif). Caption, Body, Title, Headline, Display, Hero. -->
+    <style name="T">
         <item name="android:fontFamily">sans-serif</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">-0.03</item>
-        <item name="android:includeFontPadding">false</item>
-        <item name="android:maxLines">2</item>
-        <item name="android:ellipsize">end</item>
-    </style>
-    <style name="T.Title">
-        <item name="android:textSize">@dimen/car_title</item>
         <item name="android:textColor">?attr/carText</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:letterSpacing">-0.01</item>
         <item name="android:maxLines">1</item>
         <item name="android:ellipsize">end</item>
     </style>
     <style name="T.Label">
-        <item name="android:textSize">@dimen/car_label</item>
+        <item name="android:textSize">@dimen/t_caption</item>
         <item name="android:textColor">?attr/carTextDim</item>
-        <item name="android:maxLines">1</item>
-        <item name="android:ellipsize">end</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+    <style name="T.Overline" parent="T.Label">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.14</item>
+    </style>
+    <style name="T.Body">
+        <item name="android:textSize">@dimen/t_body</item>
+        <item name="android:textColor">?attr/carTextDim</item>
+    </style>
+    <style name="T.Title">
+        <item name="android:textSize">@dimen/t_title</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+    <style name="T.Headline">
+        <item name="android:textSize">@dimen/t_headline</item>
+        <item name="android:textColor">?attr/carTextDim</item>
+    </style>
+    <style name="T.Display">
+        <item name="android:textSize">@dimen/t_display</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">-0.03</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+    <style name="T.Hero" parent="T.Display">
+        <item name="android:textSize">@dimen/t_hero</item>
     </style>
 
     <style name="Glass">
@@ -75,12 +89,26 @@
         <item name="trackStopIndicatorSize">0dp</item>
         <item name="thumbWidth">4dp</item>
     </style>
-    <style name="CarSeek" parent="Widget.Material3Expressive.Slider.Xsmall">
+    <!-- Seek: 4dp track, 16dp round white thumb, no stop dot. -->
+    <style name="CarSeek" parent="Widget.Material3.Slider">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:valueFrom">0</item>
         <item name="android:valueTo">1</item>
         <item name="labelBehavior">gone</item>
+        <item name="tickVisible">false</item>
+        <item name="trackHeight">4dp</item>
+        <item name="thumbWidth">16dp</item>
+        <item name="thumbHeight">16dp</item>
+        <item name="thumbTrackGapSize">0dp</item>
+        <item name="trackStopIndicatorSize">0dp</item>
+        <item name="trackInsideCornerSize">2dp</item>
+        <item name="thumbElevation">2dp</item>
+        <item name="haloRadius">14dp</item>
+        <item name="thumbColor">?attr/carText</item>
+        <item name="haloColor">#1FFFFFFF</item>
+        <item name="trackColorActive">?attr/carText</item>
+        <item name="trackColorInactive">#29FFFFFF</item>
     </style>
     <style name="Dot">
         <item name="android:layout_width">10dp</item>

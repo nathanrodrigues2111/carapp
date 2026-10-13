@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <dimen name="car_display">56sp</dimen>
-    <dimen name="car_title">24sp</dimen>
-    <dimen name="car_label">16sp</dimen>
-    <dimen name="car_gap">24dp</dimen>
-</resources>

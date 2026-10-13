@@ -68,7 +68,7 @@ object Ui {
     fun paintAccent(root: View, c: Int) {
         val csl = ColorStateList.valueOf(c)
         val on = ColorStateList.valueOf(Accent.onColor(c))
-        intArrayOf(R.id.npSeek, R.id.outJblSlider, R.id.outTabSlider).forEach {
+        intArrayOf(R.id.outJblSlider, R.id.outTabSlider).forEach {
             root.findViewById<Slider>(it)?.apply { trackActiveTintList = csl; thumbTintList = csl }
         }
         intArrayOf(R.id.npPlay).forEach {

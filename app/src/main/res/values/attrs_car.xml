@@ -3,6 +3,7 @@
     <!-- CarApp theme tokens. Every home, player and settings layout reads colors from these. -->
     <attr name="carBg" format="color|reference" />
     <attr name="carSurface" format="color|reference" />
+    <attr name="carSurfaceHigh" format="color|reference" />
     <attr name="carStroke" format="color|reference" />
     <attr name="carText" format="color|reference" />
     <attr name="carTextDim" format="color|reference" />

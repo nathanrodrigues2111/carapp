@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Three type sizes per screen: display, title, label. Tablet sizes in values-w840dp. -->
-    <dimen name="car_display">44sp</dimen>
-    <dimen name="car_title">18sp</dimen>
-    <dimen name="car_label">13sp</dimen>
-    <!-- Design system: spacing 4/8/12/16/24, radius 12/20/28. Use these, not ad-hoc values. -->
+    <!-- CarApp design tokens (mock/tokens.css). Six type sizes, spacing 4..32, radii 12/20/28. -->
+    <dimen name="t_caption">13sp</dimen>
+    <dimen name="t_body">16sp</dimen>
+    <dimen name="t_title">20sp</dimen>
+    <dimen name="t_headline">28sp</dimen>
+    <dimen name="t_display">44sp</dimen>
+    <dimen name="t_hero">64sp</dimen>
     <dimen name="sp1">4dp</dimen>
     <dimen name="sp2">8dp</dimen>
     <dimen name="sp3">12dp</dimen>
     <dimen name="sp4">16dp</dimen>
     <dimen name="sp6">24dp</dimen>
+    <dimen name="sp8">32dp</dimen>
     <dimen name="r_s">12dp</dimen>
     <dimen name="r_m">20dp</dimen>
     <dimen name="r_l">28dp</dimen>
-    <dimen name="car_radius">28dp</dimen>
-    <dimen name="car_gap">16dp</dimen>
-    <dimen name="car_art_wide">440dp</dimen>
-    <dimen name="car_play">120dp</dimen>
-    <dimen name="car_np_title">30sp</dimen>
+    <dimen name="car_play">112dp</dimen>
+    <dimen name="car_rail">96dp</dimen>
 </resources>

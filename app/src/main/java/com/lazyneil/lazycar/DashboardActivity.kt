@@ -53,10 +53,28 @@ class DashboardActivity : AppCompatActivity() {
             val b = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(b.left, b.top, b.right, b.bottom); insets
         }
-        if (resources.configuration.screenWidthDp >= 840) {   // fullscreen: art left, controls right
+        if (resources.configuration.screenWidthDp >= 840) {   // full width: rail left, art left, controls right
+            findViewById<LinearLayout>(R.id.frame).orientation = LinearLayout.HORIZONTAL
+            findViewById<LinearLayout>(R.id.rail).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(resources.getDimensionPixelSize(R.dimen.car_rail), -1)
+                setPadding(0, dp(24), 0, dp(24)); setBackgroundColor(0x66000000)
+            }
+            findViewById<View>(R.id.body).apply {
+                layoutParams = LinearLayout.LayoutParams(0, -1, 1f); setPadding(dp(48), dp(48), dp(48), dp(48))
+            }
             findViewById<LinearLayout>(R.id.body).orientation = LinearLayout.HORIZONTAL
             findViewById<View>(R.id.artFrame).layoutParams = LinearLayout.LayoutParams(0, -1, 1f)
-            findViewById<View>(R.id.side).layoutParams = LinearLayout.LayoutParams(0, -1, 1.15f).apply { marginStart = dp(24) }
+            findViewById<LinearLayout>(R.id.side).apply {
+                layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply { marginStart = dp(48) }
+                gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START; setPadding(0, 0, 0, 0)
+            }
+            for (id in intArrayOf(R.id.npTitle, R.id.npArtist)) findViewById<TextView>(id).gravity = android.view.Gravity.START
+        } else for (id in intArrayOf(R.id.npTitle, R.id.npArtist)) findViewById<TextView>(id).gravity = android.view.Gravity.CENTER
+        // Keep the art square: the largest square that fits its frame.
+        findViewById<View>(R.id.artFrame).addOnLayoutChangeListener { f, l, t, r, b, _, _, _, _ ->
+            val side = minOf(r - l, b - t); val box = findViewById<View>(R.id.npArtBox)
+            if (box.layoutParams.width != side) f.post { box.layoutParams = box.layoutParams.apply { width = side; height = side } }
         }
         val settings = { startActivity(Intent(this, SettingsActivity::class.java)) }
         click(R.id.settingsBtn, settings); click(R.id.statusRow, settings)
