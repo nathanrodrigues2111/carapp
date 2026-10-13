@@ -105,6 +105,9 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.helpRow).setOnClickListener {
             startActivity(Intent(this, HelpActivity::class.java))
         }
+        findViewById<View>(R.id.debugRow).setOnClickListener {
+            startActivity(Intent(this, DebugActivity::class.java))
+        }
 
         val v = try { packageManager.getPackageInfo(packageName, 0) } catch (e: Exception) { null }
         findViewById<TextView>(R.id.versionText).text =

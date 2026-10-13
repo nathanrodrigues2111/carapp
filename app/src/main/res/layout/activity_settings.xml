@@ -354,6 +354,13 @@
                         <TextView style="@style/RowTitle" android:text="Help" />
                         <ImageView style="@style/ChevronIcon" />
                     </LinearLayout>
+                    <LinearLayout android:id="@+id/debugRow" style="@style/Row56">
+                        <FrameLayout style="@style/IconCircle">
+                            <ImageView style="@style/RowIcon" android:src="@drawable/ic_settings" app:tint="@color/white" />
+                        </FrameLayout>
+                        <TextView style="@style/RowTitle" android:text="Debug" />
+                        <ImageView style="@style/ChevronIcon" />
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
