@@ -47,18 +47,10 @@ class DashboardActivity : AppCompatActivity() {
         Ui.apply(this)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        val classic = Ui.classic(this)
-        setContentView(if (classic) R.layout.activity_dashboard_classic else R.layout.activity_dashboard)
+        setContentView(R.layout.activity_dashboard)
         root = findViewById(R.id.root)
-        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
-            val b = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(b.left, b.top, b.right, b.bottom); insets
-        }
-        if (classic) { if (resources.configuration.screenWidthDp >= 840) {   // classic, fullscreen: art left, controls right
-            findViewById<LinearLayout>(R.id.body).orientation = LinearLayout.HORIZONTAL
-            findViewById<View>(R.id.artFrame).layoutParams = LinearLayout.LayoutParams(0, -1, 1f)
-            findViewById<View>(R.id.side).layoutParams = LinearLayout.LayoutParams(0, -1, 1.15f).apply { marginStart = dp(24) }
-        } } else if (resources.configuration.screenWidthDp >= 840) {   // full width: rail left, art left, controls right
+        Ui.edge(this, findViewById(R.id.frame))   // backdrop stays full window
+        if (resources.configuration.screenWidthDp >= 840) {   // full width: rail left, art left, controls right
             findViewById<LinearLayout>(R.id.frame).orientation = LinearLayout.HORIZONTAL
             findViewById<LinearLayout>(R.id.rail).apply {
                 orientation = LinearLayout.VERTICAL
@@ -77,7 +69,7 @@ class DashboardActivity : AppCompatActivity() {
             for (id in intArrayOf(R.id.npTitle, R.id.npArtist)) findViewById<TextView>(id).gravity = android.view.Gravity.START
         } else for (id in intArrayOf(R.id.npTitle, R.id.npArtist)) findViewById<TextView>(id).gravity = android.view.Gravity.CENTER
         // Keep the art square: the largest square that fits its frame.
-        if (!classic) findViewById<View>(R.id.artFrame).addOnLayoutChangeListener { f, l, t, r, b, _, _, _, _ ->
+        findViewById<View>(R.id.artFrame).addOnLayoutChangeListener { f, l, t, r, b, _, _, _, _ ->
             val side = minOf(r - l, b - t); val box = findViewById<View>(R.id.npArtBox)
             if (box.layoutParams.width != side) f.post { box.layoutParams = box.layoutParams.apply { width = side; height = side } }
         }
@@ -124,6 +116,7 @@ class DashboardActivity : AppCompatActivity() {
     private var seeking = false
     private var shownArt: android.graphics.Bitmap? = null
     private var shownPlaying: Boolean? = null
+    private var shownTitle = ""; private var titleAt = 0L
 
     /** Tap = play/pause, swipe left = next, swipe right = previous. */
     private fun artGestures(art: ImageView) {
@@ -160,6 +153,9 @@ class DashboardActivity : AppCompatActivity() {
             findViewById<ImageView>(R.id.npBackdrop).setImageBitmap(shownArt)
             Ui.paintAccent(root, Accent.forArt(this, shownArt))
         }
+        // Loader on the art while a new track's art is still coming from the phone (gives up after 5 s).
+        if (np.optString("title") != shownTitle) { shownTitle = np.optString("title"); titleAt = SystemClock.elapsedRealtime() }
+        Ui.showLoader(findViewById(R.id.npLoader), PhoneMedia.connected && has && PhoneMedia.art == null && SystemClock.elapsedRealtime() - titleAt < 5000)
         val playing = PhoneMedia.playing
         if (shownPlaying != playing) {
             Ui.morph(findViewById<ImageButton>(R.id.npPlay), playing, shownPlaying != null)

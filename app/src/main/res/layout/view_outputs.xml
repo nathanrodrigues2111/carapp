@@ -44,6 +44,8 @@
                 </LinearLayout>
             </LinearLayout>
             <TextView android:id="@+id/outTabPct" style="@style/SetValue" />
+            <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/outTabSwitch" style="@style/SetSwitch"
+                android:contentDescription="Tablet speaker on" />
         </LinearLayout>
         <com.google.android.material.slider.Slider android:id="@+id/outTabSlider" style="@style/CarSlider"
             android:layout_marginHorizontal="-16dp" android:contentDescription="Tablet speaker volume" />

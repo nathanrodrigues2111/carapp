@@ -58,10 +58,21 @@ class TapService : AccessibilityService() {
         }
 
         /** Home Drive tile: Maps left, CarApp (Drive panel) right. */
+        /** Maps + CarApp side by side. Split method (Advanced): auto = the launcher's saved pair, else the
+         *  standard adjacent launch; lenovo = saved pair only; standard = adjacent launch only. */
         fun launchDrive(ctx: Context) {
-            val svc = instance ?: return startPkg(ctx, MAPS, 0)
-            svc.h.post { if (!svc.inSplit()) svc.launchPair(MAPS, ctx.packageName, Prefs(ctx).splitRatio) }
+            val adjacent = Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+            val svc = instance ?: return startPkg(ctx, MAPS, adjacent)   // no accessibility: plain adjacent launch
+            val p = Prefs(ctx)
+            // GO from the phone and CarApp coming to the front can both ask at once: one split per 10 s.
+            if (SystemClock.elapsedRealtime() - lastDrive < 10_000) return
+            lastDrive = SystemClock.elapsedRealtime()
+            svc.h.post { if (!svc.inSplit()) {
+                if (p.splitMethod == "standard") svc.launchAdjacent(MAPS, ctx.packageName, p.splitRatio)
+                else svc.launchPair(MAPS, ctx.packageName, p.splitRatio, fallback = p.splitMethod != "lenovo")
+            } }
         }
+        @Volatile private var lastDrive = -10_000L
         const val MAPS = "com.google.android.apps.maps"
         /** Last pair launch: true = tapped the launcher's saved pair, false = none found, null = not tried. */
         @Volatile var pairFound: Boolean? = null
@@ -81,7 +92,7 @@ class TapService : AccessibilityService() {
     // which gives exactly the user's saved split (sides and ratio). Apps cannot start a split
     // pair themselves, the shell API behind it is launcher only. Without a matching pair icon,
     // try LAUNCH_ADJACENT, then the split screen global action.
-    private fun launchPair(a: String, b: String, ratio: Int) {
+    private fun launchPair(a: String, b: String, ratio: Int, fallback: Boolean = true) {
         val pm = packageManager
         fun label(pkg: String) = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (e: Exception) { pkg }
         val descs = setOf("App pair: ${label(a)} and ${label(b)}", "App pair: ${label(b)} and ${label(a)}")
@@ -101,7 +112,7 @@ class TapService : AccessibilityService() {
                 if (++tries < 10) { h.postDelayed(this, 300); return }
                 android.util.Log.e("LazyCar", "split: no launcher pair icon, launching side by side")
                 pairFound = false
-                launchAdjacent(a, b, ratio)
+                if (fallback) launchAdjacent(a, b, ratio)
             }
         }, 700)
     }
@@ -111,7 +122,7 @@ class TapService : AccessibilityService() {
         val adjacent = Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
         h.postDelayed({ startPkg(this, b, adjacent) }, 1500)
         h.postDelayed({
-            if (inSplit()) { android.util.Log.e("LazyCar", "split: adjacent launch worked"); return@postDelayed }
+            if (inSplit()) { android.util.Log.e("LazyCar", "split: adjacent launch worked"); arrangeSplit(a, ratio, swapped = false, tries = 0); return@postDelayed }
             android.util.Log.e("LazyCar", "split: adjacent ignored, using split screen action")
             startPkg(this, a, 0)
             h.postDelayed({ performGlobalAction(GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN) }, 1200)

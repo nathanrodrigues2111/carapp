@@ -83,13 +83,25 @@
     <!-- Neutral pill button, the only button style besides GO. -->
     <style name="CarButton" parent="Widget.Material3.Button">
         <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:textAllCaps">false</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
         <item name="backgroundTint">?attr/carSurfaceHigh</item>
         <item name="android:textColor">?attr/carText</item>
         <item name="android:textAppearance">@style/T.Body</item>
-        <item name="cornerRadius">24dp</item>
+        <item name="cornerRadius">22dp</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingBottom">0dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconSize">18dp</item>
+        <item name="iconPadding">8dp</item>
+        <item name="iconTint">?attr/carText</item>
+        <item name="rippleColor">?attr/carStroke</item>
     </style>
     <!-- Seek: 4dp track, 16dp round white thumb, no stop dot. -->
     <style name="CarSeek" parent="Widget.Material3.Slider">
@@ -110,7 +122,7 @@
         <item name="thumbColor">?attr/carText</item>
         <item name="haloColor">#1FFFFFFF</item>
         <item name="trackColorActive">?attr/carText</item>
-        <item name="trackColorInactive">#29FFFFFF</item>
+        <item name="trackColorInactive">#1FFFFFFF</item>
     </style>
     <style name="Dot">
         <item name="android:layout_width">10dp</item>

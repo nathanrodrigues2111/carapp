@@ -103,7 +103,7 @@ class GpsService : Service(), LocationListener {
     private fun notification(): Notification {
         val title = if (mode == "send") "Sharing GPS" else "Using phone GPS"
         val text = when {
-            lastAt == 0L -> if (mode == "send") "Waiting for a GPS fix" else "Waiting for the phone"
+            lastAt == 0L -> if (mode == "send") "Searching for a GPS fix" else "Searching for the phone"
             else -> "Accuracy ${acc.toInt()} m"
         }
         val open = PendingIntent.getActivity(this, 0, Intent(this, com.lazyneil.lazycar.MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)

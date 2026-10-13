@@ -11,34 +11,35 @@
         android:alpha="0.5" android:importantForAccessibility="no" android:scaleType="centerCrop" />
     <View android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_scrim" />
 
-    <ScrollView android:id="@+id/scroll" android:layout_width="match_parent" android:layout_height="match_parent"
-        android:clipToPadding="false" android:fillViewport="true" android:scrollbars="none">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="vertical" android:paddingHorizontal="@dimen/sp6">
+    <!-- One screen, no scroll: the hero takes the space left over, GO is sized to it (min 160dp). -->
+    <LinearLayout android:id="@+id/scroll" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:clipChildren="false" android:orientation="vertical">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+            android:clipChildren="false" android:orientation="vertical" android:paddingHorizontal="@dimen/sp6">
 
             <include layout="@layout/view_phone_bar" />
             <include layout="@layout/view_phone_setup" />
 
             <!-- Hero: glow ring behind the GO button, then the state -->
-            <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/sp6" android:clipChildren="false">
+            <FrameLayout android:id="@+id/hero" android:layout_width="match_parent" android:layout_height="0dp"
+                android:layout_weight="1" android:clipChildren="false">
                 <View android:id="@+id/goGlow" android:layout_width="320dp" android:layout_height="320dp"
                     android:layout_gravity="center" />
                 <com.google.android.material.button.MaterialButton android:id="@+id/goButton"
                     style="@style/Widget.Material3.Button" android:layout_width="240dp" android:layout_height="240dp"
                     android:layout_gravity="center" android:elevation="24dp" android:insetTop="0dp" android:insetBottom="0dp"
-                    android:padding="0dp" android:text="GO" android:textSize="@dimen/t_hero" android:textStyle="bold"
+                    android:padding="0dp" android:text="GO" android:textSize="@dimen/t_display" android:textStyle="bold"
                     app:cornerRadius="120dp" />
             </FrameLayout>
             <TextView android:id="@+id/goHint" style="@style/T.Display" android:layout_width="match_parent"
-                android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp4" android:gravity="center"
+                android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp2" android:gravity="center"
                 android:textSize="@dimen/t_headline" />
             <TextView android:id="@+id/goSub" style="@style/T.Body" android:layout_width="match_parent"
                 android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp1" android:gravity="center" />
 
             <!-- Status tiles -->
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/sp8" android:orientation="horizontal">
+                android:layout_marginTop="@dimen/sp4" android:orientation="horizontal">
                 <include android:id="@+id/tileBt" layout="@layout/view_tile" />
                 <Space android:layout_width="@dimen/sp3" android:layout_height="1dp" />
                 <include android:id="@+id/tileHotspot" layout="@layout/view_tile" />
@@ -88,5 +89,5 @@
             </LinearLayout>
 
         </LinearLayout>
-    </ScrollView>
+    </LinearLayout>
 </FrameLayout>

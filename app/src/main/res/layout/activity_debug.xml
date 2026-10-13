@@ -4,17 +4,10 @@
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="?attr/carBg"
     android:orientation="vertical">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
-        android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@android:color/transparent"
-        app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/white"
-        app:title="@string/debug_title"
-        app:titleTextColor="@color/white" />
+    <include layout="@layout/view_top_bar" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -27,15 +20,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="16dp"
-            android:paddingBottom="24dp" />
+            android:paddingHorizontal="@dimen/sp4"
+            android:paddingBottom="@dimen/sp6" />
     </ScrollView>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/copyBtn"
+        style="@style/CarButton"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginBottom="12dp"
+        android:layout_marginHorizontal="@dimen/sp4"
+        android:layout_marginBottom="@dimen/sp3"
         android:text="@string/debug_copy" />
 </LinearLayout>

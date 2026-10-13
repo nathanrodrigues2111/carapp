@@ -4,17 +4,10 @@
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="?attr/carBg"
     android:orientation="vertical">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
-        android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@android:color/transparent"
-        app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/white"
-        app:title="Help"
-        app:titleTextColor="@color/white" />
+    <include layout="@layout/view_top_bar" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -23,16 +16,13 @@
         android:clipToPadding="false"
         android:fillViewport="true">
 
-        <com.google.android.material.card.MaterialCardView
-            style="@style/CardBox"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginBottom="24dp">
+        <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginHorizontal="@dimen/sp4" android:layout_marginBottom="@dimen/sp6" android:background="@drawable/bg_glass">
             <LinearLayout
                 android:id="@+id/helpList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:padding="8dp" />
-        </com.google.android.material.card.MaterialCardView>
+        </FrameLayout>
     </ScrollView>
 </LinearLayout>

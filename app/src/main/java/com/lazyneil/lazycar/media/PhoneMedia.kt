@@ -55,17 +55,40 @@ object PhoneMedia {
     fun send(j: JSONObject) = io.execute { try { w?.apply { write(j.toString()); write("\n"); flush() } } catch (_: Exception) {} }
     fun cmd(c: String, extra: JSONObject.() -> Unit = {}) = send(JSONObject().put("c", c).apply(extra))
 
-    /** Library request; [done] gets the reply on the main thread. */
+    // Library cache: every good reply in memory and as a small JSON file, shown at once on the next open.
+    private var dir: java.io.File? = null
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, JSONObject>()
+    private fun key(c: String, id: String, q: String) = "$c|$id|$q"
+    fun cached(c: String, id: String, q: String = ""): JSONObject? = key(c, id, q).let { k ->
+        cache[k] ?: try { dir?.let { java.io.File(it, "${k.hashCode()}.json").takeIf { f -> f.exists() }?.readText()?.let(::JSONObject) }?.also { cache[k] = it } } catch (_: Exception) { null }
+    }
+    private fun store(k: String, j: JSONObject) {
+        cache[k] = j; io.execute { try { dir?.let { java.io.File(it, "${k.hashCode()}.json").writeText(j.toString()) } } catch (_: Exception) {} }
+    }
+
+    /** Library request; [done] gets the phone's reply on the main thread, or an error after 8 s. */
     fun request(c: String, id: String, q: String = "", done: (JSONObject) -> Unit) {
-        val r = synchronized(pending) { (++reqSeq).also { pending[it] = done } }
-        if (!connected) { main.post { done(JSONObject().put("err", "Phone not connected")) }; return }
+        val k = key(c, id, q)
+        val r = synchronized(pending) { (++reqSeq).also { pending[it] = { j -> if (!j.has("err")) store(k, j); done(j) } } }
+        if (!connected) { fail(r, "Phone not connected"); return }
         cmd(c) { put("id", id).put("q", q).put("req", r) }
+        main.postDelayed({ fail(r, "The phone did not answer. Unlock it and try again") }, 8000)
+    }
+    private fun fail(r: Int, err: String) {
+        synchronized(pending) { pending.remove(r) }?.let { main.post { it(JSONObject().put("err", err)) } }
+    }
+
+    /** First open is instant too: fetch the root and its first level as soon as the link is up. */
+    private fun prefetch() = request("browse", "") { root ->
+        val items = root.optJSONArray("items") ?: return@request
+        for (i in 0 until minOf(items.length(), 8)) items.getJSONObject(i).takeIf { it.optBoolean("browse") }?.let { request("browse", it.optString("id")) {} }
     }
 
     @Synchronized fun start(ctx: Context) {
         if (started) return
         started = true
         val app = ctx.applicationContext
+        dir = java.io.File(app.cacheDir, "lib").apply { mkdirs() }
         thread(name = "phone-media", isDaemon = true) {
             while (true) {
                 try {
@@ -73,10 +96,12 @@ object PhoneMedia {
                     Socket().use { s ->
                         s.connect(InetSocketAddress(ip, Link.PORT), 3000); s.tcpNoDelay = true
                         w = s.getOutputStream().bufferedWriter(); phone = ip; connected = true; sentTvol = -1   // the phone may have restarted: report our level again
+                        main.postDelayed({ prefetch() }, 1500)
                         s.getInputStream().bufferedReader().forEachLine { l -> handle(app, JSONObject(l)) }
                     }
                 } catch (_: Exception) {}
                 if (connected) { connected = false; w = null; main.post { onChange?.invoke(); notifyMedia(app) } }
+                synchronized(pending) { pending.keys.toList() }.forEach { fail(it, "Phone not connected") }
                 Thread.sleep(2000)
             }
         }

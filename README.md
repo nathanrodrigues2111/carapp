@@ -54,7 +54,10 @@ One tap on the phone runs the full sequence, a second tap stops and restores. ST
 | **Rear camera** | A USB webcam powered from the reverse light. Reverse on, the camera appears full screen, even over the lockscreen. Reverse off, it closes. |
 | **Tablet speaker** | The phone's audio plays on the tablet over Wi-Fi, auto synced to the Bluetooth speaker using the measured Bluetooth latency and clock offset. |
 | **Bluetooth speaker** | One Bluetooth speaker on the phone. |
-| **Split screen** | The tablet's Drive widget opens Maps and the music app side by side. |
+| **Tablet player** | Maps on the left, the player on the right. Big art, title, seek bar, previous, play and next. Full width it shows a side rail with art left and controls right. |
+| **Accent from art** | The accent color follows the album art on every screen. A fixed color can be picked in Settings, Display. |
+| **Library** | Browse the phone's player library or its music files from the tablet, with the playing song highlighted. |
+| **Split screen** | The tablet opens Maps + CarApp side by side on start, on GO and when CarApp opens (Settings, Drive, Open with Maps). |
 | **Hotspot auto-join** | The tablet joins the phone's hotspot on its own. |
 | **Boot autostart** | GPS and the receivers start on boot. |
 | **Debug screen** | A check per part (permissions, accessibility, mock location, GPS, hotspot join, rear camera, boot receiver) with Fix and test buttons. |
@@ -63,7 +66,7 @@ One tap on the phone runs the full sequence, a second tap stops and restores. ST
 
 - Spotify blocks audio capture on its tracks, so it cannot play on the tablet speaker. The default player is YouTube Music.
 - OxygenOS 16.0.10.601 removed classic dual audio (the old two speaker Audio sharing), so the phone drives one Bluetooth speaker and the tablet is the second one over Wi-Fi.
-- ZUI on the Lenovo tablet ignores the standard split screen launch. Split screen works only by tapping a saved Maps + music app pair on the launcher, so save that pair first.
+- ZUI on the Lenovo tablet ignores the standard split screen launch. Split screen works only by tapping a saved Maps + CarApp pair on the launcher, so save that pair first.
 - The auto-tap depends on SystemUI element ids. A system update can move them and break the tapping until CarApp is updated.
 - Reinstalling via `adb install -r` (or `am force-stop`) unbinds the Accessibility service on OnePlus. Re-enable it in Settings > Accessibility.
 
@@ -74,8 +77,10 @@ One tap on the phone runs the full sequence, a second tap stops and restores. ST
 3. Enable CarApp in Settings > Accessibility on both devices.
 4. On the tablet, set CarApp as the mock location app in Developer options > Select mock location app.
 5. On the tablet, plug in the webcam once and pick "Always open CarApp" for that USB device.
-6. On the tablet, save a Maps + music app pair on the launcher (for split screen).
-7. Add the GO widget on the phone and the Drive widget on the tablet. Pick the speaker, player, and start volume. Settings save themselves.
+6. On the tablet, save a Maps + CarApp pair once on the launcher (for split screen).
+7. Add the GO widget on the phone. Pick the speaker and the player. Settings save themselves.
+
+Settings sections: Display (accent color), Audio (speaker volumes, tablet speaker, sync trim), Drive (Open with Maps), GPS, Camera, Connection (hotspot), Advanced (device role, widget, help, debug).
 
 ## Rear camera hardware
 

@@ -19,6 +19,11 @@ object TabletSpeaker {
     /** Fine trim on top of the automatic sync, positive = later. */
     fun delayMs(ctx: Context) = sp(ctx).getInt("delay", 0)
     fun btToo(ctx: Context) = sp(ctx).getBoolean("bt", false)
+    /** Debug only: also play on a Bluetooth speaker paired with the tablet. */
+    fun setBtToo(ctx: Context, on: Boolean) {
+        sp(ctx).edit().putBoolean("bt", on).apply()
+        ctx.stopService(android.content.Intent(ctx, StreamReceiver::class.java)); StreamReceiver.sync(ctx)
+    }
     /** Mic measured JBL correction, kept so the next stream starts close. */
     fun acoustic(ctx: Context) = sp(ctx).getInt("acoustic", 0)
     fun saveAcoustic(ctx: Context, v: Int) = sp(ctx).edit().putInt("acoustic", v).apply()
@@ -29,9 +34,9 @@ object TabletSpeaker {
     /** One-word state for the main screen row. */
     fun summary(ctx: Context): String = when {
         !enabled(ctx) -> "off"
-        Role.isTablet(ctx) -> if (StreamReceiver.running && SystemClock.elapsedRealtime() - StreamReceiver.lastAt <= 2000) "connected" else "waiting"
+        Role.isTablet(ctx) -> if (StreamReceiver.running && SystemClock.elapsedRealtime() - StreamReceiver.lastAt <= 2000) "connected" else "searching"
         !StreamSender.running -> "on, starts with GO"
-        StreamSender.tablet.isEmpty() -> "on, waiting for the tablet"
+        StreamSender.tablet.isEmpty() -> "on, searching for the tablet"
         else -> "on, connected"
     }
 
@@ -40,7 +45,7 @@ object TabletSpeaker {
         val r = StreamReceiver
         when {
             !r.running -> "Off"
-            SystemClock.elapsedRealtime() - r.lastAt > 2000 -> "Waiting for the phone"
+            SystemClock.elapsedRealtime() - r.lastAt > 2000 -> "Searching for the phone"
             r.outputs.all { kotlin.math.abs(it.errMs) < 20 } -> "In sync"
             else -> "Syncing..."
         }
@@ -87,19 +92,12 @@ object TabletSpeaker {
         var rows = 0
         // Rows in the shared settings style: title, one line subtitle, control right (or below for the slider).
         val inflater = android.view.LayoutInflater.from(a)
-        fun row(title: String, sub: String, key: String, def: Boolean, on: (Boolean) -> Unit): TextView {
-            val r = inflater.inflate(R.layout.item_set_switch, parent, false)
-            r.findViewById<TextView>(R.id.setTitle).text = title
-            val s = r.findViewById<TextView>(R.id.setSub).apply { text = sub }
-            r.findViewById<MaterialSwitch>(R.id.setSwitch).apply {
-                isChecked = sp(a).getBoolean(key, def)
-                setOnCheckedChangeListener { _, v -> sp(a).edit().putBoolean(key, v).apply(); on(v) }
-                r.setOnClickListener { toggle() }
-            }
-            parent.addView(r, parent.indexOfChild(anchor) + 1 + rows++); return s
-        }
-        val status = row("Tablet speaker", "", "on", true) { v ->
-            if (tablet) StreamReceiver.sync(a) else if (v) StreamSender.start(a) else StreamSender.stop(a)
+        // The on/off switch sits on the Tablet speaker volume row; the slider shows only while it is on.
+        val slider = a.findViewById<View>(R.id.outTabSlider)
+        a.findViewById<MaterialSwitch>(R.id.outTabSwitch)?.apply {
+            isChecked = enabled(a); slider?.visibility = if (isChecked) View.VISIBLE else View.GONE
+            setOnCheckedChangeListener { _, v -> sp(a).edit().putBoolean("on", v).apply(); slider?.visibility = if (v) View.VISIBLE else View.GONE
+                if (tablet) StreamReceiver.sync(a) else if (v) StreamSender.start(a) else StreamSender.stop(a) }
         }
         if (tablet) {
             val r = inflater.inflate(R.layout.item_set_slider, parent, false)
@@ -111,14 +109,6 @@ object TabletSpeaker {
                 addOnChangeListener { _, v, _ -> sp(a).edit().putInt("delay", v.toInt()).apply(); show(v.toInt()) }
             }
             parent.addView(r, parent.indexOfChild(anchor) + 1 + rows++)
-            row("Tablet Bluetooth too", "When the JBL is paired with the tablet", "bt", false) {
-                a.stopService(android.content.Intent(a, StreamReceiver::class.java)); StreamReceiver.sync(a)
-            }
         }
-        val box = status
-        val tick = object : Runnable {
-            override fun run() { status.text = line(a); if (box.isAttachedToWindow || !a.isFinishing) box.postDelayed(this, 1000) }
-        }
-        box.post(tick)
     }
 }

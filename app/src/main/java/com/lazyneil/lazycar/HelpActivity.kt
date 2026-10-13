@@ -22,60 +22,53 @@ class HelpActivity : AppCompatActivity() {
 
     private val qa = listOf(
         "What does GO do?" to
-            "GO turns on Bluetooth, connects your chosen outputs, turns on the hotspot and mobile data if you enabled them, opens your music player, ticks both outputs in Audio sharing, and presses play, all from one tap.",
+            "GO turns on Bluetooth, connects the JBL speaker, turns on the hotspot if you use it, starts the tablet speaker and presses play. On the tablet, Maps and the player open side by side.",
         "What does STOP do?" to
-            "STOP restores exactly what was on before you tapped GO. Anything already on stays on; only what GO switched on gets turned back off.",
+            "STOP puts back what was on before you tapped GO. Only what GO switched on gets turned off.",
         "How do I set it up the first time?" to
-            "1. Pair your outputs in Android's Bluetooth settings.\n2. Enable OnePlus Audio sharing once in Bluetooth settings.\n3. Turn on CarApp in Accessibility (button below).\n4. Add the CarApp widget to your home screen.",
+            "1. Pair the JBL speaker in Android's Bluetooth settings.\n2. Turn on CarApp in Accessibility on the phone and the tablet (button below).\n3. On the tablet, save a Maps + CarApp pair once on the launcher: long press Maps, Split screen, pick CarApp, save.\n4. Add the GO widget on the phone.",
+        "How does the tablet open?" to
+            "Maps on the left, the player on the right. CarApp opens this split by itself on start, on GO and when you open it. Turn it off in Settings, Drive, Open with Maps. On tablets without a saved pair (not Lenovo), CarApp opens Maps next to itself the standard Android way; pick the method in Settings, Advanced, Split method.",
+        "How do I use the player?" to
+            "Tap the art to play or pause, swipe it for the next or previous song. Drag the bar to seek. The library icon opens the phone's music to pick what plays.",
+        "Why does the color change?" to
+            "The accent follows the album art. Pick a fixed color in Settings, Display, Accent color.",
         "Why does CarApp need Accessibility?" to
-            "Android hides hotspot and mobile data controls from apps. CarApp uses Accessibility only to tap the system panel for you, nothing else, and no data is collected.",
-        "Only one output gets ticked?" to
-            "That usually means OnePlus Audio sharing isn't enabled. Open Bluetooth settings, turn Audio sharing on, then try GO again.",
+            "Android hides the hotspot from apps. CarApp uses Accessibility only to tap system panels and the launcher's Maps pair for you. No data is collected.",
         "Widget tap does nothing?" to
-            "Check that CarApp is still enabled in Accessibility, because a system update can switch it off. Re-enable it and the widget works again.",
-        "Bluetooth prompt keeps showing?" to
-            "Android asks permission to turn Bluetooth on. Tap Allow once and CarApp can turn it on for you from then on.",
-        "Can I use headphones or car stereo instead of speakers?" to
-            "Yes. Any paired Bluetooth audio device works: headphones, earbuds or a car stereo can be picked as an output.",
-        "Does CarApp send any data?" to
-            "No. CarApp sends no data anywhere. Everything happens on your phone.",
-        "How do I add the widget?" to
-            "Long-press your home screen, tap Widgets, find CarApp, and drag the GO widget where you want it.",
+            "Check that CarApp is still on in Accessibility, a system update can switch it off. Turn it back on and the widget works again.",
         "Can I set the volume?" to
-            "Turn on Start volume and pick a level. GO sets it before the music starts, so it never blasts off. Volume applies to both outputs together: OnePlus shares one level in Audio sharing, so both speakers get louder or quieter as one."
+            "Settings, Audio has a slider for the JBL speaker and one for the tablet speaker. The volume buttons keep working too.",
+        "Does CarApp send any data?" to
+            "No. GPS and music only travel between your phone and tablet over the hotspot."
     )
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Ui.apply(this)
         Accent.apply(this)
-        if (Prefs(this).amoled) theme.applyStyle(R.style.ThemeOverlay_LazyCar_Amoled, true)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_help)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root)) { v, insets ->
-            val b = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(b.left, b.top, b.right, b.bottom); insets
-        }
-        findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener { finish() }
+        Ui.edge(this, findViewById(R.id.root))
+        findViewById<View>(R.id.backBtn).setOnClickListener { finish() }
+        findViewById<TextView>(R.id.topTitle).text = "Help"
 
         val list = findViewById<LinearLayout>(R.id.helpList)
-        val white = getColor(R.color.white)
-        val secondary = getColor(R.color.secondaryText)
         qa.forEachIndexed { i, (q, a) ->
             val header = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = dp(56)
-                setPadding(dp(8), dp(8), dp(8), dp(8))
+                minimumHeight = dp(64)
+                setPadding(dp(20), dp(12), dp(20), dp(12))
                 isClickable = true; isFocusable = true
                 val tv = android.util.TypedValue()
                 context.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
                 setBackgroundResource(tv.resourceId)
             }
             val question = TextView(this).apply {
-                text = q; setTextColor(white); textSize = 16f
-                setTypeface(typeface, Typeface.BOLD)
+                text = q; setTextAppearance(R.style.SetTitle); maxLines = 3
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
             val chevron = ImageView(this).apply {
@@ -87,19 +80,14 @@ class HelpActivity : AppCompatActivity() {
             val answer = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 visibility = View.GONE
-                setPadding(dp(8), 0, dp(8), dp(12))
+                setPadding(dp(20), 0, dp(20), dp(16))
             }
             answer.addView(TextView(this).apply {
-                text = a; setTextColor(secondary); textSize = 14f
+                text = a; setTextAppearance(R.style.T_Body); maxLines = 20
                 setLineSpacing(dp(4).toFloat(), 1f)
             })
-            if (i == 2) answer.addView(MaterialButton(this).apply {
-                text = "Open Accessibility"
-                setOnClickListener { openAccessibilitySettings() }
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = dp(8) }
-            })
+            if (i == 2) answer.addView(Ui.pillButton(this, "Open Accessibility") { openAccessibilitySettings() },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
             header.setOnClickListener {
                 val open = answer.visibility != View.VISIBLE

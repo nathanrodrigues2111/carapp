@@ -51,6 +51,11 @@
                     <ImageView android:id="@+id/npArt" android:layout_width="match_parent" android:layout_height="match_parent"
                         android:contentDescription="Album art. Tap to play or pause, swipe for next or previous"
                         android:scaleType="centerCrop" />
+                    <!-- Shared loader while the phone's art is on its way (Ui.loader look). -->
+                    <com.google.android.material.progressindicator.CircularProgressIndicator android:id="@+id/npLoader"
+                        android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center"
+                        android:alpha="0" android:indeterminate="true" android:visibility="gone" app:indicatorSize="40dp"
+                        app:trackThickness="3dp" app:trackCornerRadius="2dp" app:trackColor="@android:color/transparent" />
                 </com.google.android.material.card.MaterialCardView>
             </FrameLayout>
             <LinearLayout android:id="@+id/side" android:clipChildren="false" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="wrap_content"

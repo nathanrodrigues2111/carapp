@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    style="@style/CardBox"
-    android:layout_marginBottom="12dp">
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/sp3" android:background="@drawable/bg_glass">
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/row_pad">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -18,27 +17,25 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:textColor="@color/white"
-                android:textSize="17sp" />
+                style="@style/SetTitle" />
             <TextView
                 android:id="@+id/dbgStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="13sp"
-                android:textStyle="bold" />
+                style="@style/T.Label" />
         </LinearLayout>
         <TextView
             android:id="@+id/dbgDetail"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textColor="@color/secondaryText"
-            android:textSize="13sp" />
+            android:layout_marginTop="@dimen/sp1"
+            style="@style/T.Label"
+            android:maxLines="20" />
         <LinearLayout
             android:id="@+id/dbgButtons"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/sp2"
             android:orientation="horizontal" />
     </LinearLayout>
-</com.google.android.material.card.MaterialCardView>
+</FrameLayout>

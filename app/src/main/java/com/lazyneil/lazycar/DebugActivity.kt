@@ -67,17 +67,14 @@ class DebugActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         p = Prefs(this)
+        Ui.apply(this)
         Accent.apply(this)
-        if (p.amoled) theme.applyStyle(R.style.ThemeOverlay_LazyCar_Amoled, true)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_debug)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root)) { v, insets ->
-            val b = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(b.left, b.top, b.right, b.bottom)
-            insets
-        }
-        findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener { finish() }
+        Ui.edge(this, findViewById(R.id.root))
+        findViewById<View>(R.id.backBtn).setOnClickListener { finish() }
+        findViewById<TextView>(R.id.topTitle).text = "Debug"
         findViewById<MaterialButton>(R.id.copyBtn).setOnClickListener {
             val text = rows.joinToString("\n") { it.report }
             getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("CarApp debug", text))
@@ -95,7 +92,10 @@ class DebugActivity : AppCompatActivity() {
         } else {
             rows += Row("GPS", ::gpsPhone)
         }
-        rows += Row("Split launch", ::split, listOf("Run" to { TapService.launchApps(this) }))
+        if (tablet) rows += Row("Split launch", ::split, listOf("Run" to { TapService.launchApps(this) }))
+        if (tablet) rows += Row("Tablet Bluetooth output", {
+            St.WAITING to if (com.lazyneil.lazycar.audio.TabletSpeaker.btToo(this)) "On: also plays on a speaker paired with the tablet" else "Off" },
+            listOf("Toggle" to { com.lazyneil.lazycar.audio.TabletSpeaker.setBtToo(this, !com.lazyneil.lazycar.audio.TabletSpeaker.btToo(this)) }))
         if (tablet) rows += Row("Rear camera", ::camera,
             listOf("Open preview" to { startActivity(Intent(this, RearActivity::class.java)) }))
         else rows += Row("Speaker and Wi-Fi stream", ::audio, listOf("Refresh" to { loadA2dp() }))
@@ -158,19 +158,16 @@ class DebugActivity : AppCompatActivity() {
     }
 
     private fun button(label: String, onClick: () -> Unit) =
-        MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-            text = label
-            setOnClickListener { onClick() }
+        Ui.pillButton(this, label, when (label) { "Fix" -> 0; "Refresh" -> R.drawable.ic_refresh; else -> R.drawable.ic_play }, onClick).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                .apply { marginEnd = (8 * resources.displayMetrics.density).toInt() }
+                .apply { marginEnd = resources.getDimensionPixelSize(R.dimen.sp2) }
         }
 
     private fun refresh() {
-        val accent = Accent.now(this)
         for (r in rows) {
             val (st, d) = try { r.eval() } catch (e: Exception) { St.FAIL to "Check failed: ${e.javaClass.simpleName}" }
-            r.status.text = st.name
-            r.status.setTextColor(when (st) { St.PASS -> accent; St.FAIL -> getColor(R.color.errorRed); St.WAITING -> getColor(R.color.secondaryText) })
+            Ui.status(r.status, st.name.lowercase().replaceFirstChar { it.uppercase() },
+                when (st) { St.PASS -> Ui.GREEN; St.FAIL -> getColor(R.color.error); St.WAITING -> Ui.AMBER })
             r.detail.text = d
             r.fixBtn.visibility = if (st != St.PASS && r.fix != null) View.VISIBLE else View.GONE
             r.report = "[${st.name}] ${r.title}: $d"

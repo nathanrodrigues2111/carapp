@@ -47,8 +47,6 @@ object Ui {
     fun openOnBoot(c: Context) = openWithMaps(c)
     fun openOnGo(c: Context) = openWithMaps(c)
     fun openOnLaunch(c: Context) = openWithMaps(c)
-    /** Tablet player style: Modern (default) or Classic, the earlier layout. */
-    fun classic(c: Context) = sp(c).getBoolean("classicPlayer", false)
     fun setOpen(c: Context, key: String, on: Boolean) = sp(c).edit().putBoolean(key, on).apply()
 
     fun attr(c: Context, id: Int): Int {
@@ -80,10 +78,10 @@ object Ui {
         val thumb = ColorStateList(arrayOf(checked, intArrayOf()), intArrayOf(Color.WHITE, attr(root.context, R.attr.carTextDim)))
         fun walk(v: View) {
             when (v) {
-                is Slider -> if (v.id != R.id.npSeek) { v.trackActiveTintList = csl; v.thumbTintList = csl; v.haloTintList = ColorStateList.valueOf(ColorUtils.setAlphaComponent(c, 0x33)) }
+                is Slider -> if (v.id != R.id.npSeek) { v.trackActiveTintList = csl; v.thumbTintList = csl; v.haloTintList = ColorStateList.valueOf(0x1FFFFFFF) }
                 is MaterialSwitch -> { v.trackTintList = sw; v.thumbTintList = thumb; v.trackDecorationTintList = ColorStateList.valueOf(Color.TRANSPARENT) }
                 is com.google.android.material.tabs.TabLayout -> v.setSelectedTabIndicatorColor(c)
-                is com.google.android.material.progressindicator.LinearProgressIndicator -> v.setIndicatorColor(c)
+                is com.google.android.material.progressindicator.BaseProgressIndicator<*> -> v.setIndicatorColor(c)
                 is com.google.android.material.textfield.TextInputLayout -> v.boxStrokeColor = c
             }
             (v.tag as? Runnable)?.run()
@@ -122,6 +120,44 @@ object Ui {
         frame.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ -> if (r - l != or - ol) frame.post { paint(false) } }
     }
 
+    /** The one loader: thin indeterminate circle in the live accent, no text. Starts hidden. */
+    fun loader(c: Context) = com.google.android.material.progressindicator.CircularProgressIndicator(c).apply {
+        val d = c.resources.displayMetrics.density
+        isIndeterminate = true; indicatorSize = (40 * d).toInt(); trackThickness = (3 * d).toInt(); trackCornerRadius = (2 * d).toInt()
+        trackColor = Color.TRANSPARENT; setIndicatorColor(Accent.now(c)); alpha = 0f; visibility = View.GONE
+    }
+
+    /** Fade the loader in after 300 ms (fast loads show nothing), out at once when content arrives. */
+    fun showLoader(v: View?, on: Boolean) {
+        v ?: return
+        if (on == (v.tag == true)) return
+        v.tag = on; v.animate().cancel()
+        if (on) { v.visibility = View.VISIBLE; v.animate().alpha(1f).setStartDelay(300).setDuration(150).start() }
+        else v.animate().alpha(0f).setStartDelay(0).setDuration(150).withEndAction { v.visibility = View.GONE }.start()
+    }
+
+    /** The shared pill button (@style/CarButton): 44dp, 20dp side padding, centered label, optional icon. */
+    fun pillButton(c: Context, label: String, icon: Int = 0, onClick: () -> Unit) =
+        (android.view.LayoutInflater.from(c).inflate(R.layout.view_pill_button, null) as com.google.android.material.button.MaterialButton).apply {
+            text = label; if (icon != 0) setIconResource(icon); setOnClickListener { onClick() }; press(this)
+        }
+
+    /** Edge to edge: the window (backdrop) draws under the status bar, split caption and gesture bar;
+     *  only [content] is padded by those insets, plus [extra] px on the sides and bottom. */
+    fun edge(a: Activity, content: View, extra: Int = 0, bottomExtra: Int = 0) {
+        a.window.isNavigationBarContrastEnforced = false; a.window.isStatusBarContrastEnforced = false
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+            val b = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.displayCutout() or
+                androidx.core.view.WindowInsetsCompat.Type.captionBar() or androidx.core.view.WindowInsetsCompat.Type.ime())
+            v.setPadding(b.left + extra, b.top, b.right + extra, b.bottom + bottomExtra); insets
+        }
+    }
+
+    /** Status subtitle: a colored dot, then one of Connected / Searching / Off (or a short detail). */
+    fun status(tv: TextView, text: String, color: Int) {
+        tv.text = android.text.SpannableString("\u25CF  $text").apply { setSpan(android.text.style.ForegroundColorSpan(color), 0, 1, 0) }
+    }
+
     fun blur(iv: ImageView?) { iv?.setRenderEffect(RenderEffect.createBlurEffect(90f, 90f, Shader.TileMode.CLAMP)) }
 
     /** Crossfade to a new bitmap. */
@@ -153,10 +189,10 @@ object Ui {
     fun press(vararg views: View?) = views.filterNotNull().forEach { v ->
         v.setOnTouchListener { _, e ->
             when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(90).start()
+                MotionEvent.ACTION_DOWN -> { v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(150).start()
                     v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
-                    v.animate().scaleX(1f).scaleY(1f).setInterpolator(OvershootInterpolator(3f)).setDuration(260).start()
+                    v.animate().scaleX(1f).scaleY(1f).setInterpolator(OvershootInterpolator(2f)).setDuration(200).start()
             }
             false
         }
@@ -224,7 +260,7 @@ object Ui {
                     live = StreamSender.running && StreamSender.tablet.isNotEmpty()
                     waiting = StreamSender.running
                 }
-                tabChip?.text = when { !on -> "Off"; live -> "Connected"; waiting -> "Waiting"; else -> "Starts with GO" }
+                tabChip?.text = when { !on -> "Off"; live -> "Connected"; waiting -> "Searching"; else -> "Starts with GO" }
                 dot(tabDot, when { live -> GREEN; on && waiting -> AMBER; else -> off }, live)
                 root.postDelayed(this, 500)
             }

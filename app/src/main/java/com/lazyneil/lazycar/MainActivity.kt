@@ -85,14 +85,7 @@ class MainActivity : AppCompatActivity() {
         val scroll = findViewById<View>(R.id.scroll)
         val go = findViewById<MaterialButton>(R.id.goButton)
         val root = findViewById<View>(R.id.root)
-        val floatingGo = go.parent === root   // "Player first": GO pill pinned to the bottom
-        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
-            val b = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(b.left, b.top, b.right, 0)
-            scroll.setPadding(scroll.paddingLeft, scroll.paddingTop, scroll.paddingRight, (if (floatingGo) dp(104) else dp(16)) + b.bottom)
-            if (floatingGo) { (go.layoutParams as MarginLayoutParams).bottomMargin = dp(16) + b.bottom; go.requestLayout() }
-            insets
-        }
+        Ui.edge(this, scroll, 0, dp(16))   // backdrop stays full window
         val want = arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
             .filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
@@ -177,37 +170,50 @@ class MainActivity : AppCompatActivity() {
         fun paint(bg: Int, fg: Int) {
             btn.backgroundTintList = android.content.res.ColorStateList.valueOf(bg); btn.setTextColor(fg)
         }
-        btn.alpha = 1f; btn.isEnabled = true; btn.icon = null
+        btn.isEnabled = true; btn.icon = null
         fun busySpinner() {
-            btn.isEnabled = false; paint(busy, secondary)
+            btn.isEnabled = false; paint(ContextCompat.getColor(this, R.color.card), secondary)
             val spec = com.google.android.material.progressindicator.CircularProgressIndicatorSpec(this, null)
             spec.indicatorSize = dp(24); spec.trackThickness = dp(3); spec.indicatorColors = intArrayOf(secondary)
             btn.icon = com.google.android.material.progressindicator.IndeterminateDrawable.createCircularDrawable(this, spec)
             btn.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; btn.iconSize = dp(24); btn.iconPadding = dp(12)
         }
         val hint = findViewById<TextView>(R.id.goHint); val sub = findViewById<TextView>(R.id.goSub)
-        // Accent glow behind GO, the strip's play button and progress, all from the art accent.
-        findViewById<View>(R.id.goGlow).background = android.graphics.drawable.GradientDrawable().apply {
-            gradientType = android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT; gradientRadius = dp(160).toFloat()
-            colors = intArrayOf(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x55), 0)
-        }
         findViewById<ImageButton>(R.id.stripPlay).backgroundTintList = android.content.res.ColorStateList.valueOf(Ui.attr(this, R.attr.carText))
         findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(R.id.npProgress).setIndicatorColor(accent)
         val big = btn.layoutParams.height > dp(120)   // round hero: spinner replaces the label
-        btn.strokeWidth = 0; btn.elevation = dp(16).toFloat()
+        // GO = the tablet play button, bigger: solid live accent, dark label, accent glow, same press.
+        val hero = findViewById<View>(R.id.hero)
+        val size = maxOf(dp(160), minOf(dp(200), (resources.displayMetrics.widthPixels * 0.6f).toInt(), (hero.height * 0.85f).toInt().takeIf { it > 0 } ?: dp(200)))
+        if (hero.height == 0) hero.post { refreshGoButton() }
+        if (btn.layoutParams.width != size) { btn.layoutParams = btn.layoutParams.apply { width = size; height = size }; btn.cornerRadius = size / 2
+            findViewById<View>(R.id.goGlow).layoutParams = findViewById<View>(R.id.goGlow).layoutParams.apply { width = size * 4 / 3; height = size * 4 / 3 } }
+        // Accent glow behind GO, the strip's play button and progress, all from the art accent.
+        findViewById<View>(R.id.goGlow).background = android.graphics.drawable.GradientDrawable().apply {
+            gradientType = android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT; gradientRadius = size / 3f
+            colors = intArrayOf(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x40), androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x14), 0)
+        }
+        val state = GoAction.effectiveState(p)
+        btn.strokeWidth = 0; btn.elevation = dp(8).toFloat()
+        // OFF: the same button at 40% (no glow); ON: full opacity with the soft glow. 200 ms fade.
+        val off = state == GoAction.IDLE
+        btn.animate().alpha(if (off) 0.4f else 1f).setDuration(200).start()
+        findViewById<View>(R.id.goGlow).animate().alpha(if (off) 0f else 1f).setDuration(200).start()
         btn.outlineSpotShadowColor = accent; btn.outlineAmbientShadowColor = accent
-        when (GoAction.effectiveState(p)) {
-            GoAction.ON -> { btn.text = if (big) "ON" else "STOP"; paint(ContextCompat.getColor(this, R.color.stateBusy), accent)
-                btn.strokeWidth = dp(3); btn.strokeColor = android.content.res.ColorStateList.valueOf(accent)
+        when (state) {
+            GoAction.ON -> { power(btn, onAccent, "Stop CarApp"); paint(accent, onAccent)
                 hint.text = "Running"; sub.text = "Tap to stop" }
             GoAction.STARTING -> { btn.text = if (big) "" else "STARTING"; busySpinner(); hint.text = "Starting"; sub.text = "Connecting the speaker and the tablet" }
             GoAction.STOPPING -> { btn.text = if (big) "" else "STOPPING"; busySpinner(); hint.text = "Stopping"; sub.text = "Restoring your settings" }
-            else -> { paint(accent, onAccent); hint.text = "Ready"; sub.text = "Tap GO to start the car setup"
-                btn.text = android.text.SpannableString("GO\nTAP TO DRIVE").apply {
-                    setSpan(android.text.style.RelativeSizeSpan(0.22f), 3, length, 0)
-                    setSpan(android.text.style.TypefaceSpan("sans-serif-medium"), 3, length, 0) } }
+            else -> { power(btn, onAccent, "Start CarApp"); paint(accent, onAccent); hint.text = "Ready"; sub.text = "Tap to start the car setup" }
         }
-        if (big && btn.icon != null) { btn.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; btn.iconPadding = 0; btn.iconSize = dp(48) }
+        if (big && (state == GoAction.STARTING || state == GoAction.STOPPING)) { btn.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; btn.iconPadding = 0; btn.iconSize = dp(48) }
+    }
+
+    /** Power icon in place of the GO / ON label, tinted like the label was. */
+    private fun power(b: MaterialButton, tint: Int, desc: String) {
+        b.text = ""; b.icon = ContextCompat.getDrawable(this, R.drawable.ic_power); b.iconTint = android.content.res.ColorStateList.valueOf(tint)
+        b.iconSize = dp(72); b.iconPadding = 0; b.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; b.contentDescription = desc
     }
 
     private fun refreshSetup() {
@@ -390,16 +396,16 @@ class MainActivity : AppCompatActivity() {
         val g = com.lazyneil.lazycar.gps.GpsService
         val age = if (g.lastAt == 0L) -1 else (android.os.SystemClock.elapsedRealtime() - g.lastAt) / 1000
         val live = g.mode != "idle" && age in 0..5
-        tile(R.id.tileGps, R.drawable.ic_pin, "GPS link", when { g.mode == "idle" -> "Off"; live -> "Connected"; else -> "Waiting" },
+        tile(R.id.tileGps, R.drawable.ic_pin, "GPS", when { g.mode == "idle" -> "Off"; live -> "Connected"; else -> "Searching" },
             when { live -> Ui.GREEN; g.mode != "idle" -> Ui.AMBER; else -> off }, live)
         val bt = getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
             .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
-        tile(R.id.tileBt, R.drawable.ic_speaker, "Bluetooth", bt?.productName?.toString() ?: "Off", if (bt != null) Ui.GREEN else off, false)
+        tile(R.id.tileBt, R.drawable.ic_speaker, "Speaker", if (bt != null) "Connected" else "Off", if (bt != null) Ui.GREEN else off, false)
         val on = GoAction.effectiveState(p) == GoAction.ON
-        tile(R.id.tileHotspot, R.drawable.ic_share, "Hotspot", when { !p.hotspot -> "Off"; on -> "On"; else -> "Starts on GO" }, if (p.hotspot && on) Ui.GREEN else off, false)
+        tile(R.id.tileHotspot, R.drawable.ic_share, "Hotspot", when { !p.hotspot -> "Off"; on -> "On"; else -> "Off" }, if (p.hotspot && on) Ui.GREEN else off, false)
         val s = com.lazyneil.lazycar.audio.StreamSender
         val tab = s.running && s.tablet.isNotEmpty() || com.lazyneil.lazycar.media.MediaListener.clients > 0
-        tile(R.id.tileTablet, R.drawable.ic_tablet, "Tablet", when { tab -> "Connected"; s.running -> "Waiting"; else -> "Starts on GO" },
+        tile(R.id.tileTablet, R.drawable.ic_tablet, "Tablet", when { tab -> "Connected"; s.running -> "Searching"; else -> "Off" },
             when { tab -> Ui.GREEN; s.running -> Ui.AMBER; else -> off }, tab)
         val st = session()?.playbackState; val dur = session()?.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         val pos = if (st == null) 0L else st.position + if (st.state == PlaybackState.STATE_PLAYING)

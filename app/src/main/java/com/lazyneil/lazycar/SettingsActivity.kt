@@ -59,11 +59,7 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings)
         selMac3 = p.mac3; selName3 = p.name3
 
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root)) { v, insets ->
-            val b = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(b.left, b.top, b.right, b.bottom)
-            insets
-        }
+        Ui.edge(this, findViewById(R.id.root))
         findViewById<View>(R.id.backBtn).setOnClickListener { finish() }
         findViewById<TextView>(R.id.topTitle).text = "Settings"
         Ui.bindOutputs(this, findViewById(R.id.root))
@@ -71,7 +67,6 @@ class SettingsActivity : AppCompatActivity() {
         bindDrive()
         buildNav()
         bindAccent()
-        bindStyle()
         // A tap anywhere on a switch row flips its switch.
         fun rows(v: View) { if (v is android.view.ViewGroup) for (i in 0 until v.childCount) {
             val c = v.getChildAt(i); if (c is MaterialSwitch && v.id != View.NO_ID) v.setOnClickListener { c.toggle() } else rows(c) } }
@@ -170,8 +165,6 @@ class SettingsActivity : AppCompatActivity() {
             isChecked = m != "stop"
             setOnCheckedChangeListener { _, on -> gps.launch(this@SettingsActivity, if (on) target else "stop") }
         }
-        findViewById<TextView>(R.id.gpsCaption).text = if (tablet) "Maps on the tablet uses the phone's location"
-        else "Sends this phone's location to the tablet"
         com.lazyneil.lazycar.audio.TabletSpeaker.addSettings(this, findViewById(R.id.audioAnchor))
     }
 
@@ -346,17 +339,15 @@ class SettingsActivity : AppCompatActivity() {
     // ---- Drive: open the Maps + CarApp split by itself (tablet) ----
     private fun bindDrive() {
         val tablet = Role.isTablet(this)
+        findViewById<View>(R.id.splitMethodBox).visibility = if (tablet) View.VISIBLE else View.GONE
+        val methods = listOf("auto", "lenovo", "standard")
+        Ui.segmented(findViewById(R.id.splitMethod), listOf("Auto", "Lenovo pair", "Standard"), methods.indexOf(p.splitMethod).coerceAtLeast(0)) {
+            p.splitMethod = methods[it] }
         intArrayOf(R.id.driveHeader, R.id.driveCard).forEach { findViewById<View>(it).visibility = if (tablet) View.VISIBLE else View.GONE }
         findViewById<MaterialSwitch>(R.id.openMapsSwitch).apply {
             isChecked = Ui.openWithMaps(this@SettingsActivity)
             setOnCheckedChangeListener { _, on -> Ui.setOpen(this@SettingsActivity, "openWithMaps", on) }
         }
-    }
-
-    private fun bindStyle() {
-        findViewById<View>(R.id.styleBox).visibility = if (Role.isTablet(this)) View.VISIBLE else View.GONE
-        Ui.segmented(findViewById(R.id.styleGroup), listOf("Modern", "Classic"), if (Ui.classic(this)) 1 else 0) {
-            Ui.setOpen(this, "classicPlayer", it == 1) }
     }
 
     /** Auto (from art) plus the 8 swatches. The tablet also sends the choice to the phone. */
@@ -367,10 +358,12 @@ class SettingsActivity : AppCompatActivity() {
         val name = Accent.SWATCHES.firstOrNull { it.second == cur }?.first
         findViewById<TextView>(R.id.accentSub).text = if (name == null) "Auto, follows the album art" else "$name, fixed"
         val ring = Ui.attr(this, R.attr.carText)
-        // Rows of 5 evenly spread cells, each a fixed 44dp circle; the last row is padded with empty cells.
+        // Rows of evenly spread cells, as many 60dp columns as fit; each a fixed 44dp circle.
+        val paneDp = resources.configuration.screenWidthDp - (if (findViewById<View>(R.id.navList).visibility == View.VISIBLE) 320 else 0) - 72
+        val cols = (paneDp / 60).coerceIn(3, 9)
         val all = listOf("Auto (from art)" to Accent.AUTO) + Accent.SWATCHES
-        (all + List((5 - all.size % 5) % 5) { "" to 1 }).forEachIndexed { i, (label, c) ->
-            if (i % 5 == 0) { row = android.widget.LinearLayout(this); grid.addView(row, -1, -2) }
+        (all + List((cols - all.size % cols) % cols) { "" to 1 }).forEachIndexed { i, (label, c) ->
+            if (i % cols == 0) { row = android.widget.LinearLayout(this); grid.addView(row, -1, -2) }
             val cell = android.widget.FrameLayout(this)
             row.addView(cell, android.widget.LinearLayout.LayoutParams(0, dp(56), 1f))
             if (label.isEmpty()) return@forEachIndexed
@@ -437,16 +430,16 @@ class SettingsActivity : AppCompatActivity() {
         val g = com.lazyneil.lazycar.gps.GpsService
         val age = if (g.lastAt == 0L) -1 else (android.os.SystemClock.elapsedRealtime() - g.lastAt) / 1000
         val send = g.mode == "send"
-        findViewById<TextView>(R.id.gpsLive).text = when {
+        val live = g.mode != "idle" && age in 0..5
+        Ui.status(findViewById(R.id.gpsLive), when {
             g.error.isNotEmpty() -> g.error
             g.mode == "idle" -> "Off"
-            age < 0 -> if (send) "Waiting for a GPS fix" else "Waiting for the phone"
-            age > 5 -> "Waiting, last fix ${age}s ago"
-            else -> if (send) "Connected, sending" else "Connected"
-        }
+            live -> "Connected"
+            else -> if (send) "Searching for a GPS fix" else "Searching for the phone"
+        }, when { live -> Ui.GREEN; g.mode != "idle" -> Ui.AMBER; else -> Ui.attr(this, R.attr.carTextDim) })
         if (!Role.isTablet(this)) return
         val cam = getSystemService(android.hardware.usb.UsbManager::class.java).deviceList.values
             .firstOrNull { com.lazyneil.lazycar.rear.UsbDevices.isVideoDevice(it) }
-        findViewById<TextView>(R.id.camLive).text = if (cam != null) "Connected" else "Waiting, opens in reverse"
+        Ui.status(findViewById(R.id.camLive), if (cam != null) "Connected" else "Ready, opens in reverse", if (cam != null) Ui.GREEN else Ui.attr(this, R.attr.carTextDim))
     }
 }

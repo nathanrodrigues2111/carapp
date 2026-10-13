@@ -230,9 +230,16 @@ class MediaListener : NotificationListenerService() {
         b.connect()
     }
 
-    private fun browse(cl: Client, req: JSONObject) = withBrowser(cl, req) { b ->
+    // A frozen or busy player can leave connect/subscribe hanging: answer within 6 s and reconnect next time.
+    private fun browse(cl: Client, req: JSONObject) {
+        val done = java.util.concurrent.atomic.AtomicBoolean(false)
+        main.postDelayed({ if (!done.get()) { browser?.disconnect(); browser = null; reply(cl, req, JSONArray(), "${label(player)} did not answer") } }, 6000)
+        browseNow(cl, req, done)
+    }
+
+    private fun browseNow(cl: Client, req: JSONObject, done: java.util.concurrent.atomic.AtomicBoolean) = withBrowser(cl, req) { b ->
         val q = req.optString("q")
-        val sink = { items: List<MediaBrowser.MediaItem> -> io.execute { reply(cl, req, JSONArray().apply {
+        val sink = { items: List<MediaBrowser.MediaItem> -> done.set(true); io.execute { reply(cl, req, JSONArray().apply {
             items.take(300).forEachIndexed { i, it -> val d = it.description
                 put(JSONObject().put("id", it.mediaId).put("title", d.title ?: "").put("sub", d.subtitle ?: "")
                     .put("play", it.isPlayable).put("browse", it.isBrowsable)
@@ -246,7 +253,7 @@ class MediaListener : NotificationListenerService() {
                     b.unsubscribe(id)
                     sink(if (q.isEmpty()) children else children.filter { "${it.description.title} ${it.description.subtitle}".contains(q, true) })
                 }
-                override fun onError(parentId: String) { reply(cl, req, JSONArray(), "${label(player)} would not list this") }
+                override fun onError(parentId: String) { done.set(true); reply(cl, req, JSONArray(), "${label(player)} would not list this") }
             })
         }
     }
