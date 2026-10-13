@@ -196,6 +196,7 @@ class GpsService : Service(), LocationListener {
 
     // Receive mode: listen forever, feed every packet into the test providers.
     private fun startReceive() {
+        mocking = true; setMocking(false)   // drop test providers a previous process left behind
         // Some Wi-Fi drivers drop broadcast frames without this lock.
         wifiLock = getSystemService(WifiManager::class.java).createMulticastLock("lazygps").apply { acquire() }
         val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; soTimeout = 1000; bind(InetSocketAddress(PORT)) }
