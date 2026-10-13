@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- CarApp theme tokens. Every home, player and settings layout reads colors from these. -->
+    <attr name="carBg" format="color|reference" />
+    <attr name="carSurface" format="color|reference" />
+    <attr name="carStroke" format="color|reference" />
+    <attr name="carText" format="color|reference" />
+    <attr name="carTextDim" format="color|reference" />
+    <attr name="carAccent" format="color|reference" />
+    <attr name="carScrim" format="color|reference" />
+</resources>

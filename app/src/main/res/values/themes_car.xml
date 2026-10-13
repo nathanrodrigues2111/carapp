@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The one CarApp theme, applied by Ui.apply on top of Theme.LazyCar. -->
+    <style name="CarTheme.Midnight" parent="">
+        <item name="carBg">#FF000000</item>
+        <item name="carSurface">#14FFFFFF</item>
+        <item name="carStroke">#1FFFFFFF</item>
+        <item name="carText">#FFFFFFFF</item>
+        <item name="carTextDim">#99FFFFFF</item>
+        <item name="carAccent">#FF00E5FF</item>
+        <item name="carScrim">#B3000000</item>
+        <item name="android:windowBackground">#FF000000</item>
+        <item name="android:colorBackground">#FF000000</item>
+        <item name="colorPrimary">#FF00E5FF</item>
+        <item name="colorOnPrimary">#FF000000</item>
+        <item name="colorSecondary">#FF00E5FF</item>
+        <item name="colorOnSurface">#FFFFFFFF</item>
+        <item name="colorOnSurfaceVariant">#99FFFFFF</item>
+    </style>
+    <!-- Type: three sizes, heavy display with tight tracking. -->
+    <style name="T" />
+    <style name="T.Display">
+        <item name="android:textSize">@dimen/car_display</item>
+        <item name="android:textColor">?attr/carText</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">-0.03</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+    <style name="T.Title">
+        <item name="android:textSize">@dimen/car_title</item>
+        <item name="android:textColor">?attr/carText</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">-0.01</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+    <style name="T.Label">
+        <item name="android:textSize">@dimen/car_label</item>
+        <item name="android:textColor">?attr/carTextDim</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <style name="Glass">
+        <item name="android:background">@drawable/bg_glass</item>
+        <item name="android:padding">@dimen/sp4</item>
+    </style>
+    <style name="CarIconBtn">
+        <item name="android:layout_width">56dp</item>
+        <item name="android:layout_height">56dp</item>
+        <item name="android:padding">14dp</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="tint">?attr/carText</item>
+    </style>
+    <style name="CarIconBtn.Big">
+        <item name="android:layout_width">80dp</item>
+        <item name="android:layout_height">80dp</item>
+        <item name="android:padding">18dp</item>
+    </style>
+    <!-- Pill volume slider, icon inside the track -->
+    <style name="CarSlider" parent="Widget.Material3Expressive.Slider.Medium">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:valueFrom">0</item>
+        <item name="android:valueTo">100</item>
+        <item name="android:stepSize">1</item>
+        <item name="labelBehavior">gone</item>
+        <item name="tickVisible">false</item>
+    </style>
+    <style name="CarSeek" parent="Widget.Material3Expressive.Slider.Xsmall">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:valueFrom">0</item>
+        <item name="android:valueTo">1</item>
+        <item name="labelBehavior">gone</item>
+    </style>
+    <style name="Dot">
+        <item name="android:layout_width">10dp</item>
+        <item name="android:layout_height">10dp</item>
+        <item name="android:background">@drawable/bg_dot</item>
+    </style>
+    <style name="SectionHeader">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/sp6</item>
+        <item name="android:layout_marginBottom">@dimen/sp2</item>
+        <item name="android:layout_marginStart">@dimen/sp4</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">?attr/carAccent</item>
+    </style>
+    <style name="Caption">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">?attr/carTextDim</item>
+    </style>
+    <style name="SettingSwitch">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">?attr/carText</item>
+    </style>
+</resources>

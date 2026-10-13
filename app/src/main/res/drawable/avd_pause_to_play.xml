@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Play and pause morph: both icons are two four-point paths so they interpolate. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+            <path android:name="l" android:fillColor="#FFFFFFFF" android:pathData="M7,5 L10.5,5 L10.5,19 L7,19 Z" />
+            <path android:name="r" android:fillColor="#FFFFFFFF" android:pathData="M13.5,5 L17,5 L17,19 L13.5,19 Z" />
+        </vector>
+    </aapt:attr>
+    <target android:name="l">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:propertyName="pathData" android:duration="260" android:valueType="pathType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" android:valueFrom="M7,5 L10.5,5 L10.5,19 L7,19 Z" android:valueTo="M8,5 L12,7.5 L12,16.5 L8,19 Z" />
+        </aapt:attr>
+    </target>
+    <target android:name="r">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:propertyName="pathData" android:duration="260" android:valueType="pathType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" android:valueFrom="M13.5,5 L17,5 L17,19 L13.5,19 Z" android:valueTo="M12,7.5 L19,12 L19,12 L12,16.5 Z" />
+        </aapt:attr>
+    </target>
+</animated-vector>

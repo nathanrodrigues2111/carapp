@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phone top bar: GPS chip left, Debug and Settings right. No toolbar. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="56dp">
+    <LinearLayout android:id="@+id/gpsChip" android:layout_width="wrap_content" android:layout_height="32dp"
+        android:layout_gravity="start|center_vertical" android:background="@drawable/bg_pill"
+        android:gravity="center_vertical" android:paddingHorizontal="12dp">
+        <View android:id="@+id/gpsDot" style="@style/Dot" android:layout_width="8dp" android:layout_height="8dp" />
+        <TextView android:id="@+id/gpsText" style="@style/T.Label" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginStart="8dp" android:text="GPS" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="wrap_content" android:layout_height="match_parent"
+        android:layout_gravity="end" android:orientation="horizontal">
+        <ImageButton android:id="@+id/debugBtn" style="@style/CarIconBtn" android:contentDescription="Debug"
+            android:src="@drawable/ic_bug" />
+        <ImageButton android:id="@+id/settingsBtn" style="@style/CarIconBtn" android:contentDescription="Settings"
+            android:src="@drawable/ic_settings" />
+    </LinearLayout>
+</FrameLayout>

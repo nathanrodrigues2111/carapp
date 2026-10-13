@@ -1,279 +1,93 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Tablet player (Poweramp style), narrow: the split next to Maps. Same ids in both variants. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:clipToPadding="false"
-    android:fillViewport="true">
+    android:background="?attr/carBg">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingHorizontal="16dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="24dp">
+    <ImageView android:id="@+id/npBackdrop" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:importantForAccessibility="no" android:scaleType="centerCrop" />
+    <View android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_scrim" />
 
-        <!-- Header: brand left, cog right (same as the phone home) -->
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginBottom="4dp">
-            <ImageView
-                android:id="@+id/brandIcon"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_gravity="start|center_vertical"
-                android:src="@drawable/ic_car_glyph" />
-            <ImageButton
-                android:id="@+id/settingsBtn"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_gravity="end|center_vertical"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Settings"
-                android:padding="10dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_settings"
-                app:tint="@color/white" />
+    <!-- One layout: vertical in the split next to Maps, art left / controls right when wide (DashboardActivity flips it). -->
+    <LinearLayout android:id="@+id/body" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="vertical" android:padding="@dimen/sp4">
+        <FrameLayout android:id="@+id/artFrame" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <com.google.android.material.card.MaterialCardView android:id="@+id/npArtBox" android:layout_width="match_parent" android:layout_height="match_parent"
+            app:cardBackgroundColor="?attr/carSurface" app:cardCornerRadius="@dimen/r_m" app:cardElevation="12dp"
+            app:strokeWidth="0dp">
+            <ImageView android:id="@+id/npArt" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:contentDescription="Album art. Tap to play or pause, swipe for next or previous"
+                android:scaleType="centerCrop" />
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_gravity="bottom|start" android:layout_margin="@dimen/sp4" android:orientation="vertical">
+                <TextView android:id="@+id/npTitle" style="@style/T.Title" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:background="@drawable/bg_chip_dark"
+                    android:paddingHorizontal="@dimen/sp3" android:paddingVertical="@dimen/sp1"
+                    android:text="Nothing playing" android:textSize="@dimen/car_np_title" android:textStyle="bold" />
+                <TextView android:id="@+id/npArtist" style="@style/T.Label" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp1"
+                    android:background="@drawable/bg_chip_dark" android:paddingHorizontal="@dimen/sp3"
+                    android:paddingVertical="@dimen/sp1" android:textColor="?attr/carText" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
         </FrameLayout>
-
-        <!-- Missing permissions -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/setupCard"
-            style="@style/CardBox"
-            android:layout_marginBottom="12dp"
-            android:visibility="gone">
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Permissions needed"
-                    android:textColor="@color/white"
-                    android:textSize="20sp" />
-                <TextView
-                    android:id="@+id/setupBody"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:textColor="@color/secondaryText"
-                    android:textSize="15sp" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/setupBtn"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="Grant" />
+        <LinearLayout android:id="@+id/side" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <View android:layout_width="1dp" android:layout_height="0dp" android:layout_weight="1" />
+            <com.google.android.material.slider.Slider android:id="@+id/npSeek" style="@style/CarSlider"
+                android:valueTo="1" android:contentDescription="Seek" />
+            <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingHorizontal="@dimen/sp4">
+                <TextView android:id="@+id/npPos" style="@style/T.Label" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:background="@drawable/bg_chip_dark"
+                    android:paddingHorizontal="@dimen/sp2" android:textColor="?attr/carText" />
+                <TextView android:id="@+id/npDur" style="@style/T.Label" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:layout_gravity="end" android:background="@drawable/bg_chip_dark"
+                    android:paddingHorizontal="@dimen/sp2" android:textColor="?attr/carText" />
+            </FrameLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/sp4" android:gravity="center" android:orientation="horizontal">
+                <ImageButton android:id="@+id/npPrev" android:layout_width="88dp" android:layout_height="88dp"
+                    android:background="@drawable/bg_circle_dark" android:contentDescription="Previous" android:padding="26dp"
+                    android:scaleType="fitCenter" android:src="@drawable/ic_skip_prev" app:tint="#FFFFFFFF" />
+                <ImageButton android:id="@+id/npPlay" android:layout_width="@dimen/car_play" android:layout_height="@dimen/car_play"
+                    android:layout_marginHorizontal="@dimen/sp6" android:background="@drawable/bg_circle_accent"
+                    android:contentDescription="Play or pause" android:elevation="16dp" android:padding="32dp"
+                    android:scaleType="fitCenter" android:src="@drawable/ic_play" />
+                <ImageButton android:id="@+id/npNext" android:layout_width="88dp" android:layout_height="88dp"
+                    android:background="@drawable/bg_circle_dark" android:contentDescription="Next" android:padding="26dp"
+                    android:scaleType="fitCenter" android:src="@drawable/ic_skip_next" app:tint="#FFFFFFFF" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Now playing on the phone: controls whatever player it uses -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/npCard"
-            style="@style/CardBox"
-            android:layout_marginBottom="12dp">
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="24dp">
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/npArtBox"
-                    android:layout_width="200dp"
-                    android:layout_height="200dp"
-                    app:cardBackgroundColor="@color/iconCircle"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="0dp"
-                    app:strokeWidth="0dp">
-                    <ImageView
-                        android:id="@+id/npArt"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:contentDescription="Album art"
-                        android:scaleType="centerCrop" />
-                </com.google.android.material.card.MaterialCardView>
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="24dp"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-                    <TextView android:id="@+id/npLabel" style="@style/CardLabel" android:text="Now playing" />
-                    <TextView
-                        android:id="@+id/npTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:textColor="@color/white"
-                        android:textSize="32sp" />
-                    <TextView
-                        android:id="@+id/npArtist"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:textColor="@color/secondaryText"
-                        android:textSize="20sp" />
-                    <com.google.android.material.slider.Slider
-                        android:id="@+id/npSeek"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:valueFrom="0"
-                        android:valueTo="1"
-                        app:labelBehavior="gone" />
-                    <FrameLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content">
-                        <TextView android:id="@+id/npPos" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp" android:textColor="@color/secondaryText" android:textSize="14sp" />
-                        <TextView android:id="@+id/npDur" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:layout_gravity="end" android:layout_marginEnd="12dp" android:textColor="@color/secondaryText" android:textSize="14sp" />
-                    </FrameLayout>
-                    <LinearLayout
-                        android:id="@+id/npButtons"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-                        <com.google.android.material.button.MaterialButton android:id="@+id/npVolDown" style="@style/NpButton"
-                            android:contentDescription="Phone volume down" app:icon="@drawable/ic_vol_down" />
-                        <com.google.android.material.button.MaterialButton android:id="@+id/npPrev" style="@style/NpButton"
-                            android:contentDescription="Previous" app:icon="@drawable/ic_skip_prev" />
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/npPlay"
-                            style="@style/Widget.Material3.Button.Icon"
-                            android:layout_width="88dp"
-                            android:layout_height="88dp"
-                            android:layout_marginHorizontal="8dp"
-                            android:contentDescription="Play or pause"
-                            android:insetTop="0dp"
-                            android:insetBottom="0dp"
-                            android:padding="0dp"
-                            app:cornerRadius="44dp"
-                            app:icon="@drawable/ic_play"
-                            app:iconGravity="textStart"
-                            app:iconPadding="0dp"
-                            app:iconSize="44dp" />
-                        <com.google.android.material.button.MaterialButton android:id="@+id/npNext" style="@style/NpButton"
-                            android:contentDescription="Next" app:icon="@drawable/ic_skip_next" />
-                        <com.google.android.material.button.MaterialButton android:id="@+id/npVolUp" style="@style/NpButton"
-                            android:contentDescription="Phone volume up" app:icon="@drawable/ic_vol_up" />
-                        <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                        <com.google.android.material.button.MaterialButton android:id="@+id/npLibrary" style="@style/NpButton"
-                            android:contentDescription="Library" app:icon="@drawable/ic_library" />
-                    </LinearLayout>
-                    <LinearLayout
-                        android:id="@+id/npVol"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:orientation="vertical" />
+            <View android:layout_width="1dp" android:layout_height="0dp" android:layout_weight="1" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="64dp" android:gravity="center_vertical"
+                android:orientation="horizontal" >
+                <TextClock style="@style/T.Title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:format12Hour="h:mm" android:format24Hour="H:mm" android:textStyle="bold" />
+                <TextView android:id="@+id/speedText" style="@style/T.Label" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:layout_marginStart="@dimen/sp3" android:text="-- km/h" />
+                <LinearLayout android:id="@+id/statusRow" android:layout_width="wrap_content" android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackground" android:contentDescription="GPS and stream status, opens settings"
+                    android:gravity="center" android:paddingHorizontal="@dimen/sp3">
+                    <View android:id="@+id/stGpsDot" style="@style/Dot" android:layout_width="8dp" android:layout_height="8dp" />
+                    <View android:id="@+id/stStreamDot" style="@style/Dot" android:layout_width="8dp" android:layout_height="8dp"
+                        android:layout_marginStart="@dimen/sp2" />
                 </LinearLayout>
+                <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                <ImageButton android:id="@+id/npLibrary" style="@style/CarIconBtn" android:contentDescription="Library"
+                    android:src="@drawable/ic_library" />
+                <ImageButton android:id="@+id/mapsBtn" style="@style/CarIconBtn" android:contentDescription="Open Maps split"
+                    android:src="@drawable/ic_maps" />
+                <ImageButton android:id="@+id/settingsBtn" style="@style/CarIconBtn" android:contentDescription="Settings"
+                    android:src="@drawable/ic_settings" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- GPS link -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/gpsCard"
-            style="@style/CardBox"
-            android:layout_marginBottom="12dp">
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="28dp">
-                <TextView style="@style/CardLabel" android:text="GPS link" />
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-                    <View
-                        android:id="@+id/gpsDot"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:background="@drawable/circle_icon_bg" />
-                    <TextView
-                        android:id="@+id/gpsState"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:textColor="@color/white"
-                        android:textSize="40sp" />
-                </LinearLayout>
-                <TextView
-                    android:id="@+id/gpsDetail"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:textColor="@color/secondaryText"
-                    android:textSize="20sp" />
-                <TextView
-                    android:id="@+id/gpsStats"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:textColor="@color/white"
-                    android:textSize="20sp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Reverse camera -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/camCard"
-            style="@style/CardBox"
-            android:clickable="true"
-            android:focusable="true">
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="28dp">
-                <TextView style="@style/CardLabel" android:text="Reverse camera" />
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-                    <View
-                        android:id="@+id/camDot"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:background="@drawable/circle_icon_bg" />
-                    <TextView
-                        android:id="@+id/camState"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:textColor="@color/white"
-                        android:textSize="40sp" />
-                </LinearLayout>
-                <TextView
-                    android:id="@+id/camDetail"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:textColor="@color/secondaryText"
-                    android:textSize="20sp" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/camOpen"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="Open camera" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
     </LinearLayout>
-</ScrollView>
+
+    <TextView android:id="@+id/setupBanner" style="@style/T.Label" android:layout_width="wrap_content"
+        android:layout_height="wrap_content" android:layout_gravity="top|end" android:layout_margin="@dimen/sp6"
+        android:maxWidth="520dp" android:minHeight="48dp" android:maxLines="3" android:background="@drawable/bg_chip_dark"
+        android:gravity="center_vertical" android:padding="@dimen/sp3" android:textColor="?attr/carText"
+        android:visibility="gone" />
+</FrameLayout>

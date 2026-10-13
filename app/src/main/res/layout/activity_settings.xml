@@ -1,221 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Settings: grouped sections. Appearance, Audio, GPS, Launch, Camera, Car mode, Advanced. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="?attr/carBg"
     android:orientation="vertical">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
-        android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@android:color/transparent"
-        app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/white"
-        app:title="Settings"
-        app:titleTextColor="@color/white" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="72dp" android:gravity="center_vertical"
+        android:orientation="horizontal" android:paddingHorizontal="8dp">
+        <ImageButton android:id="@+id/backBtn" style="@style/CarIconBtn" android:contentDescription="Back"
+            android:src="@drawable/ic_back_round" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp"
+            android:fontFamily="sans-serif" android:letterSpacing="-0.02" android:text="Settings"
+            android:textColor="?attr/carText" android:textSize="32sp" android:textStyle="bold" />
+    </LinearLayout>
 
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:orientation="horizontal">
+    <!-- Tablet: section list, filled by SettingsActivity; tap scrolls to the section -->
+    <LinearLayout android:id="@+id/navList" android:layout_width="240dp" android:layout_height="match_parent"
+        android:orientation="vertical" android:paddingHorizontal="@dimen/sp4" android:visibility="gone" />
+    <ScrollView android:id="@+id/settingsScroll" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:clipToPadding="false" android:fillViewport="true" android:scrollbars="none">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:paddingHorizontal="@dimen/sp4" android:paddingBottom="@dimen/sp6">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="16dp"
-            android:paddingBottom="24dp">
+            <TextView style="@style/SectionHeader" android:text="Audio" />
+            <LinearLayout style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                <include layout="@layout/view_outputs" />
+                <TextView android:id="@+id/audioAnchor" style="@style/Caption" android:layout_marginTop="@dimen/sp2" android:text="Hardware volume buttons keep working as usual" />
+            </LinearLayout>
 
-            <!-- Device: role, GPS link, camera -->
-            <com.google.android.material.card.MaterialCardView
-                style="@style/CardBox"
-                android:layout_marginBottom="12dp">
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-                    <LinearLayout android:id="@+id/roleRow" style="@style/Row56">
-                        <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:text="Device role" />
-                        <TextView
-                            android:id="@+id/roleValue"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textColor="@color/secondaryText"
-                            android:textSize="15sp" />
-                        <ImageView style="@style/ChevronIcon" />
-                    </LinearLayout>
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/gpsSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:minHeight="48dp"
-                        android:textColor="@color/white"
-                        android:textSize="17sp" />
-                    <TextView
-                        android:id="@+id/gpsCaption"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textColor="@color/secondaryText"
-                        android:textSize="13sp" />
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/ssidBox"
-                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:hint="Phone hotspot to join">
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/ssidField"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="text" />
-                    </com.google.android.material.textfield.TextInputLayout>
-                    <LinearLayout android:id="@+id/camRow" style="@style/Row56" android:layout_marginTop="8dp">
-                        <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:text="Reverse camera settings" />
-                        <ImageView style="@style/ChevronIcon" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+            <TextView style="@style/SectionHeader" android:text="GPS" />
+            <LinearLayout style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/gpsSwitch" style="@style/SettingSwitch" android:text="" />
+                <TextView android:id="@+id/gpsCaption" style="@style/Caption" />
+                <TextView android:id="@+id/gpsLive" style="@style/T.Title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:maxLines="3" />
 
-            <com.google.android.material.card.MaterialCardView
-                style="@style/CardBox"
-                android:layout_marginBottom="12dp">
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
+            </LinearLayout>
 
-                    <!-- AMOLED -->
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/amoledSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:minHeight="48dp"
-                        android:text="AMOLED black"
-                        android:textColor="@color/white"
-                        android:textSize="17sp" />
-
-                    <!-- Accent colour -->
-                    <LinearLayout
-                        android:id="@+id/accentRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="56dp"
-                        android:layout_marginTop="8dp"
-                        android:background="?attr/selectableItemBackground"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="Accent color"
-                            android:textColor="@color/white"
-                            android:textSize="17sp" />
-                        <View
-                            android:id="@+id/accentDot"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:layout_marginEnd="8dp"
-                            android:background="@drawable/circle_icon_bg" />
-                        <ImageView style="@style/ChevronIcon" />
-                    </LinearLayout>
-
-                    <!-- Car head unit -->
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/headunitSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:minHeight="48dp"
-                        android:text="Car head unit"
-                        android:textColor="@color/white"
-                        android:textSize="17sp" />
-                    <TextView
-                        android:id="@+id/headunitDetected"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textColor="@color/secondaryText"
-                        android:textSize="13sp" />
-                    <LinearLayout
-                        android:id="@+id/headunitExtra"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:visibility="gone">
-                        <LinearLayout android:id="@+id/dev3Row" style="@style/Row56" android:layout_marginTop="4dp">
-                            <FrameLayout style="@style/IconCircle">
-                                <ImageView android:id="@+id/dev3Icon" style="@style/RowIcon" />
-                            </FrameLayout>
-                            <TextView android:id="@+id/dev3Value" style="@style/RowTitle" android:text="Head unit tablet" />
-                            <ImageView style="@style/ChevronIcon" />
-                        </LinearLayout>
-                        <com.google.android.material.textfield.TextInputLayout
-                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:hint="Head unit IP (optional)">
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/ipField"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="text" />
-                        </com.google.android.material.textfield.TextInputLayout>
-                    </LinearLayout>
-
-                    <!-- Wi-Fi hotspot -->
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/hotspotSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:minHeight="48dp"
-                        android:text="Wi-Fi hotspot"
-                        android:textColor="@color/white"
-                        android:textSize="17sp" />
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:id="@+id/hotspotCaption"
-                        android:text="Turns on with GO, restored on STOP"
-                        android:textColor="@color/secondaryText"
-                        android:textSize="13sp" />
-                    <!-- Mobile data: indented sub-row, only while hotspot is on -->
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/mobileSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="24dp"
-                        android:layout_marginTop="8dp"
-                        android:minHeight="48dp"
-                        android:text="Mobile data"
-                        android:textColor="@color/white"
-                        android:textSize="17sp"
-                        android:visibility="gone" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Widget tap opens: nothing, one app, or a split screen pair -->
-            <com.google.android.material.card.MaterialCardView
-                style="@style/CardBox"
-                android:layout_marginBottom="12dp">
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="16dp"
-                    android:paddingVertical="12dp">
-                    <TextView style="@style/CardLabel" android:text="Widget tap opens" />
+            <TextView style="@style/SectionHeader" android:text="Drive" />
+            <LinearLayout style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/openBootSwitch" style="@style/SettingSwitch" android:text="Open Maps + player on tablet start" />
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/openGoSwitch" style="@style/SettingSwitch" android:text="Open Maps + player on GO" />
+                <TextView android:id="@+id/driveCaption" style="@style/Caption" android:text="Uses the launcher's saved Maps + CarApp pair" />
+                <TextView style="@style/Caption" android:layout_marginTop="@dimen/sp4" android:text="Widget tap opens" />
                     <com.google.android.material.button.MaterialButtonToggleGroup
                         android:id="@+id/launchMode"
                         android:layout_width="match_parent"
@@ -276,7 +107,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Swap sides" />
-                            <TextView style="@style/CardLabel" android:layout_marginTop="12dp" android:text="Split ratio, left : right" />
+                            <TextView style="@style/Caption" android:layout_marginTop="12dp" android:text="Split ratio, left : right" />
                     <com.google.android.material.button.MaterialButtonToggleGroup
                         android:id="@+id/ratioGroup"
                         android:layout_width="match_parent"
@@ -306,55 +137,100 @@
                             android:layout_weight="1"
                             android:text="35 : 65" />
                     </com.google.android.material.button.MaterialButtonToggleGroup>
+                            <TextView android:id="@+id/pairHint" style="@style/Caption" android:layout_marginTop="8dp"
+                                android:text="If the split does not open, save the pair once: long press Maps on the home screen, Split screen, pick the other app, then save the app pair." />
                             <LinearLayout android:id="@+id/launchPresetRow" style="@style/Row56" android:layout_marginTop="4dp">
                                 <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:text="Presets" />
                                 <ImageView style="@style/ChevronIcon" />
                             </LinearLayout>
                         </LinearLayout>
                     </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
 
-            <!-- Accessibility status + Help -->
-            <com.google.android.material.card.MaterialCardView
-                style="@style/CardBox"
-                android:layout_marginBottom="12dp">
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="16dp">
-                    <LinearLayout android:id="@+id/a11yRow" style="@style/Row56">
-                        <FrameLayout style="@style/IconCircle">
-                            <ImageView android:id="@+id/a11yIcon" style="@style/RowIcon" />
-                        </FrameLayout>
-                        <TextView android:id="@+id/a11yText" style="@style/RowTitle" android:text="Auto-tap ready" />
-                    </LinearLayout>
-                    <LinearLayout android:id="@+id/helpRow" style="@style/Row56">
-                        <FrameLayout style="@style/IconCircle">
-                            <ImageView android:id="@+id/helpIcon" style="@style/RowIcon" android:src="@drawable/ic_help" app:tint="@color/white" />
-                        </FrameLayout>
-                        <TextView style="@style/RowTitle" android:text="Help" />
-                        <ImageView style="@style/ChevronIcon" />
-                    </LinearLayout>
-                    <LinearLayout android:id="@+id/debugRow" style="@style/Row56">
-                        <FrameLayout style="@style/IconCircle">
-                            <ImageView style="@style/RowIcon" android:src="@drawable/ic_settings" app:tint="@color/white" />
-                        </FrameLayout>
-                        <TextView style="@style/RowTitle" android:text="Debug" />
-                        <ImageView style="@style/ChevronIcon" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
 
-            <TextView
-                android:id="@+id/versionText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
-                android:textColor="@color/secondaryText"
-                android:textSize="13sp" />
+            <TextView style="@style/SectionHeader" android:text="Camera" android:id="@+id/camSectionHeader" />
+            <LinearLayout android:id="@+id/camSection" style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                <TextView android:id="@+id/camLive" style="@style/T.Title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:maxLines="2" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/camOpen" android:layout_width="wrap_content" android:layout_height="56dp" android:layout_marginTop="8dp" android:text="Open camera" />
+                <LinearLayout android:id="@+id/camRow" style="@style/Row56">
+                    <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:textColor="?attr/carText" android:text="Reverse camera settings" />
+                    <ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView style="@style/SectionHeader" android:text="Connection" android:id="@+id/carSectionHeader" />
+            <LinearLayout android:id="@+id/carSection" style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/ssidBox" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginVertical="12dp" android:hint="Phone hotspot to join">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/ssidField" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="text" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <!-- Car head unit -->
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/headunitSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:minHeight="48dp"
+                        android:text="Car head unit"
+                        android:textColor="?attr/carText"
+                        android:textSize="17sp" />
+                    <TextView
+                        android:id="@+id/headunitDetected"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="?attr/carTextDim"
+                        android:textSize="13sp" />
+                    <LinearLayout
+                        android:id="@+id/headunitExtra"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+<LinearLayout android:id="@+id/dev3Row" style="@style/Row56" android:layout_marginTop="4dp">
+                            <FrameLayout style="@style/IconCircle">
+                                <ImageView android:id="@+id/dev3Icon" style="@style/RowIcon" />
+                            </FrameLayout>
+                            <TextView android:id="@+id/dev3Value" style="@style/RowTitle" android:text="Head unit tablet" />
+                            <ImageView style="@style/ChevronIcon" />
+                        </LinearLayout>
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:hint="Head unit IP (optional)">
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/ipField"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="text" />
+                        </com.google.android.material.textfield.TextInputLayout>
+                    </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/hotspotSwitch" style="@style/SettingSwitch" android:text="Wi-Fi hotspot" />
+                <TextView android:id="@+id/hotspotCaption" style="@style/Caption" android:text="Turns on with GO, restored on STOP" />
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/mobileSwitch" style="@style/SettingSwitch" android:text="Mobile data" android:layout_marginStart="24dp" android:visibility="gone" />
+            </LinearLayout>
+
+            <TextView style="@style/SectionHeader" android:text="Advanced" />
+            <LinearLayout style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                <LinearLayout android:id="@+id/roleRow" style="@style/Row56">
+                    <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:textColor="?attr/carText" android:text="Device role" />
+                    <TextView android:id="@+id/roleValue" style="@style/T.Label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginEnd="8dp" /><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/a11yRow" style="@style/Row56">
+                    <ImageView android:id="@+id/a11yIcon" android:layout_width="24dp" android:layout_height="24dp" />
+                    <TextView android:id="@+id/a11yText" style="@style/RowTitle" android:textColor="?attr/carText" android:text="Auto-tap ready" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/helpRow" style="@style/Row56">
+                    <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:textColor="?attr/carText" android:text="Help" />
+                    <ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" />
+                </LinearLayout><LinearLayout android:id="@+id/debugRow" style="@style/Row56">
+                    <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:textColor="?attr/carText" android:text="Debug" />
+                    <ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView android:id="@+id/versionText" style="@style/Caption" android:layout_marginTop="16dp" android:gravity="center" />
         </LinearLayout>
     </ScrollView>
+    </LinearLayout>
 </LinearLayout>

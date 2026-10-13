@@ -72,7 +72,7 @@ object PhoneMedia {
                     val ip = find(app) ?: throw Exception("no phone")
                     Socket().use { s ->
                         s.connect(InetSocketAddress(ip, Link.PORT), 3000); s.tcpNoDelay = true
-                        w = s.getOutputStream().bufferedWriter(); phone = ip; connected = true
+                        w = s.getOutputStream().bufferedWriter(); phone = ip; connected = true; sentTvol = -1   // the phone may have restarted: report our level again
                         s.getInputStream().bufferedReader().forEachLine { l -> handle(app, JSONObject(l)) }
                     }
                 } catch (_: Exception) {}
@@ -83,12 +83,17 @@ object PhoneMedia {
     }
 
     private var sentTvol = -1
+    private var lastGo = false
 
     private fun handle(ctx: Context, j: JSONObject) {
         when (j.optString("t")) {
             "tvol" -> { Volumes.applyTablet(ctx, j.optInt("pct")); sentTvol = -1 }
             "np" -> {
                 val old = np
+                // Phone GO switched on (or we just connected while it is on): open Maps + CarApp once.
+                val go = j.optBoolean("go")
+                if (go && !lastGo && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.TapService.launchDrive(ctx) }
+                lastGo = go
                 if (j.has("art")) art = j.optString("art").takeIf { it.isNotEmpty() }?.let { decode(it) }
                 else j.put("art", "")
                 np = j; npAt = SystemClock.elapsedRealtime()

@@ -1,232 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Phone home: GO hero and the Now Playing strip. Volumes live in Settings, Audio. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="?attr/carBg">
 
-    <ScrollView
-        android:id="@+id/scroll"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:fillViewport="true">
+    <ImageView android:id="@+id/npBackdrop" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:importantForAccessibility="no" android:scaleType="centerCrop" />
+    <View android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_scrim" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="8dp">
+    <ScrollView android:id="@+id/scroll" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:clipToPadding="false" android:fillViewport="true" android:scrollbars="none">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:paddingHorizontal="16dp">
 
-            <!-- Header: brand on the left, help + cog on the right -->
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:layout_marginBottom="4dp">
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:layout_gravity="start|center_vertical"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-                    <ImageView
-                        android:id="@+id/brandIcon"
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
-                        android:src="@drawable/ic_car_glyph" />
+            <include layout="@layout/view_phone_bar" />
+            <include layout="@layout/view_phone_setup" />
+
+            <!-- Hero -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:gravity="center" android:orientation="vertical" android:paddingVertical="48dp">
+                <com.google.android.material.button.MaterialButton android:id="@+id/goButton"
+                    style="@style/Widget.Material3.Button" android:layout_width="208dp" android:layout_height="208dp"
+                    android:elevation="16dp" android:insetTop="0dp" android:insetBottom="0dp" android:padding="0dp"
+                    android:text="GO" android:textSize="@dimen/car_display" android:textStyle="bold"
+                    app:cornerRadius="104dp" />
+                <TextView android:id="@+id/goHint" style="@style/T.Label" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:layout_marginTop="16dp" />
+            </LinearLayout>
+
+            <!-- Now playing strip -->
+            <LinearLayout android:id="@+id/npStrip" style="@style/Glass" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginBottom="16dp" android:gravity="center_vertical"
+                android:orientation="horizontal" android:padding="12dp">
+                <com.google.android.material.card.MaterialCardView android:id="@+id/playerRow"
+                    android:layout_width="56dp" android:layout_height="56dp" android:clickable="true"
+                    android:contentDescription="Choose the player" android:focusable="true"
+                    app:cardBackgroundColor="?attr/carSurface" app:cardCornerRadius="16dp" app:cardElevation="0dp"
+                    app:strokeWidth="0dp">
+                    <ImageView android:id="@+id/playerIcon" android:layout_width="match_parent"
+                        android:layout_height="match_parent" android:padding="10dp" android:scaleType="fitCenter" />
+                    <ImageView android:id="@+id/npArt" android:layout_width="match_parent"
+                        android:layout_height="match_parent" android:importantForAccessibility="no"
+                        android:scaleType="centerCrop" />
+                </com.google.android.material.card.MaterialCardView>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                    android:layout_marginStart="16dp" android:orientation="vertical">
+                    <TextView android:id="@+id/npTitle" style="@style/T.Title" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:textStyle="bold" />
+                    <TextView android:id="@+id/npArtist" style="@style/T.Label" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
                 </LinearLayout>
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:layout_gravity="end|center_vertical"
-                    android:orientation="horizontal">
-                    <ImageButton
-                        android:id="@+id/helpBtn"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:layout_gravity="center_vertical"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Help"
-                        android:padding="10dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_help"
-                        app:tint="@color/white" />
-                    <ImageButton
-                        android:id="@+id/settingsBtn"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:layout_gravity="center_vertical"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Settings"
-                        android:padding="10dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_settings"
-                        app:tint="@color/white" />
-                </LinearLayout>
-            </FrameLayout>
-
-            <!-- First-run setup card (accent left border) -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/setupCard"
-                style="@style/CardBox"
-                android:layout_marginBottom="12dp"
-                android:visibility="gone">
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-                    <View
-                        android:layout_width="4dp"
-                        android:layout_height="match_parent"
-                        android:background="?attr/colorPrimary" />
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="16dp">
-                        <TextView
-                            android:id="@+id/setupTitle"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Setup needed"
-                            android:textColor="@color/white"
-                            android:textSize="17sp"
-                            android:textStyle="bold" />
-                        <TextView
-                            android:id="@+id/setupBody"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:lineSpacingExtra="4dp"
-                            android:textColor="@color/secondaryText"
-                            android:textSize="14sp" />
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/setupBtn"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:text="Open settings" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- PLAYER -->
-            <com.google.android.material.card.MaterialCardView
-                style="@style/CardBox"
-                android:layout_marginBottom="12dp">
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-                    <TextView style="@style/CardLabel" android:text="PLAYER" />
-                    <LinearLayout android:id="@+id/playerRow" style="@style/Row56" android:layout_marginTop="4dp">
-                        <FrameLayout style="@style/IconCircle">
-                            <ImageView android:id="@+id/playerIcon" style="@style/RowIcon"
-                                android:layout_width="36dp" android:layout_height="36dp"
-                                android:scaleType="fitCenter" />
-                        </FrameLayout>
-                        <TextView android:id="@+id/playerValue" style="@style/RowTitle" android:text="Choose a player" />
-                        <ImageView style="@style/ChevronIcon" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- OUTPUT -->
-            <com.google.android.material.card.MaterialCardView
-                style="@style/CardBox"
-                android:layout_marginBottom="12dp">
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-                    <TextView style="@style/CardLabel" android:text="OUTPUT" />
-
-                    <TextView
-                        android:id="@+id/btNote"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:textColor="@color/secondaryText"
-                        android:textSize="13sp"
-                        android:visibility="gone" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btEnable"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="Turn on Bluetooth"
-                        android:visibility="gone" />
-
-                    <!-- Bluetooth speaker -->
-                    <LinearLayout
-                        android:id="@+id/outBlock1"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-                        <LinearLayout android:id="@+id/out1Row" style="@style/Row56">
-                            <FrameLayout style="@style/IconCircle">
-                                <ImageView android:id="@+id/out1Icon" style="@style/RowIcon" />
-                            </FrameLayout>
-                            <TextView android:id="@+id/out1Value" style="@style/RowTitle" android:text="Output 1" />
-                            <ImageView style="@style/ChevronIcon" />
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <!-- Tablet speaker over Wi-Fi (status only) -->
-                    <LinearLayout style="@style/Row56">
-                        <FrameLayout style="@style/IconCircle">
-                            <ImageView style="@style/RowIcon" android:src="@drawable/ic_headphones" />
-                        </FrameLayout>
-                        <TextView android:id="@+id/tabletValue" style="@style/RowTitle" android:text="Tablet speaker (Wi-Fi)" />
-                    </LinearLayout>
-
-                    <!-- Start volume  -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/volBtn"
-                            style="@style/Widget.Material3.Button.TextButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:minWidth="0dp"
-                            android:text="Start volume"
-                            android:textColor="?attr/colorPrimary" />
-                        <com.google.android.material.slider.Slider
-                            android:id="@+id/volSlider"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:valueFrom="0"
-                            android:valueTo="100"
-                            android:stepSize="1"
-                            android:visibility="gone" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+                <ImageButton android:id="@+id/npPlay" android:layout_width="56dp" android:layout_height="56dp"
+                    android:background="@drawable/bg_cookie" android:contentDescription="Play or pause"
+                    android:padding="16dp" android:scaleType="fitCenter" android:src="@drawable/ic_play" />
+                <ImageButton android:id="@+id/npNext" style="@style/CarIconBtn" android:contentDescription="Next"
+                    android:src="@drawable/ic_skip_next" />
+            </LinearLayout>
 
         </LinearLayout>
     </ScrollView>
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/goButton"
-        style="@style/Widget.Material3.Button"
-        android:layout_width="match_parent"
-        android:layout_height="76dp"
-        android:layout_gravity="bottom"
-        android:layout_margin="16dp"
-        android:text="GO"
-        android:textColor="@color/onAccent"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        app:backgroundTint="?attr/colorPrimary"
-        app:cornerRadius="38dp" />
 </FrameLayout>

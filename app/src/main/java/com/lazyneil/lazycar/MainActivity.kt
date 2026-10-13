@@ -9,6 +9,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.media.MediaMetadata
+import android.media.session.MediaController
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.os.Bundle
 import android.provider.Settings
 import android.view.GestureDetector
@@ -35,13 +39,9 @@ import com.google.android.material.slider.Slider
 class MainActivity : AppCompatActivity() {
 
     private lateinit var p: Prefs
-    private var amoledApplied = false
-    private var accentApplied = 0
     private var players = listOf<Triple<String, String, Drawable?>>()   // pkg,label,icon
-    private var audioDevices = listOf<Triple<String, String, Int>>()    // mac,name,iconRes
 
     private var selPlayer = ""
-    private var selMac1 = ""; private var selName1 = ""
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -75,25 +75,22 @@ class MainActivity : AppCompatActivity() {
         }
         Role.applyComponents(this)
         p = Prefs(this)
-        amoledApplied = p.amoled
-        accentApplied = p.accent
-        Accent.apply(this)
-        if (p.amoled) theme.applyStyle(R.style.ThemeOverlay_LazyCar_Amoled, true)
+        Ui.apply(this)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         selPlayer = p.playerPkg
-        selMac1 = p.mac1; selName1 = p.name1
 
         val scroll = findViewById<View>(R.id.scroll)
         val go = findViewById<MaterialButton>(R.id.goButton)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root)) { v, insets ->
+        val root = findViewById<View>(R.id.root)
+        val floatingGo = go.parent === root   // "Player first": GO pill pinned to the bottom
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val b = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(b.left, b.top, b.right, 0)
-            scroll.setPadding(scroll.paddingLeft, scroll.paddingTop, scroll.paddingRight, dp(108) + b.bottom)
-            (go.layoutParams as MarginLayoutParams).bottomMargin = dp(16) + b.bottom
-            go.requestLayout()
+            scroll.setPadding(scroll.paddingLeft, scroll.paddingTop, scroll.paddingRight, (if (floatingGo) dp(104) else dp(16)) + b.bottom)
+            if (floatingGo) { (go.layoutParams as MarginLayoutParams).bottomMargin = dp(16) + b.bottom; go.requestLayout() }
             insets
         }
         val want = arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION,
@@ -106,13 +103,19 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.settingsBtn).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        findViewById<ImageButton>(R.id.helpBtn).setOnClickListener {
-            startActivity(Intent(this, HelpActivity::class.java))
+        findViewById<ImageButton>(R.id.debugBtn).setOnClickListener {
+            startActivity(Intent(this, DebugActivity::class.java))
         }
-        findViewById<ImageView>(R.id.brandIcon).setColorFilter(Accent.color(this))
+        findViewById<View>(R.id.npPlay).setOnClickListener { session()?.let { c ->
+            if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause() else c.transportControls.play() } }
+        findViewById<View>(R.id.npNext).setOnClickListener { session()?.transportControls?.skipToNext() }
+        findViewById<View>(R.id.npPrev)?.setOnClickListener { session()?.transportControls?.skipToPrevious() }
+        Ui.paintAccent(root, Ui.themeAccent(this))
+        Ui.blur(findViewById(R.id.npBackdrop))
+        Ui.press(go, findViewById(R.id.npPlay), findViewById(R.id.npNext), findViewById(R.id.npPrev),
+            findViewById(R.id.settingsBtn), findViewById(R.id.debugBtn))
 
         buildPlayers()
-        buildOutputs()
 
         go.setOnClickListener {
             if (GoAction.effectiveState(p) == GoAction.IDLE) save()   // GO saves the form; STOP just runs
@@ -140,22 +143,16 @@ class MainActivity : AppCompatActivity() {
         stateReceiver = null
     }
 
-    private var volumesAdded = false
-
     override fun onResume() {
         super.onResume()
         if (isFinishing) return
-        if (p.amoled != amoledApplied || p.accent != accentApplied) { recreate(); return }   // AMOLED/accent changed in Settings
         refreshSetup()
-        if (!volumesAdded) { volumesAdded = true
-            val row = findViewById<View>(R.id.tabletValue).parent as View
-            (row.parent as android.view.ViewGroup).let { com.lazyneil.lazycar.media.Volumes.attach(this, it, it.indexOfChild(row) + 1) } }
-        buildOutputs()                       // reflect BT state changes made in Settings
+        handler.post(tick)
         refreshGoButton()
         GoAction.deriveState(applicationContext, p) { refreshGoButton() }   // match reality after reboot
         if (btReceiver == null) {
             btReceiver = object : BroadcastReceiver() {
-                override fun onReceive(c: Context, i: Intent) { buildOutputs(); refreshGoButton() }
+                override fun onReceive(c: Context, i: Intent) { refreshGoButton() }
             }
             registerReceiver(btReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
         }
@@ -164,6 +161,7 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         if (!::p.isInitialized) return
+        handler.removeCallbacks(tick)
         save()
         btReceiver?.let { try { unregisterReceiver(it) } catch (e: Exception) {} }
         btReceiver = null
@@ -171,9 +169,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshGoButton() {
         val btn = findViewById<MaterialButton>(R.id.goButton)
-        val accent = Accent.color(this)
+        val accent = Ui.themeAccent(this)
         val onAccent = Accent.onColor(accent)
-        val error = ContextCompat.getColor(this, R.color.errorRed)
         val busy = ContextCompat.getColor(this, R.color.stateBusy)
         val secondary = ContextCompat.getColor(this, R.color.secondaryText)
         fun paint(bg: Int, fg: Int) {
@@ -187,12 +184,19 @@ class MainActivity : AppCompatActivity() {
             btn.icon = com.google.android.material.progressindicator.IndeterminateDrawable.createCircularDrawable(this, spec)
             btn.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; btn.iconSize = dp(24); btn.iconPadding = dp(12)
         }
+        val hint = findViewById<TextView>(R.id.goHint)
+        val big = btn.layoutParams.height > dp(120)   // round hero: spinner replaces the label
+        btn.strokeWidth = 0; btn.elevation = dp(16).toFloat()
+        btn.outlineSpotShadowColor = accent; btn.outlineAmbientShadowColor = accent
         when (GoAction.effectiveState(p)) {
-            GoAction.ON -> { btn.text = "STOP"; paint(error, onAccent) }
-            GoAction.STARTING -> { btn.text = "Starting..."; busySpinner() }
-            GoAction.STOPPING -> { btn.text = "Stopping..."; busySpinner() }
-            else -> { btn.text = "GO"; paint(accent, onAccent) }
+            GoAction.ON -> { btn.text = if (big) "ON" else "STOP"; paint(ContextCompat.getColor(this, R.color.stateBusy), accent)
+                btn.strokeWidth = dp(3); btn.strokeColor = android.content.res.ColorStateList.valueOf(accent)
+                hint.text = "Running. Tap to stop" }
+            GoAction.STARTING -> { btn.text = if (big) "" else "STARTING"; busySpinner(); hint.text = "Starting" }
+            GoAction.STOPPING -> { btn.text = if (big) "" else "STOPPING"; busySpinner(); hint.text = "Stopping" }
+            else -> { btn.text = "GO"; paint(accent, onAccent); hint.text = "Tap to start the car setup" }
         }
+        if (big && btn.icon != null) { btn.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; btn.iconPadding = 0; btn.iconSize = dp(48) }
     }
 
     private fun refreshSetup() {
@@ -265,7 +269,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onRequestPermissionsResult(rc: Int, perms: Array<out String>, res: IntArray) {
         super.onRequestPermissionsResult(rc, perms, res)
-        buildOutputs()
         com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
     }
 
@@ -288,11 +291,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderPlayer() {
-        val icon = findViewById<ImageView>(R.id.playerIcon)
-        val value = findViewById<TextView>(R.id.playerValue)
         val cur = players.firstOrNull { it.first == selPlayer }
-        if (cur != null) { icon.setImageDrawable(cur.third); value.text = cur.second }
-        else { icon.setImageDrawable(null); value.text = "Choose a player" }
+        findViewById<ImageView>(R.id.playerIcon).setImageDrawable(cur?.third)
+        playerLabel = cur?.second?.substringBefore(" (") ?: "Choose a player"
+        findViewById<View>(R.id.playerRow).contentDescription = "Player: $playerLabel. Tap to change"
     }
 
     private fun showPlayerPicker() {
@@ -319,96 +321,54 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // ---- output ----
-    private fun buildOutputs() {
-        val r = BtDevices.load(this)
-        audioDevices = r.audio
-        val note = findViewById<TextView>(R.id.btNote)
-        val enableBtn = findViewById<MaterialButton>(R.id.btEnable)
-        if (r.note != null) { note.text = r.note; note.visibility = View.VISIBLE } else note.visibility = View.GONE
-        if (r.canEnable) {
-            enableBtn.visibility = View.VISIBLE
-            enableBtn.setOnClickListener {
-                @Suppress("DEPRECATION") startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-            }
-        } else enableBtn.visibility = View.GONE
-
-        bindOutput()
-        findViewById<TextView>(R.id.tabletValue).text = "Tablet speaker (Wi-Fi): " + com.lazyneil.lazycar.audio.TabletSpeaker.summary(this)
-
-        wireVol(R.id.volBtn, R.id.volSlider, { p.volOn }, { p.volOn = it }, { p.vol }, { p.vol = it })
-    }
-
-    private fun bindOutput() {
-        val rowId = R.id.out1Row
-        val iconId = R.id.out1Icon
-        val valueId = R.id.out1Value
-        val title = "Bluetooth speaker"
-        val getMac = { selMac1 }
-        val set = { m: String, n: String -> selMac1 = m; selName1 = n }
-
-        renderDevice(iconId, valueId, title, getMac(), audioDevices)
-        findViewById<View>(rowId).setOnClickListener {
-            if (audioDevices.isEmpty()) { toast("No paired devices available"); return@setOnClickListener }
-            val names = audioDevices.map { it.second }.toTypedArray()
-            val checked = audioDevices.indexOfFirst { it.first == getMac() }
-            MaterialAlertDialogBuilder(this)
-                .setTitle(title)
-                .setSingleChoiceItems(names, checked) { d, which ->
-                    set(audioDevices[which].first, audioDevices[which].second)
-                    renderDevice(iconId, valueId, title, audioDevices[which].first, audioDevices); save(); d.dismiss()
-                }
-                .setNeutralButton("Clear") { _, _ ->
-                    set("", ""); renderDevice(iconId, valueId, title, "", audioDevices); save()
-                }
-                .show()
-        }
-    }
-
-    private fun wireVol(btnId: Int, sliderId: Int, getOn: () -> Boolean, setOn: (Boolean) -> Unit,
-                        getVol: () -> Int, setVol: (Int) -> Unit) {
-        val slider = findViewById<Slider>(sliderId)
-        val accentTint = android.content.res.ColorStateList.valueOf(Accent.color(this))
-        slider.trackActiveTintList = accentTint
-        slider.thumbTintList = accentTint
-        slider.value = getVol().coerceIn(0, 100).toFloat()
-        slider.visibility = if (getOn()) View.VISIBLE else View.GONE
-        slider.clearOnChangeListeners()
-        slider.addOnChangeListener { _, value, _ -> setVol(value.toInt()) }
-        // Dragging while playing applies the new level live (open panel, set slider, back).
-        slider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
-            override fun onStartTrackingTouch(s: Slider) {}
-            override fun onStopTrackingTouch(s: Slider) {
-                setVol(s.value.toInt())
-                if (GoAction.effectiveState(p) == GoAction.ON)
-                    startActivity(Intent(this@MainActivity, GoActivity::class.java).putExtra("volumeOnly", true))
-            }
-        })
-        findViewById<MaterialButton>(btnId).apply {
-            setTextColor(Accent.color(this@MainActivity))
-            setOnClickListener {
-                val on = !getOn(); setOn(on)
-                slider.visibility = if (on) View.VISIBLE else View.GONE
-            }
-        }
-    }
-
-    private fun renderDevice(iconId: Int, valueId: Int, default: String, mac: String,
-                             list: List<Triple<String, String, Int>>) {
-        val icon = findViewById<ImageView>(iconId)
-        val value = findViewById<TextView>(valueId)
-        if (mac.isEmpty()) {
-            icon.setImageResource(BtDevices.ICON); value.text = default
-        } else {
-            icon.setImageResource(list.firstOrNull { it.first == mac }?.third ?: BtDevices.ICON)
-            value.text = list.firstOrNull { it.first == mac }?.second ?: mac
-        }
-    }
-
     private fun save() {
         p.playerPkg = selPlayer
-        p.mac1 = selMac1; p.name1 = selName1
     }
 
     private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
+
+    // ---- now playing strip + GPS chip (phone side, straight from the media session) ----
+    private var playerLabel = ""
+    private var shownArt: android.graphics.Bitmap? = null
+    private var shownPlaying: Boolean? = null
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val tick = object : Runnable {
+        override fun run() { renderStrip(); renderGps(); handler.postDelayed(this, 1000) }
+    }
+
+    private fun session(): MediaController? = try {
+        getSystemService(MediaSessionManager::class.java)
+            .getActiveSessions(ComponentName(this, com.lazyneil.lazycar.media.MediaListener::class.java))
+            .let { l -> l.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING } ?: l.firstOrNull() }
+    } catch (e: SecurityException) { null }
+
+    private fun renderStrip() {
+        val c = session(); val m = c?.metadata
+        val title = m?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        Ui.swapText(findViewById(R.id.npTitle), title.ifEmpty { playerLabel })
+        Ui.swapText(findViewById(R.id.npArtist), if (title.isEmpty()) "Nothing playing"
+            else listOf(m?.getString(MediaMetadata.METADATA_KEY_ARTIST), m?.getString(MediaMetadata.METADATA_KEY_ALBUM))
+                .filter { !it.isNullOrEmpty() }.joinToString("  "))
+        val art = m?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+        if (art?.sameAs(shownArt) != true && !(art == null && shownArt == null)) {
+            shownArt = art
+            Ui.swapArt(findViewById(R.id.npArt), art)
+            findViewById<ImageView>(R.id.npBackdrop).setImageBitmap(art)
+            Ui.paintAccent(findViewById(R.id.root), Ui.artColor(art) ?: Ui.themeAccent(this))
+        }
+        val playing = c?.playbackState?.state == PlaybackState.STATE_PLAYING
+        if (shownPlaying != playing) {
+            Ui.morph(findViewById(R.id.npPlay), playing, shownPlaying != null)
+            shownPlaying = playing
+        }
+        for (id in intArrayOf(R.id.npPlay, R.id.npNext, R.id.npPrev)) findViewById<View>(id)?.isEnabled = c != null
+    }
+
+    private fun renderGps() {
+        val g = com.lazyneil.lazycar.gps.GpsService
+        val age = if (g.lastAt == 0L) -1 else (android.os.SystemClock.elapsedRealtime() - g.lastAt) / 1000
+        val live = g.mode != "idle" && age in 0..5
+        Ui.dot(findViewById(R.id.gpsDot), when { live -> Ui.GREEN; g.mode != "idle" -> Ui.AMBER; else -> Ui.attr(this, R.attr.carTextDim) }, live)
+        findViewById<TextView>(R.id.gpsText).text = when { g.mode == "idle" -> "GPS off"; live -> "GPS sending, ${g.acc.toInt()} m"; else -> "GPS no fix" }
+    }
 }

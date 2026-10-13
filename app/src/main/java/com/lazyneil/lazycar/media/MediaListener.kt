@@ -107,11 +107,11 @@ class MediaListener : NotificationListenerService() {
 
     private fun label(pkg: String) = try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
 
-    private fun jpeg(b: Bitmap?, px: Int): String? {
+    private fun jpeg(b: Bitmap?, px: Int, q: Int = 80): String? {
         b ?: return null
         val s = px.toFloat() / maxOf(b.width, b.height)
         val small = if (s < 1) Bitmap.createScaledBitmap(b, (b.width * s).toInt().coerceAtLeast(1), (b.height * s).toInt().coerceAtLeast(1), true) else b
-        val o = ByteArrayOutputStream(); small.compress(Bitmap.CompressFormat.JPEG, 80, o)
+        val o = ByteArrayOutputStream(); small.compress(Bitmap.CompressFormat.JPEG, q, o)
         return Base64.encodeToString(o.toByteArray(), Base64.NO_WRAP)
     }
 
@@ -119,9 +119,11 @@ class MediaListener : NotificationListenerService() {
         uri?.let { contentResolver.openInputStream(Uri.parse(it))?.use(BitmapFactory::decodeStream) }
     } catch (_: Exception) { null }
 
-    private fun art(m: MediaMetadata): Bitmap? = m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-        ?: m.getBitmap(MediaMetadata.METADATA_KEY_ART) ?: m.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
-        ?: bitmapFrom(m.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI) ?: m.getString(MediaMetadata.METADATA_KEY_ART_URI))
+    // The session's bitmaps are downscaled by the framework, so the art URI (full resolution) goes first.
+    private fun art(m: MediaMetadata): Bitmap? =
+        bitmapFrom(m.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI) ?: m.getString(MediaMetadata.METADATA_KEY_ART_URI))
+        ?: m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m.getBitmap(MediaMetadata.METADATA_KEY_ART)
+        ?: m.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
 
     /** Now Playing to every tablet; art only when the track changed for that client. */
     private fun push() {
@@ -140,9 +142,10 @@ class MediaListener : NotificationListenerService() {
         }
         val am = getSystemService(AudioManager::class.java)
         j.put("vol", am.getStreamVolume(AudioManager.STREAM_MUSIC)).put("volMax", am.getStreamMaxVolume(AudioManager.STREAM_MUSIC))
+        j.put("go", com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this)) == com.lazyneil.lazycar.GoAction.ON)
         val key = listOf(c?.packageName, j.optString("title"), j.optString("artist"), j.optString("album")).joinToString("|")
         val needArt = out.any { it.artKey != key }
-        val a = if (needArt && m != null) jpeg(art(m), 256) else null
+        val a = if (needArt && m != null) jpeg(art(m), 1024, 92) else null
         for (cl in out) {
             val line = if (cl.artKey != key) JSONObject(j.toString()).put("art", a ?: "").toString().also { cl.artKey = key } else j.toString()
             send(cl, line)

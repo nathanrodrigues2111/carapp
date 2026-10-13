@@ -57,6 +57,15 @@ class TapService : AccessibilityService() {
             else svc.h.post { svc.launchPair(p.launchA, p.launchB, p.splitRatio) }
         }
 
+        /** Home Drive tile: Maps left, CarApp (Drive panel) right. */
+        fun launchDrive(ctx: Context) {
+            val svc = instance ?: return startPkg(ctx, MAPS, 0)
+            svc.h.post { if (!svc.inSplit()) svc.launchPair(MAPS, ctx.packageName, Prefs(ctx).splitRatio) }
+        }
+        const val MAPS = "com.google.android.apps.maps"
+        /** Last pair launch: true = tapped the launcher's saved pair, false = none found, null = not tried. */
+        @Volatile var pairFound: Boolean? = null
+
         private fun startPkg(ctx: Context, pkg: String, flags: Int) {
             val i = ctx.packageManager.getLaunchIntentForPackage(pkg) ?: return
             try { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or flags)) }
@@ -86,10 +95,12 @@ class TapService : AccessibilityService() {
                 if (icon != null) {
                     val ok = (if (icon.isClickable) icon else clickableAncestor(icon) ?: icon).performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     android.util.Log.e("LazyCar", "split: tapped launcher pair '${icon.contentDescription}' ok=$ok")
+                    pairFound = true
                     h.postDelayed({ arrangeSplit(a, ratio, swapped = false, tries = 0) }, 1500); return
                 }
                 if (++tries < 10) { h.postDelayed(this, 300); return }
                 android.util.Log.e("LazyCar", "split: no launcher pair icon, launching side by side")
+                pairFound = false
                 launchAdjacent(a, b, ratio)
             }
         }, 700)
@@ -241,6 +252,9 @@ class TapService : AccessibilityService() {
 
     override fun onServiceConnected() {   // the system binds us at boot, after an update and after a process restart
         instance = this; startJoin()
+        // Tablet start: we bind after unlock, give the launcher a moment, then open Maps + CarApp.
+        if (Role.isTablet(this) && SystemClock.elapsedRealtime() < 300_000 && Ui.openOnBoot(this))
+            h.postDelayed({ launchDrive(this) }, 8000)
         if (!Role.isTablet(this) && SystemClock.elapsedRealtime() > 120_000) h.postDelayed({
             val p = Prefs(this)
             if (GoAction.effectiveState(p) == GoAction.ON && com.lazyneil.lazycar.audio.TabletSpeaker.enabled(this) &&
