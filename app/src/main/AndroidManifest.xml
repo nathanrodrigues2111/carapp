@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Tablet speaker over Wi-Fi (audio/) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <!-- GPS link (phone sends, tablet receives and mocks) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -233,7 +234,7 @@
         <service
             android:name=".audio.StreamReceiver"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse|microphone">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="plays the phone's media audio on the head unit speaker" />

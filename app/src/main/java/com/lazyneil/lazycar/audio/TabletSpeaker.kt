@@ -19,6 +19,9 @@ object TabletSpeaker {
     /** Fine trim on top of the automatic sync, positive = later. */
     fun delayMs(ctx: Context) = sp(ctx).getInt("delay", 0)
     fun btToo(ctx: Context) = sp(ctx).getBoolean("bt", false)
+    /** Mic measured JBL correction, kept so the next stream starts close. */
+    fun acoustic(ctx: Context) = sp(ctx).getInt("acoustic", 0)
+    fun saveAcoustic(ctx: Context, v: Int) = sp(ctx).edit().putInt("acoustic", v).apply()
 
     fun onGo(ctx: Context) { if (enabled(ctx)) StreamSender.start(ctx) }
     fun onStop(ctx: Context) = StreamSender.stop(ctx)
@@ -37,8 +40,11 @@ object TabletSpeaker {
         when {
             !r.running -> "Off"
             SystemClock.elapsedRealtime() - r.lastAt > 2000 -> "Waiting for the phone"
-            else -> "Connected to ${r.phone}, ${Wire.FORMAT}, tablet native ${android.media.AudioTrack.getNativeOutputSampleRate(android.media.AudioManager.STREAM_MUSIC)} Hz, ${r.kbps} kbps, level ${r.rms}, network ${r.netMs} ms, JBL plays ${r.phoneOutMs} ms after send, auto delay ${r.phoneOutMs - r.netMs} ms" +
-                r.outputs.joinToString("") { ". ${it.name}: buffer ${it.queueMs} ms, track ${it.trackMs} ms, behind capture ${r.netMs + it.queueMs + it.trackMs} ms, underruns ${it.underruns}" } +
+            else -> "Connected to ${r.phone}, ${Wire.FORMAT}, ${r.kbps} kbps, level ${r.rms}. " +
+                "Clock offset locked, round trip ${"%.1f".format(r.rttMs)} ms. JBL latency (phone measured) ${r.phoneOutMs} ms. " +
+                "Acoustic correction ${"%+.0f".format(r.acousticMs)} ms, last residual ${if (Acoustic.residualMs.isNaN()) "n/a" else "%+.0f ms".format(Acoustic.residualMs)} (${Acoustic.note}). " +
+                "Jitter ${"%.0f".format(r.jitterMs)} ms, buffer target ${r.targetMs} ms" +
+                r.outputs.joinToString("") { ". ${it.name}: ${it.aheadMs} ms ahead, sync error ${"%+.1f".format(it.errMs)} ms, resample ${it.ppm} ppm, jitter depth ${it.depthMs} ms, track buffer ${it.bufferMs} ms, underruns ${it.underruns}, concealed ${it.concealed}, dropped ${it.dropped}" } +
                 ", lost ${r.lost}"
         }
     } else {
@@ -47,7 +53,7 @@ object TabletSpeaker {
             s.error.isNotEmpty() && !s.running -> s.error
             !s.running -> "Starts with GO"
             s.tablet.isEmpty() -> "Capturing, waiting for the tablet"
-            else -> "Streaming to ${s.tablet}, ${Wire.FORMAT}, ${s.kbps} kbps, level ${s.rms}, JBL latency ${s.outMs} ms, capture ${s.capMs} ms" + players(ctx).let { p ->
+            else -> "Streaming to ${s.tablet}, ${Wire.FORMAT}, ${s.kbps} kbps, level ${s.rms}, JBL latency ${s.outMs} ms (HAL ${s.halMs} ms), capture ${s.capMs} ms" + players(ctx).let { p ->
                 if (p.isEmpty()) ", nothing playing" else if (s.rms == 0) ". Silent, blocking capture: $p" else ". Capturing: $p"
             }
         }

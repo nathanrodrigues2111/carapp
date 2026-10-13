@@ -41,6 +41,7 @@ class StreamSender : Service() {
         @Volatile var error = ""
         @Volatile var outMs = 0         // mixer to JBL latency, from the monitor track
         @Volatile var capMs = 0         // mixer to our read() latency, from the AudioRecord timestamp
+        @Volatile var halMs = -1        // hidden AudioManager.getOutputLatency(STREAM_MUSIC), cross-check only
 
         /** ms from writing a frame to it leaving the device, from the track's own timestamp. */
         fun latencyMs(t: android.media.AudioTrack, written: Long): Int? {
@@ -87,6 +88,7 @@ class StreamSender : Service() {
     private var projection: MediaProjection? = null
     private var socket: DatagramSocket? = null
     private var lock: WifiManager.MulticastLock? = null
+    private var wifiLow: WifiManager.WifiLock? = null
     private var wake: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?) = null
@@ -105,6 +107,7 @@ class StreamSender : Service() {
             projection = mp
             alive = true; running = true; error = ""; tablet = ""
             lock = getSystemService(WifiManager::class.java).createMulticastLock("speaker").apply { acquire() }
+            wifiLow = getSystemService(WifiManager::class.java).createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "speaker-ll").apply { acquire() }
             wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "carapp:speaker").apply { acquire() }
             capture(mp)
         } catch (e: Exception) { error = e.message ?: e.toString(); Log.e("LazyCar", "speaker send", e); stopSelf() }
@@ -122,7 +125,7 @@ class StreamSender : Service() {
         val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; bind(InetSocketAddress(Wire.PHONE_PORT)) }
         socket = s
         var dest: SocketAddress? = null
-        var beaconT = 0L; var beaconAt = 0L
+        var beaconT = 0L; var beaconAt = 0L; var beaconNs = 0L
 
         // Tablet beacons once a second; its source address is where audio goes.
         thread(name = "speaker-beacon") {
@@ -130,33 +133,37 @@ class StreamSender : Service() {
             while (alive) try {
                 val p = DatagramPacket(buf, buf.size); s.receive(p)
                 if (p.length == 14 && String(buf, 0, 6) == Wire.MAGIC) {
-                    beaconT = ByteBuffer.wrap(buf, 6, 8).long; beaconAt = SystemClock.elapsedRealtime()
+                    beaconNs = System.nanoTime(); beaconT = ByteBuffer.wrap(buf, 6, 8).long; beaconAt = SystemClock.elapsedRealtime()
                     dest = p.socketAddress; tablet = p.address.hostAddress ?: ""
                 }
             } catch (_: Exception) {}
         }
         thread(name = "speaker-capture") {
+            StreamReceiver.urgent()
             rec.startRecording()
             val pkt = ByteArray(Wire.HEADER + Wire.CHUNK)
             val bb = ByteBuffer.wrap(pkt)
             var seq = 0; var bytes = 0L; var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
-            var readFrames = 0L; val rts = android.media.AudioTimestamp()
+            var readFrames = 0L; val rts = android.media.AudioTimestamp(); var tsAt = 0L; var haveTs = false
             while (alive) {
                 val r = rec.read(pkt, Wire.HEADER, Wire.CHUNK)
                 if (r <= 0) { if (r < 0) { error = "Capture read $r"; break }; continue }
                 for (i in 0 until r / 2) { val v = bb.getShort(Wire.HEADER + i * 2).toInt(); sq += v * v.toDouble() }
-                n += r / 2; readFrames += r / 4
                 val now = SystemClock.elapsedRealtime()
+                if (now - tsAt > 100) { tsAt = now; haveTs = rec.getTimestamp(rts, android.media.AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS }
+                // Mixer time of this chunk's first frame, so the tablet gets a smooth timeline despite bursty reads.
+                val mixNs = if (haveTs) rts.nanoTime + (readFrames - rts.framePosition) * 1_000_000_000L / Wire.RATE else System.nanoTime() - capMs * 1_000_000L
+                n += r / 2; readFrames += r / 4
                 val d = dest
                 if (d != null && now - beaconAt < 5000) {
-                    bb.putInt(0, seq++).putLong(4, beaconT).putInt(12, (now - beaconAt).toInt()).putInt(16, outMs - capMs)
+                    bb.putInt(0, seq++).putLong(4, beaconT).putLong(12, beaconNs).putLong(20, System.nanoTime()).putLong(28, mixNs).putInt(36, outMs)
                     try { s.send(DatagramPacket(pkt, Wire.HEADER + r, d)); bytes += Wire.HEADER + r } catch (_: Exception) {}
                 } else tablet = ""
                 if (now - secAt >= 1000) {
                     rms = sqrt(sq / maxOf(n, 1)).toInt(); kbps = (bytes * 8 / (now - secAt)).toInt()
-                    if (rec.getTimestamp(rts, android.media.AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS)
+                    if (haveTs)
                         capMs = ((rts.framePosition - readFrames) * 1000 / Wire.RATE + (System.nanoTime() - rts.nanoTime) / 1_000_000).toInt()
-                    Log.e("LazyCar", "speaker send rms=$rms kbps=$kbps out=$outMs cap=$capMs tablet=$tablet")
+                    Log.e("LazyCar", "speaker send rms=$rms kbps=$kbps out=$outMs hal=$halMs cap=$capMs tablet=$tablet")
                     sq = 0.0; n = 0; bytes = 0; secAt = now
                 }
             }
@@ -175,6 +182,8 @@ class StreamSender : Service() {
                 written += t.write(zero, 0, zero.size).coerceAtLeast(0) / 4
                 val now = SystemClock.elapsedRealtime()
                 if (now - at > 1000) { at = now
+                    halMs = try { android.media.AudioManager::class.java.getMethod("getOutputLatency", Int::class.java)
+                        .invoke(getSystemService(android.media.AudioManager::class.java), android.media.AudioManager.STREAM_MUSIC) as Int } catch (_: Exception) { -1 }
                     val bt = t.routedDevice?.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
                     // Blocking writes keep the client buffer full; the music is captured after it, so drop it.
                     latencyMs(t, written)?.let { val mix = it - t.bufferSizeInFrames * 1000 / Wire.RATE
@@ -190,6 +199,7 @@ class StreamSender : Service() {
         socket?.close(); socket = null
         projection?.stop(); projection = null
         lock?.release(); lock = null
+        wifiLow?.release(); wifiLow = null
         wake?.release(); wake = null
         super.onDestroy()
     }
@@ -204,5 +214,5 @@ object Wire {
     const val CHUNK = 960          // 5 ms of 48 kHz stereo 16-bit, fits one Wi-Fi frame
     const val CHUNK_MS = 5
     const val FORMAT = "lossless PCM 48 kHz 16-bit stereo"
-    const val HEADER = 20          // seq int, echoed beacon time long, ms held since beacon int, phone output latency int
+    const val HEADER = 40          // seq int, echoed tablet beacon ns, phone ns at beacon, phone ns at send, phone mixer ns of frame 0, phone to JBL ms int
 }
