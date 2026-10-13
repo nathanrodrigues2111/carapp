@@ -3,15 +3,18 @@ package com.lazyneil.lazycar
 import android.content.Context
 
 /** Thin SharedPreferences wrapper. */
-class Prefs(ctx: Context) {
+class Prefs(private val ctx: Context) {
     private val sp = ctx.getSharedPreferences("lazycar", Context.MODE_PRIVATE)
     private val tablet = Role.isTablet(ctx)
     private fun s(k: String) = sp.getString(k, "") ?: ""
     private fun put(k: String, v: String) = sp.edit().putString(k, v).apply()
 
-    var playerPkg: String get() = s("player"); set(v) = put("player", v)
+    // Blank = first installed player that allows the tablet speaker copy (Spotify blocks it).
+    var playerPkg: String get() = s("player").ifEmpty { CAPTURABLE.firstOrNull { ctx.packageManager.getLaunchIntentForPackage(it) != null } ?: "" }
+        set(v) = put("player", v)
     var mac1: String get() = s("mac1"); set(v) = put("mac1", v)
-    var mac2: String get() = s("mac2"); set(v) = put("mac2", v)
+    // Tablet speaker over Wi-Fi replaces Bluetooth speaker 2 (dual audio), so GO never connects it.
+    var mac2: String get() = if (com.lazyneil.lazycar.audio.TabletSpeaker.enabled(ctx)) "" else s("mac2"); set(v) = put("mac2", v)
     var mac3: String get() = s("mac3"); set(v) = put("mac3", v)
     var name1: String get() = s("name1"); set(v) = put("name1", v)
     var name2: String get() = s("name2"); set(v) = put("name2", v)
@@ -69,4 +72,8 @@ class Prefs(ctx: Context) {
     var mobileData: Boolean get() = b("mobileData", false); set(v) = putB("mobileData", v)
     // Accent colour: ARGB, 0 = System (Material dynamic colour).
     var accent: Int get() = i("accent", 0); set(v) = sp.edit().putInt("accent", v).apply()
+
+    companion object {
+        val CAPTURABLE = listOf("revanced.youtube.music", "com.google.android.apps.youtube.music", "com.maxmpz.audioplayer", "org.videolan.vlc")
+    }
 }

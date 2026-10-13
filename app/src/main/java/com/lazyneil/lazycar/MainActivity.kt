@@ -259,7 +259,8 @@ class MainActivity : AppCompatActivity() {
             .distinct()
             .map { pkg ->
                 Triple(pkg,
-                    try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (e: Exception) { pkg },
+                    (try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (e: Exception) { pkg }) +
+                        if (pkg == "com.spotify.music") " (tablet speaker unsupported, app blocks audio copy)" else "",
                     try { pm.getApplicationIcon(pkg) } catch (e: Exception) { null })
             }
             .sortedBy { it.second.lowercase() }
