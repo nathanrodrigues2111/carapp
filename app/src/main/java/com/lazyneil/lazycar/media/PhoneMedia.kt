@@ -94,7 +94,7 @@ object PhoneMedia {
                 val go = j.optBoolean("go")
                 if (go && !lastGo && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.TapService.launchDrive(ctx) }
                 lastGo = go
-                if (j.has("art")) art = j.optString("art").takeIf { it.isNotEmpty() }?.let { decode(it) }
+                if (j.has("art")) { art = j.optString("art").takeIf { it.isNotEmpty() }?.let { decode(it) }; com.lazyneil.lazycar.Accent.art = art }
                 else j.put("art", "")
                 np = j; npAt = SystemClock.elapsedRealtime()
                 // Report our speaker level so the phone slider is live; hardware buttons included.

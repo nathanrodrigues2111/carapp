@@ -169,7 +169,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshGoButton() {
         val btn = findViewById<MaterialButton>(R.id.goButton)
-        val accent = Accent.forArt(this, shownArt)
+        val accent = Accent.now(this)
+        Ui.paintAccent(findViewById(R.id.root), accent)
         val onAccent = Accent.onColor(accent)
         val busy = ContextCompat.getColor(this, R.color.stateBusy)
         val secondary = ContextCompat.getColor(this, R.color.secondaryText)
@@ -361,7 +362,7 @@ class MainActivity : AppCompatActivity() {
                 .filter { !it.isNullOrEmpty() }.joinToString(" · "))
         val art = m?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m?.getBitmap(MediaMetadata.METADATA_KEY_ART)
         if (art?.sameAs(shownArt) != true && !(art == null && shownArt == null)) {
-            shownArt = art
+            shownArt = art; Accent.art = art
             Ui.swapArt(findViewById(R.id.npArt), art)
             findViewById<ImageView>(R.id.npBackdrop).setImageBitmap(art)
             refreshGoButton()   // GO, its glow and the progress follow the art accent

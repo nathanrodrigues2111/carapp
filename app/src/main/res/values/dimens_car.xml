@@ -16,6 +16,10 @@
     <dimen name="r_s">12dp</dimen>
     <dimen name="r_m">20dp</dimen>
     <dimen name="r_l">28dp</dimen>
+    <dimen name="row_pad">20dp</dimen>
+    <dimen name="row_min">64dp</dimen>
+    <dimen name="seg_h">44dp</dimen>
+    <dimen name="swatch">44dp</dimen>
     <dimen name="car_play">112dp</dimen>
     <dimen name="car_rail">96dp</dimen>
 </resources>

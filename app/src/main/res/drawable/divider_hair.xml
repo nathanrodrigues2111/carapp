@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hairline between rows in a settings card, inset to the row padding. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:insetLeft="@dimen/row_pad" android:insetRight="@dimen/row_pad">
+    <shape android:shape="rectangle"><solid android:color="?attr/carStroke" /><size android:height="1px" /></shape>
+</inset>

@@ -75,20 +75,21 @@
         <item name="android:layout_height">80dp</item>
         <item name="android:padding">18dp</item>
     </style>
-    <!-- Pill volume slider, icon inside the track -->
-    <style name="CarSlider" parent="Widget.Material3Expressive.Slider.Medium">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:valueFrom">0</item>
+    <!-- Volume slider: same component as the seek bar, 0..100. -->
+    <style name="CarSlider" parent="CarSeek">
         <item name="android:valueTo">100</item>
         <item name="android:stepSize">1</item>
-        <item name="labelBehavior">gone</item>
-        <item name="tickVisible">false</item>
-        <!-- One continuous pill: no gap around the thumb, no stop dot, slim thumb -->
-        <item name="thumbTrackGapSize">0dp</item>
-        <item name="trackStopIndicatorSize">0dp</item>
-        <item name="thumbWidth">4dp</item>
-        <item name="trackColorInactive">?attr/carSurfaceHigh</item>
+    </style>
+    <!-- Neutral pill button, the only button style besides GO. -->
+    <style name="CarButton" parent="Widget.Material3.Button">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="backgroundTint">?attr/carSurfaceHigh</item>
+        <item name="android:textColor">?attr/carText</item>
+        <item name="android:textAppearance">@style/T.Body</item>
+        <item name="cornerRadius">24dp</item>
     </style>
     <!-- Seek: 4dp track, 16dp round white thumb, no stop dot. -->
     <style name="CarSeek" parent="Widget.Material3.Slider">
@@ -116,15 +117,64 @@
         <item name="android:layout_height">10dp</item>
         <item name="android:background">@drawable/bg_dot</item>
     </style>
-    <style name="SectionHeader">
+    <!-- Settings: small caps header outside the card, one card per section, rows with hairlines. -->
+    <style name="SectionHeader" parent="T.Overline">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">@dimen/sp8</item>
-        <item name="android:layout_marginBottom">@dimen/sp3</item>
-        <item name="android:textSize">@dimen/t_headline</item>
-        <item name="android:fontFamily">sans-serif</item>
-        <item name="android:textStyle">bold</item>
+        <item name="android:layout_marginTop">@dimen/sp6</item>
+        <item name="android:layout_marginBottom">@dimen/sp2</item>
+        <item name="android:layout_marginStart">@dimen/row_pad</item>
+    </style>
+    <style name="SetCard">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:background">@drawable/bg_glass</item>
+        <item name="android:showDividers">middle</item>
+        <item name="android:divider">@drawable/divider_hair</item>
+    </style>
+    <!-- Row: title + one line subtitle on the left, control right aligned. -->
+    <style name="SetRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">@dimen/row_min</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingHorizontal">@dimen/row_pad</item>
+        <item name="android:paddingVertical">@dimen/sp3</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+    </style>
+    <!-- Row whose control sits under the title (swatches, pills, sliders). -->
+    <style name="SetRow.Stack">
+        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">start</item>
+        <item name="android:paddingVertical">@dimen/sp4</item>
+        <item name="android:background">@null</item>
+    </style>
+    <style name="SetTexts">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+    <style name="SetTitle" parent="T.Body">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
         <item name="android:textColor">?attr/carText</item>
+    </style>
+    <style name="SetSub" parent="T.Label">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+    <style name="SetValue" parent="T.Body">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">@dimen/sp3</item>
+    </style>
+    <style name="SetSwitch">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">@dimen/sp3</item>
     </style>
     <style name="Caption">
         <item name="android:layout_width">match_parent</item>
@@ -132,11 +182,24 @@
         <item name="android:textSize">@dimen/t_body</item>
         <item name="android:textColor">?attr/carTextDim</item>
     </style>
-    <style name="SettingSwitch">
+    <!-- Text field: filled pill, no outline. -->
+    <style name="CarField" parent="Widget.Material3.TextInputLayout.FilledBox">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:minHeight">64dp</item>
-        <item name="android:textSize">@dimen/t_title</item>
+        <item name="boxBackgroundColor">?attr/carSurfaceHigh</item>
+        <item name="boxStrokeWidth">0dp</item>
+        <item name="boxStrokeWidthFocused">0dp</item>
+        <item name="boxCornerRadiusTopStart">@dimen/r_m</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/r_m</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/r_m</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/r_m</item>
+        <item name="hintTextColor">?attr/carTextDim</item>
+        <item name="android:textColorHint">?attr/carTextDim</item>
+    </style>
+    <style name="CarFieldText" parent="T.Body">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
         <item name="android:textColor">?attr/carText</item>
+        <item name="android:inputType">text</item>
     </style>
 </resources>

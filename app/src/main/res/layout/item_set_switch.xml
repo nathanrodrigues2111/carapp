@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings row: title, one line subtitle, switch right. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/SetRow">
+    <LinearLayout style="@style/SetTexts">
+        <TextView android:id="@+id/setTitle" style="@style/SetTitle" />
+        <TextView android:id="@+id/setSub" style="@style/SetSub" />
+    </LinearLayout>
+    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/setSwitch" style="@style/SetSwitch" />
+</LinearLayout>

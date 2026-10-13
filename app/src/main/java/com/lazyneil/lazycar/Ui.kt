@@ -42,9 +42,11 @@ object Ui {
     }
 
     private fun sp(c: Context) = c.getSharedPreferences("lazycar", Context.MODE_PRIVATE)
-    fun openOnBoot(c: Context) = sp(c).getBoolean("openOnBoot", true)
-    fun openOnGo(c: Context) = sp(c).getBoolean("openOnGo", true)
-    fun openOnLaunch(c: Context) = sp(c).getBoolean("openOnLaunch", true)
+    /** One switch, "Open with Maps": the Maps + CarApp split on tablet start, on GO and when CarApp opens. */
+    fun openWithMaps(c: Context) = sp(c).getBoolean("openWithMaps", true)
+    fun openOnBoot(c: Context) = openWithMaps(c)
+    fun openOnGo(c: Context) = openWithMaps(c)
+    fun openOnLaunch(c: Context) = openWithMaps(c)
     /** Tablet player style: Modern (default) or Classic, the earlier layout. */
     fun classic(c: Context) = sp(c).getBoolean("classicPlayer", false)
     fun setOpen(c: Context, key: String, on: Boolean) = sp(c).edit().putBoolean(key, on).apply()
@@ -68,38 +70,56 @@ object Ui {
         }
     } catch (_: Exception) { null }
 
-    /** Accent on the seek bar, sliders, play button (with glow) and meter, wherever they exist in [root]. */
+    /** The live accent on every accent widget under [root]: volume sliders, switches, play button, tabs,
+     *  progress, text fields. The seek bar stays neutral. Views tagged with a Runnable repaint themselves. */
     fun paintAccent(root: View, c: Int) {
         val csl = ColorStateList.valueOf(c)
         val on = ColorStateList.valueOf(Accent.onColor(c))
-        intArrayOf(R.id.outJblSlider, R.id.outTabSlider).forEach {
-            root.findViewById<Slider>(it)?.apply { trackActiveTintList = csl; thumbTintList = csl }
-        }
-        intArrayOf(R.id.npPlay).forEach {
-            root.findViewById<ImageButton>(it)?.apply {
-                backgroundTintList = csl; imageTintList = on; outlineSpotShadowColor = c; outlineAmbientShadowColor = c
+        val checked = intArrayOf(android.R.attr.state_checked)
+        val sw = ColorStateList(arrayOf(checked, intArrayOf()), intArrayOf(c, attr(root.context, R.attr.carSurfaceHigh)))
+        val thumb = ColorStateList(arrayOf(checked, intArrayOf()), intArrayOf(Color.WHITE, attr(root.context, R.attr.carTextDim)))
+        fun walk(v: View) {
+            when (v) {
+                is Slider -> if (v.id != R.id.npSeek) { v.trackActiveTintList = csl; v.thumbTintList = csl; v.haloTintList = ColorStateList.valueOf(ColorUtils.setAlphaComponent(c, 0x33)) }
+                is MaterialSwitch -> { v.trackTintList = sw; v.thumbTintList = thumb; v.trackDecorationTintList = ColorStateList.valueOf(Color.TRANSPARENT) }
+                is com.google.android.material.tabs.TabLayout -> v.setSelectedTabIndicatorColor(c)
+                is com.google.android.material.progressindicator.LinearProgressIndicator -> v.setIndicatorColor(c)
+                is com.google.android.material.textfield.TextInputLayout -> v.boxStrokeColor = c
             }
+            (v.tag as? Runnable)?.run()
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(root)
+        root.findViewById<ImageButton>(R.id.npPlay)?.apply {
+            backgroundTintList = csl; imageTintList = on; outlineSpotShadowColor = c; outlineAmbientShadowColor = c
         }
     }
 
-    /** Segmented pill: one rounded track, the picked option a soft accent pill with accent text. */
+    /** Segmented pill: one surface track, the picked option a solid light pill that slides in 150 ms. */
     fun segmented(row: android.widget.LinearLayout, options: List<String>, selected: Int, pick: (Int) -> Unit) {
-        val c = row.context; val d = c.resources.displayMetrics.density
-        val accent = attr(c, R.attr.carAccent); val dim = attr(c, R.attr.carTextDim)
+        val c = row.context; val d = c.resources.displayMetrics.density; val inset = (4 * d).toInt()
         fun pill(color: Int) = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 999f * d; setColor(color) }
-        row.removeAllViews(); row.orientation = android.widget.LinearLayout.HORIZONTAL
-        row.background = pill(attr(c, R.attr.carSurfaceHigh)); row.setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
+        val dim = attr(c, R.attr.carTextDim); val ink = attr(c, R.attr.carBg)
+        row.removeAllViews(); row.background = pill(attr(c, R.attr.carSurfaceHigh)); row.setPadding(inset, inset, inset, inset)
+        val frame = android.widget.FrameLayout(c); row.addView(frame, android.widget.LinearLayout.LayoutParams(-1, -1))
+        val thumb = View(c).apply { background = pill(0xEBFFFFFF.toInt()) }
+        frame.addView(thumb, android.widget.FrameLayout.LayoutParams(0, -1))
+        val labels = android.widget.LinearLayout(c); frame.addView(labels, android.widget.FrameLayout.LayoutParams(-1, -1))
         var cur = selected
-        fun paint() = (0 until row.childCount).forEach { i -> (row.getChildAt(i) as TextView).apply {
-            background = if (i == cur) pill(ColorUtils.setAlphaComponent(accent, 0x33)) else null
-            setTextColor(if (i == cur) accent else dim) } }
-        options.forEachIndexed { i, label ->
-            row.addView(TextView(c).apply {
-                text = label; setTextAppearance(R.style.T_Body); paint.isFakeBoldText = true; gravity = android.view.Gravity.CENTER
-                setOnClickListener { if (cur != i) { cur = i; paint(); pick(i) } }
-            }, android.widget.LinearLayout.LayoutParams(0, (40 * d).toInt(), 1f))
+        fun paint(anim: Boolean) {
+            val w = frame.width / options.size
+            thumb.layoutParams = thumb.layoutParams.apply { width = w }
+            if (anim) thumb.animate().translationX((cur * w).toFloat()).setDuration(150).start() else thumb.translationX = (cur * w).toFloat()
+            (0 until labels.childCount).forEach { (labels.getChildAt(it) as TextView).setTextColor(if (it == cur) ink else dim) }
         }
-        paint()
+        options.forEachIndexed { i, label ->
+            labels.addView(TextView(c).apply {
+                text = label; setTextAppearance(R.style.T_Body); typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                gravity = android.view.Gravity.CENTER
+                setOnClickListener { if (cur != i) { cur = i; paint(true); pick(i) } }
+            }, android.widget.LinearLayout.LayoutParams(0, -1, 1f))
+        }
+        frame.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ -> if (r - l != or - ol) frame.post { paint(false) } }
     }
 
     fun blur(iv: ImageView?) { iv?.setRenderEffect(RenderEffect.createBlurEffect(90f, 90f, Shader.TileMode.CLAMP)) }

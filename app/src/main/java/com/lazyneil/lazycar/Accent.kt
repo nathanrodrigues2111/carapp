@@ -19,6 +19,12 @@ object Accent {
         R.style.AccentOverlay_Purple, R.style.AccentOverlay_Green, R.style.AccentOverlay_Yellow,
         R.style.AccentOverlay_Red, R.style.AccentOverlay_White)
 
+    /** Current album art, app wide: PhoneMedia sets it on the tablet, MediaListener and the home screen on the phone. */
+    @Volatile var art: Bitmap? = null
+
+    /** The one live accent every screen paints with. */
+    fun now(ctx: Context) = forArt(ctx, art)
+
     /** Fixed accent for places without art (widgets, Debug). */
     fun color(ctx: Context) = Prefs(ctx).accent.takeIf { it != AUTO } ?: CYAN
 

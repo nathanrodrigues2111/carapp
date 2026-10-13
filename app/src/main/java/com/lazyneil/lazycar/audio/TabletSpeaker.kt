@@ -84,35 +84,38 @@ object TabletSpeaker {
     fun addSettings(a: Activity, anchor: View) {
         val parent = anchor.parent as ViewGroup
         val tablet = Role.isTablet(a)
-        val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
-        val caption = { t: String -> TextView(a).apply { text = t; setTextAppearance(R.style.T_Body); maxLines = 4 } }
-        val status = caption("")
-        fun switch(t: String, key: String, def: Boolean, on: (Boolean) -> Unit) = MaterialSwitch(a).apply {
-            text = t; setTextAppearance(R.style.T_Title); minHeight = (64 * resources.displayMetrics.density).toInt()
-            isChecked = sp(a).getBoolean(key, def)
-            setOnCheckedChangeListener { _, v -> sp(a).edit().putBoolean(key, v).apply(); on(v) }
+        var rows = 0
+        // Rows in the shared settings style: title, one line subtitle, control right (or below for the slider).
+        val inflater = android.view.LayoutInflater.from(a)
+        fun row(title: String, sub: String, key: String, def: Boolean, on: (Boolean) -> Unit): TextView {
+            val r = inflater.inflate(R.layout.item_set_switch, parent, false)
+            r.findViewById<TextView>(R.id.setTitle).text = title
+            val s = r.findViewById<TextView>(R.id.setSub).apply { text = sub }
+            r.findViewById<MaterialSwitch>(R.id.setSwitch).apply {
+                isChecked = sp(a).getBoolean(key, def)
+                setOnCheckedChangeListener { _, v -> sp(a).edit().putBoolean(key, v).apply(); on(v) }
+                r.setOnClickListener { toggle() }
+            }
+            parent.addView(r, parent.indexOfChild(anchor) + 1 + rows++); return s
         }
-        box.addView(switch("Tablet speaker over Wi-Fi", "on", true) { v ->
+        val status = row("Tablet speaker", "", "on", true) { v ->
             if (tablet) StreamReceiver.sync(a) else if (v) StreamSender.start(a) else StreamSender.stop(a)
-        })
-        box.addView(caption(if (tablet) "Plays the phone's music on this tablet's speaker, in sync with the JBL"
-            else "Streams this phone's music to the tablet speaker while GO is on, the JBL keeps playing over Bluetooth"))
-        box.addView(status)
-        if (tablet) {
-            val label = caption("")
-            fun show(v: Int) { label.text = "Sync trim ${if (v > 0) "+" else ""}$v ms" }
-            show(delayMs(a))
-            box.addView(label)
-            box.addView(Slider(a).apply {
-                valueFrom = -500f; valueTo = 1000f; stepSize = 10f; isTickVisible = false; value = delayMs(a).toFloat()
-                addOnChangeListener { _, v, _ -> sp(a).edit().putInt("delay", v.toInt()).apply(); show(v.toInt()) }
-            })
-            box.addView(switch("Also play on the tablet's Bluetooth speaker", "bt", false) {
-                a.stopService(android.content.Intent(a, StreamReceiver::class.java)); StreamReceiver.sync(a)
-            })
-            box.addView(caption("Pair the JBL with the tablet instead of the phone: both outputs then share one clock"))
         }
-        parent.addView(box, parent.indexOfChild(anchor) + 1)
+        if (tablet) {
+            val r = inflater.inflate(R.layout.item_set_slider, parent, false)
+            val label = r.findViewById<TextView>(R.id.setValue)
+            fun show(v: Int) { label.text = "${if (v > 0) "+" else ""}$v ms" }
+            show(delayMs(a))
+            r.findViewById<Slider>(R.id.setSlider).apply {
+                valueFrom = -500f; valueTo = 1000f; stepSize = 10f; value = delayMs(a).toFloat()
+                addOnChangeListener { _, v, _ -> sp(a).edit().putInt("delay", v.toInt()).apply(); show(v.toInt()) }
+            }
+            parent.addView(r, parent.indexOfChild(anchor) + 1 + rows++)
+            row("Tablet Bluetooth too", "When the JBL is paired with the tablet", "bt", false) {
+                a.stopService(android.content.Intent(a, StreamReceiver::class.java)); StreamReceiver.sync(a)
+            }
+        }
+        val box = status
         val tick = object : Runnable {
             override fun run() { status.text = line(a); if (box.isAttachedToWindow || !a.isFinishing) box.postDelayed(this, 1000) }
         }

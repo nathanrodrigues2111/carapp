@@ -1,191 +1,71 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings: grouped sections. Appearance, Audio, GPS, Launch, Camera, Car mode, Advanced. -->
+<!-- Settings: small caps header, one card per section, rows with hairlines. Ordered by use in the car. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/root"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="?attr/carBg"
-    android:orientation="vertical">
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="80dp" android:gravity="center_vertical"
-        android:orientation="horizontal" android:paddingHorizontal="@dimen/sp2">
-        <ImageButton android:id="@+id/backBtn" style="@style/CarIconBtn" android:contentDescription="Back"
-            android:src="@drawable/ic_back_round" />
-        <TextView style="@style/T.Display" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/sp2" android:text="Settings" android:textSize="@dimen/t_headline" />
-    </LinearLayout>
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
-        android:orientation="horizontal">
-    <!-- Tablet: section list, filled by SettingsActivity; tap scrolls to the section -->
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="?attr/carBg" android:orientation="vertical">
+    <include layout="@layout/view_top_bar" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
+    <!-- Tablet, wide: section list filled by SettingsActivity; a tap scrolls to the section -->
     <LinearLayout android:id="@+id/navList" android:layout_width="320dp" android:layout_height="match_parent"
         android:orientation="vertical" android:paddingHorizontal="@dimen/sp4" android:visibility="gone" />
     <ScrollView android:id="@+id/settingsScroll" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
         android:clipToPadding="false" android:fillViewport="true" android:scrollbars="none">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="vertical" android:paddingHorizontal="@dimen/sp4" android:paddingBottom="@dimen/sp6">
-
-            <TextView style="@style/SectionHeader" android:text="Audio" />
-            <LinearLayout style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView style="@style/T.Overline" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/sp2" android:text="Speaker volume" />
-                <include layout="@layout/view_outputs" />
-                <TextView android:id="@+id/audioAnchor" style="@style/Caption" android:layout_marginTop="@dimen/sp2" android:text="Hardware volume buttons keep working as usual" />
-            </LinearLayout>
             <TextView style="@style/SectionHeader" android:text="Display" />
-            <LinearLayout style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView style="@style/T.Overline" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Accent color" />
-                <TextView android:id="@+id/accentName" style="@style/T.Title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp3" />
-                <TextView android:id="@+id/accentSub" style="@style/T.Body" android:layout_width="match_parent" android:layout_height="wrap_content" />
-                <GridLayout android:id="@+id/accentRow" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp4" android:columnCount="5" />
-                <LinearLayout android:id="@+id/styleBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                    <TextView style="@style/T.Overline" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp6" android:text="Player style" />
-                    <LinearLayout android:id="@+id/styleGroup" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="@dimen/sp3" />
-                </LinearLayout>
+            <LinearLayout style="@style/SetCard">
+                <LinearLayout style="@style/SetRow.Stack"><TextView style="@style/SetTitle" android:text="Accent color" /><TextView style="@style/SetSub" android:id="@+id/accentSub" /><LinearLayout android:id="@+id/accentRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp3" android:orientation="vertical" /></LinearLayout>
+                <LinearLayout android:id="@+id/styleBox" style="@style/SetRow.Stack"><TextView style="@style/SetTitle" android:text="Player style" /><TextView style="@style/SetSub" android:text="Layout of the tablet player" /><LinearLayout android:id="@+id/styleGroup" android:layout_width="match_parent" android:layout_height="@dimen/seg_h" android:layout_marginTop="@dimen/sp3" /></LinearLayout>
             </LinearLayout>
-
+            <TextView style="@style/SectionHeader" android:text="Audio" />
+            <LinearLayout style="@style/SetCard">
+                <include layout="@layout/view_outputs" />
+                <View android:id="@+id/audioAnchor" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
+            </LinearLayout>
+            <TextView style="@style/SectionHeader" android:id="@+id/driveHeader" android:text="Drive" />
+            <LinearLayout style="@style/SetCard" android:id="@+id/driveCard">
+                <LinearLayout android:id="@+id/rowOpenMaps" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Open with Maps" /><TextView style="@style/SetSub" android:text="Maps and player side by side, on start and GO" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/openMapsSwitch" style="@style/SetSwitch" /></LinearLayout>
+            </LinearLayout>
             <TextView style="@style/SectionHeader" android:text="GPS" />
-            <LinearLayout style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView style="@style/T.Overline" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/sp2" android:text="Location" />
-                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/gpsSwitch" style="@style/SettingSwitch" android:text="" />
-                <TextView android:id="@+id/gpsCaption" style="@style/Caption" />
-                <TextView android:id="@+id/gpsLive" style="@style/T.Title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp3" />
-
+            <LinearLayout style="@style/SetCard">
+                <LinearLayout android:id="@+id/rowGps" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:id="@+id/gpsTitle" /><TextView style="@style/SetSub" android:id="@+id/gpsCaption" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/gpsSwitch" style="@style/SetSwitch" /></LinearLayout>
+                <LinearLayout android:id="@+id/rowGpsLive" style="@style/SetRow" android:background="@null"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Status" /><TextView style="@style/SetSub" /></LinearLayout><TextView android:id="@+id/gpsLive" style="@style/SetValue" /></LinearLayout>
             </LinearLayout>
-
-            <TextView style="@style/SectionHeader" android:text="Drive" />
-            <LinearLayout style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView style="@style/T.Overline" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/sp2" android:text="Split screen" />
-                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/openBootSwitch" style="@style/SettingSwitch" android:text="Open Maps + player on tablet start" />
-                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/openGoSwitch" style="@style/SettingSwitch" android:text="Open Maps + player on GO" />
-                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/openLaunchSwitch" style="@style/SettingSwitch" android:text="Open Maps + player when CarApp opens" />
-                <TextView android:id="@+id/driveCaption" style="@style/Caption" android:text="Uses the launcher's saved Maps + CarApp pair" />
-                <TextView style="@style/Caption" android:layout_marginTop="@dimen/sp4" android:text="Widget tap opens" />
-                    <LinearLayout android:id="@+id/launchMode" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="8dp" />
-                    <LinearLayout
-                        android:id="@+id/launchApps"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:orientation="vertical">
-                    <LinearLayout android:id="@+id/launchARow" style="@style/Row56">
-                        <FrameLayout style="@style/IconCircle">
-                            <ImageView android:id="@+id/launchAIcon" style="@style/RowIcon" />
-                        </FrameLayout>
-                        <TextView android:id="@+id/launchAValue" style="@style/RowTitle" />
-                        <ImageView style="@style/ChevronIcon" />
-                    </LinearLayout>
-                    <LinearLayout android:id="@+id/launchBRow" style="@style/Row56">
-                        <FrameLayout style="@style/IconCircle">
-                            <ImageView android:id="@+id/launchBIcon" style="@style/RowIcon" />
-                        </FrameLayout>
-                        <TextView android:id="@+id/launchBValue" style="@style/RowTitle" />
-                        <ImageView style="@style/ChevronIcon" />
-                    </LinearLayout>
-                        <LinearLayout
-                            android:id="@+id/splitExtra"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical">
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/swapBtn"
-                                style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Swap sides" />
-                            <TextView style="@style/Caption" android:layout_marginTop="12dp" android:text="Split ratio, left : right" />
-                    <LinearLayout android:id="@+id/ratioGroup" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="8dp" />
-                            <LinearLayout android:id="@+id/launchPresetRow" style="@style/Row56" android:layout_marginTop="4dp">
-                                <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:text="Presets" />
-                                <ImageView style="@style/ChevronIcon" />
-                            </LinearLayout>
-                        </LinearLayout>
-                    </LinearLayout>
-
+            <TextView style="@style/SectionHeader" android:id="@+id/camSectionHeader" android:text="Camera" />
+            <LinearLayout style="@style/SetCard" android:id="@+id/camSection">
+                <LinearLayout android:id="@+id/rowCamLive" style="@style/SetRow" android:background="@null"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Status" /><TextView style="@style/SetSub" /></LinearLayout><TextView android:id="@+id/camLive" style="@style/SetValue" /></LinearLayout>
+                <LinearLayout android:id="@+id/camOpen" style="@style/SetRow" android:clickable="true" android:focusable="true"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Open camera" /><TextView style="@style/SetSub" android:text="See the rear view now" /></LinearLayout><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
+                <LinearLayout android:id="@+id/camRow" style="@style/SetRow" android:clickable="true" android:focusable="true"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Camera settings" /><TextView style="@style/SetSub" android:text="Guidelines, recording, theme" /></LinearLayout><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
             </LinearLayout>
-
-            <TextView style="@style/SectionHeader" android:text="Camera" android:id="@+id/camSectionHeader" />
-            <LinearLayout android:id="@+id/camSection" style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView style="@style/T.Overline" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/sp2" android:text="Rear camera" />
-                <TextView android:id="@+id/camLive" style="@style/T.Title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp2" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/camOpen" android:layout_width="wrap_content" android:layout_height="56dp" android:layout_marginTop="8dp" android:text="Open camera" />
-                <LinearLayout android:id="@+id/camRow" style="@style/Row56">
-                    <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:textColor="?attr/carText" android:text="Reverse camera settings" />
-                    <ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" />
+            <TextView style="@style/SectionHeader" android:id="@+id/carSectionHeader" android:text="Connection" />
+            <LinearLayout style="@style/SetCard" android:id="@+id/carSection">
+                <FrameLayout style="@style/SetRow" android:background="@null"><com.google.android.material.textfield.TextInputLayout android:id="@+id/ssidBox" style="@style/CarField" android:hint="Phone hotspot to join"><com.google.android.material.textfield.TextInputEditText android:id="@+id/ssidField" style="@style/CarFieldText" /></com.google.android.material.textfield.TextInputLayout></FrameLayout>
+                <LinearLayout android:id="@+id/rowHeadunit" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Car head unit" /><TextView style="@style/SetSub" android:id="@+id/headunitDetected" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/headunitSwitch" style="@style/SetSwitch" /></LinearLayout>
+                <LinearLayout android:id="@+id/headunitExtra" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <LinearLayout android:id="@+id/dev3Row" style="@style/SetRow" android:clickable="true" android:focusable="true"><ImageView android:id="@+id/dev3Icon" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginEnd="@dimen/sp4" android:importantForAccessibility="no" /><TextView android:id="@+id/dev3Value" style="@style/SetTitle" android:layout_width="0dp" android:layout_weight="1" /><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
+                <FrameLayout style="@style/SetRow" android:background="@null"><com.google.android.material.textfield.TextInputLayout android:id="@+id/ipBox" style="@style/CarField" android:hint="Head unit IP (optional)"><com.google.android.material.textfield.TextInputEditText android:id="@+id/ipField" style="@style/CarFieldText" /></com.google.android.material.textfield.TextInputLayout></FrameLayout>
                 </LinearLayout>
+                <LinearLayout android:id="@+id/rowHotspot" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Wi-Fi hotspot" /><TextView style="@style/SetSub" android:id="@+id/hotspotCaption" android:text="Turns on with GO, off on STOP" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/hotspotSwitch" style="@style/SetSwitch" /></LinearLayout>
+                <LinearLayout android:id="@+id/rowMobile" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Mobile data" /><TextView style="@style/SetSub" android:text="Shares mobile data over the hotspot" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/mobileSwitch" style="@style/SetSwitch" /></LinearLayout>
             </LinearLayout>
-
-            <TextView style="@style/SectionHeader" android:text="Connection" android:id="@+id/carSectionHeader" />
-            <LinearLayout android:id="@+id/carSection" style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView style="@style/T.Overline" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/sp2" android:text="Hotspot" />
-                <com.google.android.material.textfield.TextInputLayout android:id="@+id/ssidBox" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginVertical="12dp" android:hint="Phone hotspot to join">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/ssidField" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="text" />
-                </com.google.android.material.textfield.TextInputLayout>
-                <!-- Car head unit -->
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/headunitSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        style="@style/SettingSwitch"
-                        android:text="Car head unit" />
-                    <TextView
-                        android:id="@+id/headunitDetected"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        style="@style/Caption" />
-                    <LinearLayout
-                        android:id="@+id/headunitExtra"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:visibility="gone">
-<LinearLayout android:id="@+id/dev3Row" style="@style/Row56" android:layout_marginTop="4dp">
-                            <FrameLayout style="@style/IconCircle">
-                                <ImageView android:id="@+id/dev3Icon" style="@style/RowIcon" />
-                            </FrameLayout>
-                            <TextView android:id="@+id/dev3Value" style="@style/RowTitle" android:text="Head unit tablet" />
-                            <ImageView style="@style/ChevronIcon" />
-                        </LinearLayout>
-                        <com.google.android.material.textfield.TextInputLayout
-                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:hint="Head unit IP (optional)">
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/ipField"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="text" />
-                        </com.google.android.material.textfield.TextInputLayout>
-                    </LinearLayout>
-                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/hotspotSwitch" style="@style/SettingSwitch" android:text="Wi-Fi hotspot" />
-                <TextView android:id="@+id/hotspotCaption" style="@style/Caption" android:text="Turns on with GO, restored on STOP" />
-                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/mobileSwitch" style="@style/SettingSwitch" android:text="Mobile data" android:layout_marginStart="24dp" android:visibility="gone" />
-            </LinearLayout>
-
             <TextView style="@style/SectionHeader" android:text="Advanced" />
-            <LinearLayout style="@style/Glass" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView style="@style/T.Overline" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/sp2" android:text="Device" />
-                <LinearLayout android:id="@+id/roleRow" style="@style/Row56">
-                    <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:textColor="?attr/carText" android:text="Device role" />
-                    <TextView android:id="@+id/roleValue" style="@style/T.Label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginEnd="8dp" /><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" />
+            <LinearLayout style="@style/SetCard">
+                <LinearLayout android:id="@+id/roleRow" style="@style/SetRow" android:clickable="true" android:focusable="true"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Device role" /><TextView style="@style/SetSub" android:text="Phone or tablet" /></LinearLayout><TextView android:id="@+id/roleValue" style="@style/SetValue" /><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
+                <LinearLayout android:id="@+id/a11yRow" style="@style/SetRow"><ImageView android:id="@+id/a11yIcon" android:layout_width="24dp" android:layout_height="24dp" android:layout_marginEnd="@dimen/sp4" /><TextView android:id="@+id/a11yText" style="@style/SetTitle" android:layout_width="0dp" android:layout_weight="1" /></LinearLayout>
+                <LinearLayout style="@style/SetRow.Stack"><TextView style="@style/SetTitle" android:text="Widget tap opens" /><TextView style="@style/SetSub" /><LinearLayout android:id="@+id/launchMode" android:layout_width="match_parent" android:layout_height="@dimen/seg_h" android:layout_marginTop="@dimen/sp3" /></LinearLayout>
+                <LinearLayout android:id="@+id/launchApps" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:showDividers="middle" android:divider="@drawable/divider_hair">
+                <LinearLayout android:id="@+id/launchARow" style="@style/SetRow" android:clickable="true" android:focusable="true"><ImageView android:id="@+id/launchAIcon" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginEnd="@dimen/sp4" android:importantForAccessibility="no" /><TextView android:id="@+id/launchAValue" style="@style/SetTitle" android:layout_width="0dp" android:layout_weight="1" /><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
+                <LinearLayout android:id="@+id/launchBRow" style="@style/SetRow" android:clickable="true" android:focusable="true"><ImageView android:id="@+id/launchBIcon" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginEnd="@dimen/sp4" android:importantForAccessibility="no" /><TextView android:id="@+id/launchBValue" style="@style/SetTitle" android:layout_width="0dp" android:layout_weight="1" /><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
+                <LinearLayout android:id="@+id/splitExtra" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:showDividers="middle" android:divider="@drawable/divider_hair">
+                <LinearLayout android:id="@+id/swapBtn" style="@style/SetRow" android:clickable="true" android:focusable="true"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Swap sides" /><TextView style="@style/SetSub" /></LinearLayout><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
+                <LinearLayout android:id="@+id/launchPresetRow" style="@style/SetRow" android:clickable="true" android:focusable="true"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Presets" /><TextView style="@style/SetSub" android:text="Saved app pairs" /></LinearLayout><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
                 </LinearLayout>
-                <LinearLayout android:id="@+id/a11yRow" style="@style/Row56">
-                    <ImageView android:id="@+id/a11yIcon" android:layout_width="24dp" android:layout_height="24dp" />
-                    <TextView android:id="@+id/a11yText" style="@style/RowTitle" android:textColor="?attr/carText" android:text="Auto-tap ready" />
                 </LinearLayout>
-                <LinearLayout android:id="@+id/helpRow" style="@style/Row56">
-                    <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:textColor="?attr/carText" android:text="Help" />
-                    <ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" />
-                </LinearLayout><LinearLayout android:id="@+id/debugRow" style="@style/Row56">
-                    <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:textColor="?attr/carText" android:text="Debug" />
-                    <ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" />
-                </LinearLayout>
+                <LinearLayout android:id="@+id/helpRow" style="@style/SetRow" android:clickable="true" android:focusable="true"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Help" /><TextView style="@style/SetSub" android:text="Setup steps" /></LinearLayout><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
+                <LinearLayout android:id="@+id/debugRow" style="@style/SetRow" android:clickable="true" android:focusable="true"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Debug" /><TextView style="@style/SetSub" android:text="Status of every part" /></LinearLayout><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
             </LinearLayout>
-
-            <TextView android:id="@+id/versionText" style="@style/Caption" android:layout_marginTop="16dp" android:gravity="center" />
+            <TextView android:id="@+id/versionText" style="@style/T.Label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp6" android:gravity="center" />
         </LinearLayout>
     </ScrollView>
     </LinearLayout>

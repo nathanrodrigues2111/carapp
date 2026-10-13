@@ -166,7 +166,7 @@ class DebugActivity : AppCompatActivity() {
         }
 
     private fun refresh() {
-        val accent = Accent.color(this)
+        val accent = Accent.now(this)
         for (r in rows) {
             val (st, d) = try { r.eval() } catch (e: Exception) { St.FAIL to "Check failed: ${e.javaClass.simpleName}" }
             r.status.text = st.name

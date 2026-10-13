@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared top bar for Settings, Library and Debug: chevron back and the screen title. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/topBar" android:layout_width="match_parent" android:layout_height="72dp"
+    android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="@dimen/sp2">
+    <ImageButton android:id="@+id/backBtn" style="@style/CarIconBtn" android:contentDescription="Back"
+        android:src="@drawable/ic_back_round" />
+    <TextView android:id="@+id/topTitle" style="@style/T.Title" android:layout_width="0dp"
+        android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="@dimen/sp2" />
+</LinearLayout>

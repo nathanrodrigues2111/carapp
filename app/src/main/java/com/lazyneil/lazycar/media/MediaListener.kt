@@ -120,6 +120,7 @@ class MediaListener : NotificationListenerService() {
     } catch (_: Exception) { null }
 
     // The session's bitmaps are downscaled by the framework, so the art URI (full resolution) goes first.
+    private var accentKey = ""
     private fun art(m: MediaMetadata): Bitmap? =
         bitmapFrom(m.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI) ?: m.getString(MediaMetadata.METADATA_KEY_ART_URI))
         ?: m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m.getBitmap(MediaMetadata.METADATA_KEY_ART)
@@ -145,6 +146,7 @@ class MediaListener : NotificationListenerService() {
         j.put("go", com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this)) == com.lazyneil.lazycar.GoAction.ON)
         val key = listOf(c?.packageName, j.optString("title"), j.optString("artist"), j.optString("album")).joinToString("|")
         val needArt = out.any { it.artKey != key }
+        if (key != accentKey) { accentKey = key; com.lazyneil.lazycar.Accent.art = m?.let { art(it) } }
         val a = if (needArt && m != null) jpeg(art(m), 1024, 92) else null
         for (cl in out) {
             val line = if (cl.artKey != key) JSONObject(j.toString()).put("art", a ?: "").toString().also { cl.artKey = key } else j.toString()
