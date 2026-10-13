@@ -18,44 +18,15 @@
         <item name="colorOnError">@color/onAccent</item>
     </style>
 
-    <!-- Per-accent overlays: set colorPrimary so every Material widget (buttons, sliders,
-         switches, dialog buttons, text fields, ripples-via-primary) follows the chosen accent.
-         onPrimary matches Accent.onColor (black on light accents, white on dark). -->
-    <style name="AccentOverlay.Lime" parent="">
-        <item name="colorPrimary">@color/accent</item>
-        <item name="colorOnPrimary">#FF000000</item>
-        <item name="colorSecondary">@color/accent</item>
-    </style>
-    <style name="AccentOverlay.Blue" parent="">
-        <item name="colorPrimary">@color/accentBlue</item>
-        <item name="colorOnPrimary">#FFFFFFFF</item>
-        <item name="colorSecondary">@color/accentBlue</item>
-    </style>
-    <style name="AccentOverlay.Red" parent="">
-        <item name="colorPrimary">@color/accentRed</item>
-        <item name="colorOnPrimary">#FFFFFFFF</item>
-        <item name="colorSecondary">@color/accentRed</item>
-    </style>
-    <style name="AccentOverlay.Orange" parent="">
-        <item name="colorPrimary">@color/accentOrange</item>
-        <item name="colorOnPrimary">#FFFFFFFF</item>
-        <item name="colorSecondary">@color/accentOrange</item>
-    </style>
-    <style name="AccentOverlay.Purple" parent="">
-        <item name="colorPrimary">@color/accentPurple</item>
-        <item name="colorOnPrimary">#FFFFFFFF</item>
-        <item name="colorSecondary">@color/accentPurple</item>
-    </style>
-    <style name="AccentOverlay.Cyan" parent="">
-        <item name="colorPrimary">@color/accentCyan</item>
-        <item name="colorOnPrimary">#FF000000</item>
-        <item name="colorSecondary">@color/accentCyan</item>
-    </style>
-    <style name="AccentOverlay.White" parent="">
-        <item name="colorPrimary">@color/accentWhite</item>
-        <item name="colorOnPrimary">#FF000000</item>
-        <item name="colorSecondary">@color/accentWhite</item>
-    </style>
+    <!-- Accent overlays, index-matched to Accent.SWATCHES: colorPrimary drives every Material widget. -->
+    <style name="AccentOverlay.Cyan" parent=""><item name="colorPrimary">#FF00E5FF</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FF00E5FF</item><item name="carAccent">#FF00E5FF</item></style>
+    <style name="AccentOverlay.Orange" parent=""><item name="colorPrimary">#FFFF7A45</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FFFF7A45</item><item name="carAccent">#FFFF7A45</item></style>
+    <style name="AccentOverlay.Blue" parent=""><item name="colorPrimary">#FF7C9CFF</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FF7C9CFF</item><item name="carAccent">#FF7C9CFF</item></style>
+    <style name="AccentOverlay.Purple" parent=""><item name="colorPrimary">#FFB388FF</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FFB388FF</item><item name="carAccent">#FFB388FF</item></style>
+    <style name="AccentOverlay.Green" parent=""><item name="colorPrimary">#FF34D399</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FF34D399</item><item name="carAccent">#FF34D399</item></style>
+    <style name="AccentOverlay.Yellow" parent=""><item name="colorPrimary">#FFFBBF24</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FFFBBF24</item><item name="carAccent">#FFFBBF24</item></style>
+    <style name="AccentOverlay.Red" parent=""><item name="colorPrimary">#FFF87171</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FFF87171</item><item name="carAccent">#FFF87171</item></style>
+    <style name="AccentOverlay.White" parent=""><item name="colorPrimary">#FFF5F5F7</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FFF5F5F7</item><item name="carAccent">#FFF5F5F7</item></style>
 
     <!-- AMOLED: only the window/background turn pure black; cards stay @color/card. -->
     <style name="ThemeOverlay.LazyCar.Amoled" parent="">
@@ -79,7 +50,7 @@
     <!-- 56dp tappable row -->
     <style name="Row56">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">56dp</item>
+        <item name="android:layout_height">64dp</item>
         <item name="android:orientation">horizontal</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:background">?attr/selectableItemBackground</item>
@@ -105,8 +76,8 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
         <item name="android:layout_marginStart">12dp</item>
-        <item name="android:textSize">17sp</item>
-        <item name="android:textColor">@color/white</item>
+        <item name="android:textSize">@dimen/t_title</item>
+        <item name="android:textColor">?attr/carText</item>
     </style>
 
     <style name="NpButton" parent="Widget.Material3.Button.IconButton.Filled.Tonal">

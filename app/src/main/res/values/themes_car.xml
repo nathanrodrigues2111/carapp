@@ -60,7 +60,7 @@
 
     <style name="Glass">
         <item name="android:background">@drawable/bg_glass</item>
-        <item name="android:padding">@dimen/sp4</item>
+        <item name="android:padding">@dimen/sp6</item>
     </style>
     <style name="CarIconBtn">
         <item name="android:layout_width">56dp</item>
@@ -88,6 +88,7 @@
         <item name="thumbTrackGapSize">0dp</item>
         <item name="trackStopIndicatorSize">0dp</item>
         <item name="thumbWidth">4dp</item>
+        <item name="trackColorInactive">?attr/carSurfaceHigh</item>
     </style>
     <!-- Seek: 4dp track, 16dp round white thumb, no stop dot. -->
     <style name="CarSeek" parent="Widget.Material3.Slider">
@@ -118,24 +119,24 @@
     <style name="SectionHeader">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">@dimen/sp6</item>
-        <item name="android:layout_marginBottom">@dimen/sp2</item>
-        <item name="android:layout_marginStart">@dimen/sp4</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:textColor">?attr/carAccent</item>
+        <item name="android:layout_marginTop">@dimen/sp8</item>
+        <item name="android:layout_marginBottom">@dimen/sp3</item>
+        <item name="android:textSize">@dimen/t_headline</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">?attr/carText</item>
     </style>
     <style name="Caption">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textSize">@dimen/t_body</item>
         <item name="android:textColor">?attr/carTextDim</item>
     </style>
     <style name="SettingSwitch">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:minHeight">56dp</item>
-        <item name="android:textSize">16sp</item>
+        <item name="android:minHeight">64dp</item>
+        <item name="android:textSize">@dimen/t_title</item>
         <item name="android:textColor">?attr/carText</item>
     </style>
 </resources>

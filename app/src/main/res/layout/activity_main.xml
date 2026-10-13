@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Phone home: GO hero and the Now Playing strip. Volumes live in Settings, Audio. -->
+<!-- Phone home: GO hero with glow, status tiles, now playing strip. Volumes live in Settings, Audio. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -8,56 +8,83 @@
     android:background="?attr/carBg">
 
     <ImageView android:id="@+id/npBackdrop" android:layout_width="match_parent" android:layout_height="match_parent"
-        android:importantForAccessibility="no" android:scaleType="centerCrop" />
+        android:alpha="0.5" android:importantForAccessibility="no" android:scaleType="centerCrop" />
     <View android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_scrim" />
 
     <ScrollView android:id="@+id/scroll" android:layout_width="match_parent" android:layout_height="match_parent"
         android:clipToPadding="false" android:fillViewport="true" android:scrollbars="none">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="vertical" android:paddingHorizontal="16dp">
+            android:orientation="vertical" android:paddingHorizontal="@dimen/sp6">
 
             <include layout="@layout/view_phone_bar" />
             <include layout="@layout/view_phone_setup" />
 
-            <!-- Hero -->
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:gravity="center" android:orientation="vertical" android:paddingVertical="48dp">
+            <!-- Hero: glow ring behind the GO button, then the state -->
+            <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/sp6" android:clipChildren="false">
+                <View android:id="@+id/goGlow" android:layout_width="320dp" android:layout_height="320dp"
+                    android:layout_gravity="center" />
                 <com.google.android.material.button.MaterialButton android:id="@+id/goButton"
-                    style="@style/Widget.Material3.Button" android:layout_width="208dp" android:layout_height="208dp"
-                    android:elevation="16dp" android:insetTop="0dp" android:insetBottom="0dp" android:padding="0dp"
-                    android:text="GO" android:textSize="@dimen/t_hero" android:textStyle="bold"
-                    app:cornerRadius="104dp" />
-                <TextView android:id="@+id/goHint" style="@style/T.Label" android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" android:layout_marginTop="16dp" />
+                    style="@style/Widget.Material3.Button" android:layout_width="240dp" android:layout_height="240dp"
+                    android:layout_gravity="center" android:elevation="24dp" android:insetTop="0dp" android:insetBottom="0dp"
+                    android:padding="0dp" android:text="GO" android:textSize="@dimen/t_hero" android:textStyle="bold"
+                    app:cornerRadius="120dp" />
+            </FrameLayout>
+            <TextView android:id="@+id/goHint" style="@style/T.Display" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp4" android:gravity="center"
+                android:textSize="@dimen/t_headline" />
+            <TextView android:id="@+id/goSub" style="@style/T.Body" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp1" android:gravity="center" />
+
+            <!-- Status tiles -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/sp8" android:orientation="horizontal">
+                <include android:id="@+id/tileBt" layout="@layout/view_tile" />
+                <Space android:layout_width="@dimen/sp3" android:layout_height="1dp" />
+                <include android:id="@+id/tileHotspot" layout="@layout/view_tile" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/sp3" android:orientation="horizontal">
+                <include android:id="@+id/tileTablet" layout="@layout/view_tile" />
+                <Space android:layout_width="@dimen/sp3" android:layout_height="1dp" />
+                <include android:id="@+id/tileGps" layout="@layout/view_tile" />
             </LinearLayout>
 
             <!-- Now playing strip -->
             <LinearLayout android:id="@+id/npStrip" style="@style/Glass" android:layout_width="match_parent"
-                android:layout_height="wrap_content" android:layout_marginBottom="16dp" android:gravity="center_vertical"
-                android:orientation="horizontal" android:padding="12dp">
-                <com.google.android.material.card.MaterialCardView android:id="@+id/playerRow"
-                    android:layout_width="56dp" android:layout_height="56dp" android:clickable="true"
-                    android:contentDescription="Choose the player" android:focusable="true"
-                    app:cardBackgroundColor="?attr/carSurface" app:cardCornerRadius="16dp" app:cardElevation="0dp"
-                    app:strokeWidth="0dp">
-                    <ImageView android:id="@+id/playerIcon" android:layout_width="match_parent"
-                        android:layout_height="match_parent" android:padding="10dp" android:scaleType="fitCenter" />
-                    <ImageView android:id="@+id/npArt" android:layout_width="match_parent"
-                        android:layout_height="match_parent" android:importantForAccessibility="no"
-                        android:scaleType="centerCrop" />
-                </com.google.android.material.card.MaterialCardView>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                    android:layout_marginStart="16dp" android:orientation="vertical">
-                    <TextView android:id="@+id/npTitle" style="@style/T.Title" android:layout_width="match_parent"
-                        android:layout_height="wrap_content" android:textStyle="bold" />
-                    <TextView android:id="@+id/npArtist" style="@style/T.Label" android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
+                android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp4" android:layout_marginBottom="@dimen/sp4"
+                android:orientation="vertical" android:padding="0dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:gravity="center_vertical" android:orientation="horizontal" android:padding="@dimen/sp3">
+                    <com.google.android.material.card.MaterialCardView android:id="@+id/playerRow"
+                        android:layout_width="64dp" android:layout_height="64dp" android:clickable="true"
+                        android:contentDescription="Choose the player" android:focusable="true"
+                        app:cardBackgroundColor="?attr/carSurfaceHigh" app:cardCornerRadius="@dimen/r_s" app:cardElevation="0dp"
+                        app:strokeWidth="0dp">
+                        <ImageView android:id="@+id/playerIcon" android:layout_width="match_parent"
+                            android:layout_height="match_parent" android:padding="12dp" android:scaleType="fitCenter" />
+                        <ImageView android:id="@+id/npArt" android:layout_width="match_parent"
+                            android:layout_height="match_parent" android:importantForAccessibility="no"
+                            android:scaleType="centerCrop" />
+                    </com.google.android.material.card.MaterialCardView>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:layout_marginStart="@dimen/sp4" android:orientation="vertical">
+                        <TextView android:id="@+id/npTitle" style="@style/T.Title" android:layout_width="match_parent"
+                            android:layout_height="wrap_content" />
+                        <TextView android:id="@+id/npArtist" style="@style/T.Body" android:layout_width="match_parent"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+                    <ImageButton android:id="@+id/npNext" style="@style/CarIconBtn" android:contentDescription="Next"
+                        android:src="@drawable/ic_skip_next" />
+                    <ImageButton android:id="@+id/stripPlay" android:layout_width="64dp" android:layout_height="64dp"
+                        android:layout_marginStart="@dimen/sp2" android:background="@drawable/bg_circle_accent"
+                        android:contentDescription="Play or pause" android:padding="20dp" android:scaleType="fitCenter"
+                        android:src="@drawable/ic_play" app:tint="?attr/carBg" />
                 </LinearLayout>
-                <ImageButton android:id="@+id/npPlay" android:layout_width="56dp" android:layout_height="56dp"
-                    android:background="@drawable/bg_cookie" android:contentDescription="Play or pause"
-                    android:padding="16dp" android:scaleType="fitCenter" android:src="@drawable/ic_play" />
-                <ImageButton android:id="@+id/npNext" style="@style/CarIconBtn" android:contentDescription="Next"
-                    android:src="@drawable/ic_skip_next" />
+                <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/npProgress"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" android:max="1000"
+                    android:paddingHorizontal="@dimen/sp6" app:trackThickness="3dp" app:trackCornerRadius="2dp"
+                    app:trackStopIndicatorSize="0dp" app:indicatorTrackGapSize="0dp" app:trackColor="?attr/carSurfaceHigh" />
             </LinearLayout>
 
         </LinearLayout>

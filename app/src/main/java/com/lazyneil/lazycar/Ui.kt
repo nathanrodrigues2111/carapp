@@ -22,6 +22,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.graphics.ColorUtils
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.slider.Slider
@@ -43,6 +44,9 @@ object Ui {
     private fun sp(c: Context) = c.getSharedPreferences("lazycar", Context.MODE_PRIVATE)
     fun openOnBoot(c: Context) = sp(c).getBoolean("openOnBoot", true)
     fun openOnGo(c: Context) = sp(c).getBoolean("openOnGo", true)
+    fun openOnLaunch(c: Context) = sp(c).getBoolean("openOnLaunch", true)
+    /** Tablet player style: Modern (default) or Classic, the earlier layout. */
+    fun classic(c: Context) = sp(c).getBoolean("classicPlayer", false)
     fun setOpen(c: Context, key: String, on: Boolean) = sp(c).edit().putBoolean(key, on).apply()
 
     fun attr(c: Context, id: Int): Int {
@@ -53,14 +57,14 @@ object Ui {
     /** Vivid accent from album art: the most saturated hue bucket, pushed bright. Null for grey art. */
     fun artColor(b: Bitmap?): Int? = try {
         b?.let { src ->
-            val s = Bitmap.createScaledBitmap(src, 24, 24, true)
+            val s = Bitmap.createScaledBitmap(src, 48, 48, true)
             val hsv = FloatArray(3); val w = FloatArray(12)
-            for (x in 0 until 24) for (y in 0 until 24) {
+            for (x in 0 until 48) for (y in 0 until 48) {
                 Color.colorToHSV(s.getPixel(x, y), hsv)
                 if (hsv[1] >= 0.25f && hsv[2] >= 0.3f) w[(hsv[0] / 30).toInt() % 12] += hsv[1] * hsv[2]
             }
             val best = w.indices.maxBy { w[it] }
-            if (w[best] < 3f) null else Color.HSVToColor(floatArrayOf(best * 30f + 15f, 0.7f, 1f))
+            if (w[best] < 2f) null else Color.HSVToColor(floatArrayOf(best * 30f + 15f, 0.7f, 1f))
         }
     } catch (_: Exception) { null }
 
@@ -76,6 +80,26 @@ object Ui {
                 backgroundTintList = csl; imageTintList = on; outlineSpotShadowColor = c; outlineAmbientShadowColor = c
             }
         }
+    }
+
+    /** Segmented pill: one rounded track, the picked option a soft accent pill with accent text. */
+    fun segmented(row: android.widget.LinearLayout, options: List<String>, selected: Int, pick: (Int) -> Unit) {
+        val c = row.context; val d = c.resources.displayMetrics.density
+        val accent = attr(c, R.attr.carAccent); val dim = attr(c, R.attr.carTextDim)
+        fun pill(color: Int) = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 999f * d; setColor(color) }
+        row.removeAllViews(); row.orientation = android.widget.LinearLayout.HORIZONTAL
+        row.background = pill(attr(c, R.attr.carSurfaceHigh)); row.setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
+        var cur = selected
+        fun paint() = (0 until row.childCount).forEach { i -> (row.getChildAt(i) as TextView).apply {
+            background = if (i == cur) pill(ColorUtils.setAlphaComponent(accent, 0x33)) else null
+            setTextColor(if (i == cur) accent else dim) } }
+        options.forEachIndexed { i, label ->
+            row.addView(TextView(c).apply {
+                text = label; setTextAppearance(R.style.T_Body); paint.isFakeBoldText = true; gravity = android.view.Gravity.CENTER
+                setOnClickListener { if (cur != i) { cur = i; paint(); pick(i) } }
+            }, android.widget.LinearLayout.LayoutParams(0, (40 * d).toInt(), 1f))
+        }
+        paint()
     }
 
     fun blur(iv: ImageView?) { iv?.setRenderEffect(RenderEffect.createBlurEffect(90f, 90f, Shader.TileMode.CLAMP)) }
@@ -128,8 +152,8 @@ object Ui {
         if (!live && a != null) { a.cancel(); v.alpha = 1f; v.setTag(R.id.stGpsDot, null) }
     }
 
-    val GREEN = 0xFF2EB872.toInt()
-    val AMBER = 0xFFF2A93B.toInt()
+    val GREEN = 0xFF34D399.toInt()   // tokens: success
+    val AMBER = 0xFFFBBF24.toInt()   // tokens: warning
 
     /** Both output sliders, chips, Wi-Fi switch and level meter, live every 500 ms. Uses the Volumes API. */
     fun bindOutputs(a: Activity, root: View) {

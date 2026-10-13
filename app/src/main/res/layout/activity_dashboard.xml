@@ -4,6 +4,8 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="?attr/carBg">
@@ -12,7 +14,7 @@
         android:alpha="0.6" android:importantForAccessibility="no" android:scaleType="centerCrop" />
     <View android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_scrim" />
 
-    <LinearLayout android:id="@+id/frame" android:layout_width="match_parent" android:layout_height="match_parent"
+    <LinearLayout android:id="@+id/frame" android:clipChildren="false" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="match_parent"
         android:orientation="vertical">
 
         <!-- Bar (narrow) / rail (wide): clock, speed, status dots, then Library, Maps, Settings. -->
@@ -32,29 +34,31 @@
             <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
             <ImageButton android:id="@+id/npLibrary" style="@style/CarIconBtn" android:contentDescription="Library"
                 android:src="@drawable/ic_library" />
-            <ImageButton android:id="@+id/mapsBtn" style="@style/CarIconBtn" android:contentDescription="Open Maps split"
-                android:src="@drawable/ic_maps" />
             <ImageButton android:id="@+id/settingsBtn" style="@style/CarIconBtn" android:contentDescription="Settings"
                 android:src="@drawable/ic_settings" />
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/body" android:layout_width="match_parent" android:layout_height="0dp"
+        <LinearLayout android:id="@+id/body" android:clipChildren="false" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="0dp"
             android:layout_weight="1" android:orientation="vertical" android:paddingHorizontal="@dimen/sp6"
-            android:paddingBottom="@dimen/sp6">
+            android:paddingBottom="@dimen/sp8">
             <!-- Square art, sized to fit in code. -->
             <FrameLayout android:id="@+id/artFrame" android:layout_width="match_parent" android:layout_height="0dp"
                 android:layout_weight="1">
                 <com.google.android.material.card.MaterialCardView android:id="@+id/npArtBox" android:layout_width="match_parent"
                     android:layout_height="match_parent" android:layout_gravity="center"
                     app:cardBackgroundColor="?attr/carSurfaceHigh" app:cardCornerRadius="@dimen/r_l" app:cardElevation="24dp"
-                    app:strokeColor="?attr/carStroke" app:strokeWidth="1dp">
+                    app:strokeColor="?attr/carSurfaceHigh" app:strokeWidth="1dp">
                     <ImageView android:id="@+id/npArt" android:layout_width="match_parent" android:layout_height="match_parent"
                         android:contentDescription="Album art. Tap to play or pause, swipe for next or previous"
                         android:scaleType="centerCrop" />
                 </com.google.android.material.card.MaterialCardView>
             </FrameLayout>
-            <LinearLayout android:id="@+id/side" android:layout_width="match_parent" android:layout_height="wrap_content"
+            <LinearLayout android:id="@+id/side" android:clipChildren="false" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:gravity="center" android:orientation="vertical" android:paddingTop="@dimen/sp6">
+        <TextView android:id="@+id/setupBanner" style="@style/T.Label" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginBottom="@dimen/sp4" android:minHeight="48dp" android:maxLines="3" android:background="@drawable/bg_glass"
+            android:gravity="center_vertical" android:padding="@dimen/sp3" android:textColor="?attr/carText"
+            android:visibility="gone" />
                 <TextView android:id="@+id/npTitle" style="@style/T.Display" android:layout_width="match_parent"
                     android:layout_height="wrap_content" android:text="Nothing playing" />
                 <TextView android:id="@+id/npArtist" style="@style/T.Headline" android:layout_width="match_parent"
@@ -68,7 +72,7 @@
                         android:layout_height="wrap_content" android:layout_gravity="end" />
                 </FrameLayout>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/sp4" android:gravity="center" android:orientation="horizontal">
+                    android:layout_marginTop="@dimen/sp4" android:clipChildren="false" android:gravity="center" android:orientation="horizontal">
                     <ImageButton android:id="@+id/npPrev" style="@style/CarIconBtn.Big" android:contentDescription="Previous"
                         android:src="@drawable/ic_skip_prev" />
                     <ImageButton android:id="@+id/npPlay" android:layout_width="@dimen/car_play" android:layout_height="@dimen/car_play"
@@ -82,9 +86,4 @@
         </LinearLayout>
     </LinearLayout>
 
-    <TextView android:id="@+id/setupBanner" style="@style/T.Label" android:layout_width="wrap_content"
-        android:layout_height="wrap_content" android:layout_gravity="top|end" android:layout_marginTop="80dp" android:layout_marginEnd="@dimen/sp6"
-        android:maxWidth="520dp" android:minHeight="48dp" android:maxLines="3" android:background="@drawable/bg_glass"
-        android:gravity="center_vertical" android:padding="@dimen/sp3" android:textColor="?attr/carText"
-        android:visibility="gone" />
 </FrameLayout>

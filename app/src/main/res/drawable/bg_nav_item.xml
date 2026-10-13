@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings section list item: raised pill while selected. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="?attr/carSurfaceHigh">
+    <item><selector>
+        <item android:state_activated="true"><shape><solid android:color="?attr/carSurfaceHigh" /><corners android:radius="@dimen/r_m" /></shape></item>
+        <item><shape><solid android:color="@android:color/transparent" /><corners android:radius="@dimen/r_m" /></shape></item>
+    </selector></item>
+    <item android:id="@android:id/mask"><shape><solid android:color="#FFFFFFFF" /><corners android:radius="@dimen/r_m" /></shape></item>
+</ripple>

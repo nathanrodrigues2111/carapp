@@ -47,13 +47,18 @@ class DashboardActivity : AppCompatActivity() {
         Ui.apply(this)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_dashboard)
+        val classic = Ui.classic(this)
+        setContentView(if (classic) R.layout.activity_dashboard_classic else R.layout.activity_dashboard)
         root = findViewById(R.id.root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val b = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(b.left, b.top, b.right, b.bottom); insets
         }
-        if (resources.configuration.screenWidthDp >= 840) {   // full width: rail left, art left, controls right
+        if (classic) { if (resources.configuration.screenWidthDp >= 840) {   // classic, fullscreen: art left, controls right
+            findViewById<LinearLayout>(R.id.body).orientation = LinearLayout.HORIZONTAL
+            findViewById<View>(R.id.artFrame).layoutParams = LinearLayout.LayoutParams(0, -1, 1f)
+            findViewById<View>(R.id.side).layoutParams = LinearLayout.LayoutParams(0, -1, 1.15f).apply { marginStart = dp(24) }
+        } } else if (resources.configuration.screenWidthDp >= 840) {   // full width: rail left, art left, controls right
             findViewById<LinearLayout>(R.id.frame).orientation = LinearLayout.HORIZONTAL
             findViewById<LinearLayout>(R.id.rail).apply {
                 orientation = LinearLayout.VERTICAL
@@ -72,13 +77,12 @@ class DashboardActivity : AppCompatActivity() {
             for (id in intArrayOf(R.id.npTitle, R.id.npArtist)) findViewById<TextView>(id).gravity = android.view.Gravity.START
         } else for (id in intArrayOf(R.id.npTitle, R.id.npArtist)) findViewById<TextView>(id).gravity = android.view.Gravity.CENTER
         // Keep the art square: the largest square that fits its frame.
-        findViewById<View>(R.id.artFrame).addOnLayoutChangeListener { f, l, t, r, b, _, _, _, _ ->
+        if (!classic) findViewById<View>(R.id.artFrame).addOnLayoutChangeListener { f, l, t, r, b, _, _, _, _ ->
             val side = minOf(r - l, b - t); val box = findViewById<View>(R.id.npArtBox)
             if (box.layoutParams.width != side) f.post { box.layoutParams = box.layoutParams.apply { width = side; height = side } }
         }
         val settings = { startActivity(Intent(this, SettingsActivity::class.java)) }
         click(R.id.settingsBtn, settings); click(R.id.statusRow, settings)
-        click(R.id.mapsBtn) { TapService.launchDrive(this) }
         click(R.id.npLibrary) { startActivity(Intent(this, LibraryActivity::class.java)) }
         click(R.id.setupBanner) {
             if (missing().isNotEmpty()) requestPermissions(missing(), 1)
@@ -91,9 +95,9 @@ class DashboardActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: Slider) { seeking = false; PhoneMedia.cmd("seek") { put("pos", s.value.toLong()) } }
         })
         artGestures(findViewById(R.id.npArt))
-        Ui.paintAccent(root, Ui.themeAccent(this))
+        Ui.paintAccent(root, Accent.forArt(this, null))
         Ui.blur(findViewById(R.id.npBackdrop))
-        Ui.press(*intArrayOf(R.id.npPrev, R.id.npNext, R.id.npPlay, R.id.npLibrary, R.id.mapsBtn, R.id.settingsBtn)
+        Ui.press(*intArrayOf(R.id.npPrev, R.id.npNext, R.id.npPlay, R.id.npLibrary, R.id.settingsBtn)
             .map { findViewById<View>(it) }.toTypedArray())
         Role.applyComponents(this)
         if (missing().isNotEmpty()) requestPermissions(missing(), 1)
@@ -107,7 +111,13 @@ class DashboardActivity : AppCompatActivity() {
         PhoneMedia.start(this)
         PhoneMedia.onChange = { renderNowPlaying() }
         handler.post(tick)
+        // Full screen: go to the Maps + CarApp split. In the split isInMultiWindowMode is true and
+        // launchDrive skips when already split, and the 15 s gap stops retries, so it cannot loop.
+        if (!isInMultiWindowMode && Ui.openOnLaunch(this) && SystemClock.elapsedRealtime() - splitAt > 15_000) {
+            splitAt = SystemClock.elapsedRealtime(); TapService.launchDrive(this)
+        }
     }
+    private companion object { var splitAt = -15_000L }
 
     override fun onPause() { super.onPause(); handler.removeCallbacks(tick); PhoneMedia.onChange = null }
 
@@ -142,13 +152,13 @@ class DashboardActivity : AppCompatActivity() {
         Ui.swapText(findViewById(R.id.npTitle), when { !PhoneMedia.connected -> "Phone not connected"; has -> np.optString("title"); else -> "Nothing playing" })
         Ui.swapText(findViewById(R.id.npArtist), when {
             !PhoneMedia.connected -> "Open CarApp on the phone"
-            has -> listOf(np.optString("artist"), np.optString("album")).filter { it.isNotEmpty() }.joinToString("  ")
+            has -> listOf(np.optString("artist"), np.optString("album")).filter { it.isNotEmpty() }.joinToString(" · ")
             else -> "Start music on the phone" })
         if (shownArt !== PhoneMedia.art) {
             shownArt = PhoneMedia.art
             Ui.swapArt(findViewById(R.id.npArt), shownArt)
             findViewById<ImageView>(R.id.npBackdrop).setImageBitmap(shownArt)
-            Ui.paintAccent(root, Ui.artColor(shownArt) ?: Ui.themeAccent(this))
+            Ui.paintAccent(root, Accent.forArt(this, shownArt))
         }
         val playing = PhoneMedia.playing
         if (shownPlaying != playing) {
@@ -182,7 +192,6 @@ class DashboardActivity : AppCompatActivity() {
             text = when {
                 miss.isNotEmpty() -> "Tap to allow permissions"
                 !a11y -> "Tap to turn on CarApp in Accessibility"
-                TapService.pairFound == false -> "Save the Maps + CarApp pair: long press Maps on the home screen, Split screen, pick CarApp, save"
                 else -> ""
             }
             visibility = if (text.isEmpty()) View.GONE else View.VISIBLE

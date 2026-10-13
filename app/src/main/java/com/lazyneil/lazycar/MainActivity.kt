@@ -106,13 +106,13 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.debugBtn).setOnClickListener {
             startActivity(Intent(this, DebugActivity::class.java))
         }
-        findViewById<View>(R.id.npPlay).setOnClickListener { session()?.let { c ->
+        findViewById<View>(R.id.stripPlay).setOnClickListener { session()?.let { c ->
             if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause() else c.transportControls.play() } }
         findViewById<View>(R.id.npNext).setOnClickListener { session()?.transportControls?.skipToNext() }
         findViewById<View>(R.id.npPrev)?.setOnClickListener { session()?.transportControls?.skipToPrevious() }
-        Ui.paintAccent(root, Ui.themeAccent(this))
+        Ui.paintAccent(root, Accent.forArt(this, null))
         Ui.blur(findViewById(R.id.npBackdrop))
-        Ui.press(go, findViewById(R.id.npPlay), findViewById(R.id.npNext), findViewById(R.id.npPrev),
+        Ui.press(go, findViewById(R.id.stripPlay), findViewById(R.id.npNext), findViewById(R.id.npPrev),
             findViewById(R.id.settingsBtn), findViewById(R.id.debugBtn))
 
         buildPlayers()
@@ -169,7 +169,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshGoButton() {
         val btn = findViewById<MaterialButton>(R.id.goButton)
-        val accent = Ui.themeAccent(this)
+        val accent = Accent.forArt(this, shownArt)
         val onAccent = Accent.onColor(accent)
         val busy = ContextCompat.getColor(this, R.color.stateBusy)
         val secondary = ContextCompat.getColor(this, R.color.secondaryText)
@@ -184,17 +184,27 @@ class MainActivity : AppCompatActivity() {
             btn.icon = com.google.android.material.progressindicator.IndeterminateDrawable.createCircularDrawable(this, spec)
             btn.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; btn.iconSize = dp(24); btn.iconPadding = dp(12)
         }
-        val hint = findViewById<TextView>(R.id.goHint)
+        val hint = findViewById<TextView>(R.id.goHint); val sub = findViewById<TextView>(R.id.goSub)
+        // Accent glow behind GO, the strip's play button and progress, all from the art accent.
+        findViewById<View>(R.id.goGlow).background = android.graphics.drawable.GradientDrawable().apply {
+            gradientType = android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT; gradientRadius = dp(160).toFloat()
+            colors = intArrayOf(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x55), 0)
+        }
+        findViewById<ImageButton>(R.id.stripPlay).backgroundTintList = android.content.res.ColorStateList.valueOf(Ui.attr(this, R.attr.carText))
+        findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(R.id.npProgress).setIndicatorColor(accent)
         val big = btn.layoutParams.height > dp(120)   // round hero: spinner replaces the label
         btn.strokeWidth = 0; btn.elevation = dp(16).toFloat()
         btn.outlineSpotShadowColor = accent; btn.outlineAmbientShadowColor = accent
         when (GoAction.effectiveState(p)) {
             GoAction.ON -> { btn.text = if (big) "ON" else "STOP"; paint(ContextCompat.getColor(this, R.color.stateBusy), accent)
                 btn.strokeWidth = dp(3); btn.strokeColor = android.content.res.ColorStateList.valueOf(accent)
-                hint.text = "Running. Tap to stop" }
-            GoAction.STARTING -> { btn.text = if (big) "" else "STARTING"; busySpinner(); hint.text = "Starting" }
-            GoAction.STOPPING -> { btn.text = if (big) "" else "STOPPING"; busySpinner(); hint.text = "Stopping" }
-            else -> { btn.text = "GO"; paint(accent, onAccent); hint.text = "Tap to start the car setup" }
+                hint.text = "Running"; sub.text = "Tap to stop" }
+            GoAction.STARTING -> { btn.text = if (big) "" else "STARTING"; busySpinner(); hint.text = "Starting"; sub.text = "Connecting the speaker and the tablet" }
+            GoAction.STOPPING -> { btn.text = if (big) "" else "STOPPING"; busySpinner(); hint.text = "Stopping"; sub.text = "Restoring your settings" }
+            else -> { paint(accent, onAccent); hint.text = "Ready"; sub.text = "Tap GO to start the car setup"
+                btn.text = android.text.SpannableString("GO\nTAP TO DRIVE").apply {
+                    setSpan(android.text.style.RelativeSizeSpan(0.22f), 3, length, 0)
+                    setSpan(android.text.style.TypefaceSpan("sans-serif-medium"), 3, length, 0) } }
         }
         if (big && btn.icon != null) { btn.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; btn.iconPadding = 0; btn.iconSize = dp(48) }
     }
@@ -348,27 +358,52 @@ class MainActivity : AppCompatActivity() {
         Ui.swapText(findViewById(R.id.npTitle), title.ifEmpty { playerLabel })
         Ui.swapText(findViewById(R.id.npArtist), if (title.isEmpty()) "Nothing playing"
             else listOf(m?.getString(MediaMetadata.METADATA_KEY_ARTIST), m?.getString(MediaMetadata.METADATA_KEY_ALBUM))
-                .filter { !it.isNullOrEmpty() }.joinToString("  "))
+                .filter { !it.isNullOrEmpty() }.joinToString(" · "))
         val art = m?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m?.getBitmap(MediaMetadata.METADATA_KEY_ART)
         if (art?.sameAs(shownArt) != true && !(art == null && shownArt == null)) {
             shownArt = art
             Ui.swapArt(findViewById(R.id.npArt), art)
             findViewById<ImageView>(R.id.npBackdrop).setImageBitmap(art)
-            Ui.paintAccent(findViewById(R.id.root), Ui.artColor(art) ?: Ui.themeAccent(this))
+            refreshGoButton()   // GO, its glow and the progress follow the art accent
         }
         val playing = c?.playbackState?.state == PlaybackState.STATE_PLAYING
         if (shownPlaying != playing) {
-            Ui.morph(findViewById(R.id.npPlay), playing, shownPlaying != null)
+            Ui.morph(findViewById(R.id.stripPlay), playing, shownPlaying != null)
             shownPlaying = playing
         }
-        for (id in intArrayOf(R.id.npPlay, R.id.npNext, R.id.npPrev)) findViewById<View>(id)?.isEnabled = c != null
+        for (id in intArrayOf(R.id.stripPlay, R.id.npNext, R.id.npPrev)) findViewById<View>(id)?.isEnabled = c != null
     }
 
+    /** One status tile: states are Off / Waiting / Connected (or a plain on/off word). */
+    private fun tile(id: Int, icon: Int, title: String, state: String, color: Int, live: Boolean) {
+        val t = findViewById<View>(id)
+        t.findViewById<ImageView>(R.id.tileIcon).setImageResource(icon)
+        t.findViewById<TextView>(R.id.tileTitle).text = title
+        t.findViewById<TextView>(R.id.tileSub).text = state
+        Ui.dot(t.findViewById(R.id.tileDot), color, live)
+    }
+
+    /** Status tiles and the strip's progress line, once a second. */
     private fun renderGps() {
+        val off = Ui.attr(this, R.attr.carTextDim)
         val g = com.lazyneil.lazycar.gps.GpsService
         val age = if (g.lastAt == 0L) -1 else (android.os.SystemClock.elapsedRealtime() - g.lastAt) / 1000
         val live = g.mode != "idle" && age in 0..5
-        Ui.dot(findViewById(R.id.gpsDot), when { live -> Ui.GREEN; g.mode != "idle" -> Ui.AMBER; else -> Ui.attr(this, R.attr.carTextDim) }, live)
-        findViewById<TextView>(R.id.gpsText).text = when { g.mode == "idle" -> "GPS off"; live -> "GPS sending, ${g.acc.toInt()} m"; else -> "GPS no fix" }
+        tile(R.id.tileGps, R.drawable.ic_pin, "GPS link", when { g.mode == "idle" -> "Off"; live -> "Connected"; else -> "Waiting" },
+            when { live -> Ui.GREEN; g.mode != "idle" -> Ui.AMBER; else -> off }, live)
+        val bt = getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+            .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
+        tile(R.id.tileBt, R.drawable.ic_speaker, "Bluetooth", bt?.productName?.toString() ?: "Off", if (bt != null) Ui.GREEN else off, false)
+        val on = GoAction.effectiveState(p) == GoAction.ON
+        tile(R.id.tileHotspot, R.drawable.ic_share, "Hotspot", when { !p.hotspot -> "Off"; on -> "On"; else -> "Starts on GO" }, if (p.hotspot && on) Ui.GREEN else off, false)
+        val s = com.lazyneil.lazycar.audio.StreamSender
+        val tab = s.running && s.tablet.isNotEmpty() || com.lazyneil.lazycar.media.MediaListener.clients > 0
+        tile(R.id.tileTablet, R.drawable.ic_tablet, "Tablet", when { tab -> "Connected"; s.running -> "Waiting"; else -> "Starts on GO" },
+            when { tab -> Ui.GREEN; s.running -> Ui.AMBER; else -> off }, tab)
+        val st = session()?.playbackState; val dur = session()?.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+        val pos = if (st == null) 0L else st.position + if (st.state == PlaybackState.STATE_PLAYING)
+            ((android.os.SystemClock.elapsedRealtime() - st.lastPositionUpdateTime) * st.playbackSpeed).toLong() else 0L
+        findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(R.id.npProgress).progress =
+            if (dur > 0) (pos * 1000 / dur).toInt().coerceIn(0, 1000) else 0
     }
 }

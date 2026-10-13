@@ -85,11 +85,11 @@ object TabletSpeaker {
         val parent = anchor.parent as ViewGroup
         val tablet = Role.isTablet(a)
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
-        val caption = { t: String -> TextView(a).apply { text = t; textSize = 13f; setTextColor(a.getColor(R.color.secondaryText)) } }
+        val caption = { t: String -> TextView(a).apply { text = t; setTextAppearance(R.style.T_Body); maxLines = 4 } }
         val status = caption("")
         fun switch(t: String, key: String, def: Boolean, on: (Boolean) -> Unit) = MaterialSwitch(a).apply {
-            text = t; textSize = 17f; minHeight = (48 * resources.displayMetrics.density).toInt()
-            setTextColor(a.getColor(R.color.white)); isChecked = sp(a).getBoolean(key, def)
+            text = t; setTextAppearance(R.style.T_Title); minHeight = (64 * resources.displayMetrics.density).toInt()
+            isChecked = sp(a).getBoolean(key, def)
             setOnCheckedChangeListener { _, v -> sp(a).edit().putBoolean(key, v).apply(); on(v) }
         }
         box.addView(switch("Tablet speaker over Wi-Fi", "on", true) { v ->
@@ -104,7 +104,7 @@ object TabletSpeaker {
             show(delayMs(a))
             box.addView(label)
             box.addView(Slider(a).apply {
-                valueFrom = -500f; valueTo = 1000f; stepSize = 10f; value = delayMs(a).toFloat()
+                valueFrom = -500f; valueTo = 1000f; stepSize = 10f; isTickVisible = false; value = delayMs(a).toFloat()
                 addOnChangeListener { _, v, _ -> sp(a).edit().putInt("delay", v.toInt()).apply(); show(v.toInt()) }
             })
             box.addView(switch("Also play on the tablet's Bluetooth speaker", "bt", false) {

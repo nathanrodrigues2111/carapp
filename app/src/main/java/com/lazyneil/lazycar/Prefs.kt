@@ -67,7 +67,7 @@ class Prefs(private val ctx: Context) {
     var hotspot: Boolean get() = b("hotspot", false); set(v) = putB("hotspot", v)
     var mobileData: Boolean get() = b("mobileData", false); set(v) = putB("mobileData", v)
     // Accent colour: ARGB, 0 = System (Material dynamic colour).
-    var accent: Int get() = i("accent", 0); set(v) = sp.edit().putInt("accent", v).apply()
+    var accent: Int get() = i("accent2", 0); set(v) = sp.edit().putInt("accent2", v).apply()
 
     companion object {
         val CAPTURABLE = listOf("revanced.youtube.music", "com.google.android.apps.youtube.music", "com.maxmpz.audioplayer", "org.videolan.vlc")

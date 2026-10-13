@@ -1,20 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="accent">#FFC6FF3D</color>
-    <color name="onAccent">#FF000000</color>
-    <!-- Accent swatch colours (the Lime swatch reuses @color/accent) -->
-    <color name="accentBlue">#FF4DA3FF</color>
-    <color name="accentRed">#FFEB0028</color>
-    <color name="accentOrange">#FFFF8A3D</color>
-    <color name="accentPurple">#FFB388FF</color>
-    <color name="accentCyan">#FF00E5FF</color>
-    <color name="accentWhite">#FFFFFFFF</color>
-    <color name="bg">#FF0E0F12</color>
+    <!-- Base palette (tokens.css). Screen colors come from the CarTheme.Midnight attrs. -->
+    <color name="accent">#FF00E5FF</color>
+    <color name="onAccent">#FF140600</color>
+    <color name="bg">#FF000000</color>
     <color name="bgAmoled">#FF000000</color>
-    <color name="card">#FF15171C</color>
-    <color name="secondaryText">#FF9AA0A6</color>
-    <color name="errorRed">#FFFF5252</color>
-    <color name="iconCircle">#FF22252B</color>
-    <color name="stateBusy">#FF22252B</color>
-    <color name="white">#FFFFFFFF</color>
+    <color name="card">#FF1C1C1E</color>
+    <color name="secondaryText">#8FF5F5F7</color>
+    <color name="success">#FF34D399</color>
+    <color name="warning">#FFFBBF24</color>
+    <color name="error">#FFF87171</color>
+    <color name="errorRed">#FFF87171</color>
+    <color name="iconCircle">#FF1C1C1E</color>
+    <color name="stateBusy">#FF1C1C1E</color>
+    <color name="white">#FFF5F5F7</color>
 </resources>

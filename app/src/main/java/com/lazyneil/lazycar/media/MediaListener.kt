@@ -198,6 +198,7 @@ class MediaListener : NotificationListenerService() {
                 if (j.optInt("d") > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER, 0).also { main.postDelayed({ push() }, 150) }
             "volSet" -> com.lazyneil.lazycar.media.Volumes.setJblLocal(this, j.optInt("pct")).also { main.postDelayed({ push() }, 150) }
             "tvol" -> tabletPct = j.optInt("pct")
+            "accent" -> com.lazyneil.lazycar.Prefs(this).accent = j.optInt("v")
             "browse" -> browse(cl, j)
             "playId" -> withBrowser(cl, j) { b -> MediaController(this, b.sessionToken).transportControls.playFromMediaId(j.optString("id"), null) }
             "files" -> io.execute { reply(cl, j, Files.list(this, j.optString("id"), j.optString("q"))) }
