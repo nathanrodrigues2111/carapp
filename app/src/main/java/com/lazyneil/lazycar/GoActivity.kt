@@ -12,10 +12,6 @@ class GoActivity : Activity() {
         val svc = Intent(this, GoService::class.java)
         when {
             intent?.getBooleanExtra("volumeOnly", false) == true -> svc.putExtra("action", "volume")
-            intent?.getBooleanExtra("shareOnly", false) == true -> svc.putExtra("action", "share")
-                .putExtra("mac1", p.mac1.ifEmpty { intent.getStringExtra("mac1").orEmpty() })
-                .putExtra("mac2", p.mac2.ifEmpty { intent.getStringExtra("mac2").orEmpty() })
-                .putExtra("player", p.playerPkg.ifEmpty { intent.getStringExtra("player").orEmpty() })
             GoAction.effectiveState(p) == GoAction.IDLE -> svc.putExtra("action", "go")
             GoAction.effectiveState(p) == GoAction.ON -> svc.putExtra("action", "stop")
             else -> { android.util.Log.e("LazyCar", "GoActivity ignored tap (transitioning)"); finish(); return }

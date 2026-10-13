@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">CarApp</string>
-    <string name="tap_service_desc">Taps the second speaker in the output switcher so dual audio turns on with no extra tap.</string>
+    <string name="tap_service_desc">Taps system dialogs and quick settings tiles for you: Bluetooth confirm, hotspot, mobile data, screen share and Wi-Fi join.</string>
 </resources>

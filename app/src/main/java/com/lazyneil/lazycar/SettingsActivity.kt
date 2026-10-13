@@ -66,10 +66,6 @@ class SettingsActivity : AppCompatActivity() {
         }
         findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener { finish() }
 
-        findViewById<MaterialSwitch>(R.id.dualSwitch).apply {
-            isChecked = p.dualAudio
-            setOnCheckedChangeListener { _, on -> p.dualAudio = on }
-        }
         findViewById<MaterialSwitch>(R.id.amoledSwitch).apply {
             isChecked = p.amoled
             setOnCheckedChangeListener { _, on -> if (on != p.amoled) { p.amoled = on; recreate() } }
@@ -129,9 +125,11 @@ class SettingsActivity : AppCompatActivity() {
     private fun bindDevice() {
         val tablet = Role.isTablet(this)
         // Phone-only car audio controls are hidden on the tablet, the camera row on the phone.
-        intArrayOf(R.id.dualSwitch, R.id.dualCaption, R.id.headunitSwitch, R.id.headunitDetected,
+        intArrayOf(R.id.headunitSwitch, R.id.headunitDetected,
             R.id.headunitExtra, R.id.hotspotSwitch, R.id.hotspotCaption, R.id.mobileSwitch, R.id.a11yRow)
             .forEach { if (tablet) findViewById<View>(it).visibility = View.GONE }
+        if (!SHOW_HEADUNIT) intArrayOf(R.id.headunitSwitch, R.id.headunitDetected, R.id.headunitExtra)
+            .forEach { findViewById<View>(it).visibility = View.GONE }
         findViewById<View>(R.id.ssidBox).visibility = if (tablet) View.VISIBLE else View.GONE
         findViewById<TextInputEditText>(R.id.ssidField).setText(p.hotspotSsid)
         findViewById<View>(R.id.camRow).apply {
@@ -299,7 +297,7 @@ class SettingsActivity : AppCompatActivity() {
         val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
         val track = ColorStateList(states, intArrayOf(accent, 0xFF3A3F45.toInt()))
         val thumb = ColorStateList(states, intArrayOf(Accent.onColor(accent), 0xFF9AA0A6.toInt()))
-        intArrayOf(R.id.gpsSwitch, R.id.dualSwitch, R.id.amoledSwitch, R.id.headunitSwitch,
+        intArrayOf(R.id.gpsSwitch, R.id.amoledSwitch, R.id.headunitSwitch,
             R.id.hotspotSwitch, R.id.mobileSwitch).forEach {
             findViewById<MaterialSwitch>(it).apply { trackTintList = track; thumbTintList = thumb }
         }

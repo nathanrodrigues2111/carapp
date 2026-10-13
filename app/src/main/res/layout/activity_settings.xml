@@ -92,23 +92,6 @@
                     android:orientation="vertical"
                     android:padding="16dp">
 
-                    <!-- Dual audio -->
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/dualSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:minHeight="48dp"
-                        android:text="Dual audio"
-                        android:textColor="@color/white"
-                        android:textSize="17sp" />
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:id="@+id/dualCaption"
-                        android:text="Auto-ticks both outputs in Audio sharing"
-                        android:textColor="@color/secondaryText"
-                        android:textSize="13sp" />
-
                     <!-- AMOLED -->
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/amoledSwitch"

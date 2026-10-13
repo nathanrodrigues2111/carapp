@@ -42,7 +42,6 @@ class MainActivity : AppCompatActivity() {
 
     private var selPlayer = ""
     private var selMac1 = ""; private var selName1 = ""
-    private var selMac2 = ""; private var selName2 = ""
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -86,7 +85,6 @@ class MainActivity : AppCompatActivity() {
 
         selPlayer = p.playerPkg
         selMac1 = p.mac1; selName1 = p.name1
-        selMac2 = p.mac2; selName2 = p.name2
 
         val scroll = findViewById<View>(R.id.scroll)
         val go = findViewById<MaterialButton>(R.id.goButton)
@@ -147,7 +145,7 @@ class MainActivity : AppCompatActivity() {
         if (isFinishing) return
         if (p.amoled != amoledApplied || p.accent != accentApplied) { recreate(); return }   // AMOLED/accent changed in Settings
         refreshSetup()
-        buildOutputs()                       // reflect dual-audio + BT state changes made in Settings
+        buildOutputs()                       // reflect BT state changes made in Settings
         refreshGoButton()
         GoAction.deriveState(applicationContext, p) { refreshGoButton() }   // match reality after reboot
         if (btReceiver == null) {
@@ -314,22 +312,19 @@ class MainActivity : AppCompatActivity() {
             }
         } else enableBtn.visibility = View.GONE
 
-        val dual = p.dualAudio
-        findViewById<View>(R.id.outBlock2).visibility = if (dual) View.VISIBLE else View.GONE
-
-        bindOutput(true, dual)
-        if (dual) bindOutput(false, true)
+        bindOutput()
+        findViewById<TextView>(R.id.tabletValue).text = "Tablet speaker (Wi-Fi): " + com.lazyneil.lazycar.audio.TabletSpeaker.summary(this)
 
         wireVol(R.id.volBtn, R.id.volSlider, { p.volOn }, { p.volOn = it }, { p.vol }, { p.vol = it })
     }
 
-    private fun bindOutput(isOne: Boolean, dual: Boolean) {
-        val rowId = if (isOne) R.id.out1Row else R.id.out2Row
-        val iconId = if (isOne) R.id.out1Icon else R.id.out2Icon
-        val valueId = if (isOne) R.id.out1Value else R.id.out2Value
-        val title = when { !dual -> "Output source"; isOne -> "Output 1"; else -> "Output 2" }
-        val getMac = { if (isOne) selMac1 else selMac2 }
-        val set = { m: String, n: String -> if (isOne) { selMac1 = m; selName1 = n } else { selMac2 = m; selName2 = n } }
+    private fun bindOutput() {
+        val rowId = R.id.out1Row
+        val iconId = R.id.out1Icon
+        val valueId = R.id.out1Value
+        val title = "Bluetooth speaker"
+        val getMac = { selMac1 }
+        val set = { m: String, n: String -> selMac1 = m; selName1 = n }
 
         renderDevice(iconId, valueId, title, getMac(), audioDevices)
         findViewById<View>(rowId).setOnClickListener {
@@ -392,7 +387,6 @@ class MainActivity : AppCompatActivity() {
     private fun save() {
         p.playerPkg = selPlayer
         p.mac1 = selMac1; p.name1 = selName1
-        p.mac2 = selMac2; p.name2 = selName2
     }
 
     private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()

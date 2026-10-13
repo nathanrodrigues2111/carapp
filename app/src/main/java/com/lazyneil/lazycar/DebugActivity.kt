@@ -98,9 +98,7 @@ class DebugActivity : AppCompatActivity() {
         rows += Row("Split launch", ::split, listOf("Run" to { TapService.launchApps(this) }))
         if (tablet) rows += Row("Rear camera", ::camera,
             listOf("Open preview" to { startActivity(Intent(this, RearActivity::class.java)) }))
-        else rows += Row("Dual audio", ::audio, listOf("Run" to {
-            startActivity(Intent(this, GoActivity::class.java).putExtra("shareOnly", true)); loadA2dp()
-        }))
+        else rows += Row("Speaker and Wi-Fi stream", ::audio, listOf("Refresh" to { loadA2dp() }))
         rows += Row("Accessibility service", ::a11y, fix = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         rows += Row("Battery optimisation", ::battery, fix = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         if (tablet) rows += Row("Mock location app", ::mock, fix = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
@@ -265,9 +263,9 @@ class DebugActivity : AppCompatActivity() {
 
     private fun audio(): Pair<St, String> {
         val l = a2dp ?: return St.FAIL to a2dpNote
-        if (l.isEmpty()) return St.WAITING to "No A2DP devices connected"
-        val both = p.mac1.isNotEmpty() && p.mac2.isNotEmpty() && l.size >= 2
-        return (if (both) St.PASS else St.WAITING) to "Connected (${l.size}): ${l.joinToString()}"
+        val spk = if (p.mac1.isEmpty()) "No speaker chosen" else if (l.isEmpty()) "Speaker not connected" else "Speaker: ${l.joinToString()}"
+        val wifi = com.lazyneil.lazycar.audio.TabletSpeaker.status(this)
+        return (if (p.mac1.isNotEmpty() && l.isNotEmpty()) St.PASS else St.WAITING) to "$spk. Wi-Fi stream: $wifi"
     }
 
     // ---- health ----

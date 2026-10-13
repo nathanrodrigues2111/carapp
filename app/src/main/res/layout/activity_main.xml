@@ -162,7 +162,7 @@
                         android:text="Turn on Bluetooth"
                         android:visibility="gone" />
 
-                    <!-- Output 1 / single source -->
+                    <!-- Bluetooth speaker -->
                     <LinearLayout
                         android:id="@+id/outBlock1"
                         android:layout_width="match_parent"
@@ -177,22 +177,15 @@
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- Output 2 (dual only) -->
-                    <LinearLayout
-                        android:id="@+id/outBlock2"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-                        <LinearLayout android:id="@+id/out2Row" style="@style/Row56">
-                            <FrameLayout style="@style/IconCircle">
-                                <ImageView android:id="@+id/out2Icon" style="@style/RowIcon" />
-                            </FrameLayout>
-                            <TextView android:id="@+id/out2Value" style="@style/RowTitle" android:text="Output 2" />
-                            <ImageView style="@style/ChevronIcon" />
-                        </LinearLayout>
+                    <!-- Tablet speaker over Wi-Fi (status only) -->
+                    <LinearLayout style="@style/Row56">
+                        <FrameLayout style="@style/IconCircle">
+                            <ImageView style="@style/RowIcon" android:src="@drawable/ic_headphones" />
+                        </FrameLayout>
+                        <TextView android:id="@+id/tabletValue" style="@style/RowTitle" android:text="Tablet speaker (Wi-Fi)" />
                     </LinearLayout>
 
-                    <!-- Start volume (single group level; OnePlus shares one level in Audio sharing) -->
+                    <!-- Start volume  -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

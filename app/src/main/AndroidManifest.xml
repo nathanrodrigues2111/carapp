@@ -94,7 +94,7 @@
         <service
             android:name=".TapService"
             android:exported="true"
-            android:label="CarApp dual-audio tap"
+            android:label="CarApp auto-tap"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

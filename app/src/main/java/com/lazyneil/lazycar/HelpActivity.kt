@@ -28,7 +28,7 @@ class HelpActivity : AppCompatActivity() {
         "How do I set it up the first time?" to
             "1. Pair your outputs in Android's Bluetooth settings.\n2. Enable OnePlus Audio sharing once in Bluetooth settings.\n3. Turn on CarApp in Accessibility (button below).\n4. Add the CarApp widget to your home screen.",
         "Why does CarApp need Accessibility?" to
-            "Android hides dual-audio and hotspot controls from apps. CarApp uses Accessibility only to tap the system panel for you, nothing else, and no data is collected.",
+            "Android hides hotspot and mobile data controls from apps. CarApp uses Accessibility only to tap the system panel for you, nothing else, and no data is collected.",
         "Only one output gets ticked?" to
             "That usually means OnePlus Audio sharing isn't enabled. Open Bluetooth settings, turn Audio sharing on, then try GO again.",
         "Widget tap does nothing?" to

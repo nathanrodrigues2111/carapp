@@ -31,12 +31,6 @@ class GoService : Service() {
         } else intent?.getStringExtra("action")
         val dur = when (action) {
             "stop" -> GoAction.stop(applicationContext)
-            "share" -> {
-                val m1 = intent?.getStringExtra("mac1").orEmpty()
-                val m2 = intent?.getStringExtra("mac2").orEmpty()
-                val pkg = intent?.getStringExtra("player").orEmpty()
-                GoAction.shareAudio(applicationContext, m1, m2, pkg); 9000L
-            }
             "volume" -> { GoAction.applyVolumesNow(applicationContext); 4000L }
             "go" -> GoAction.run(applicationContext)
             else -> 0L    // null / transitioning toggle: nothing to do, just fall through and stop

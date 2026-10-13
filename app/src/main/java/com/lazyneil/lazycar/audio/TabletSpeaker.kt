@@ -23,6 +23,15 @@ object TabletSpeaker {
     fun onGo(ctx: Context) { if (enabled(ctx)) StreamSender.start(ctx) }
     fun onStop(ctx: Context) = StreamSender.stop(ctx)
 
+    /** One-word state for the main screen row. */
+    fun summary(ctx: Context): String = when {
+        !enabled(ctx) -> "off"
+        Role.isTablet(ctx) -> if (StreamReceiver.running && SystemClock.elapsedRealtime() - StreamReceiver.lastAt <= 2000) "connected" else "waiting"
+        !StreamSender.running -> "on, starts with GO"
+        StreamSender.tablet.isEmpty() -> "on, waiting for the tablet"
+        else -> "on, connected"
+    }
+
     fun status(ctx: Context): String = if (Role.isTablet(ctx)) {
         val r = StreamReceiver
         when {

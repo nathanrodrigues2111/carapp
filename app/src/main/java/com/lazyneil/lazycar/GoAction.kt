@@ -51,10 +51,7 @@ object GoAction {
     }
 
     fun sequenceDuration(p: Prefs): Long {
-        // Keep the foreground service alive through the network toggles + the whole share poll.
-        val net = (if (p.mobileData) 4000L else 0L) + (if (p.hotspot) 4000L else 0L)
-        val shareEnd = if (p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty()) net + 3000L + 9500L else 0L
-        return maxOf(5000L, shareEnd) + 1500L
+        return 6500L
     }
 
     /** Entry for GO. Returns ms the caller (service) should stay alive for the delayed steps. */
@@ -80,7 +77,7 @@ object GoAction {
 
     /**
      * Idempotent: connect only what's disconnected, launch/play only if music isn't already active,
-     * open the sharing switcher only if the speakers aren't already grouped. Transitions to ON right
+     * Transitions to ON right
      * after the last scheduled step, so a fully-satisfied GO (nothing to do) finishes in ~0.3s.
      */
     fun runSequence(ctx: Context, p: Prefs) {
@@ -88,27 +85,23 @@ object GoAction {
         a2dpConnectedDevices(ctx) { connected ->
             step("probe A2DP connections", t0)
             val need1 = p.mac1.isNotEmpty() && p.mac1 !in connected
-            val need2 = p.mac2.isNotEmpty() && p.mac2 !in connected
             val need3 = p.headunit && p.mac3.isNotEmpty() && p.mac3 !in connected
             if (need1) connectA2dp(ctx, p.mac1) else if (p.mac1.isNotEmpty()) log("skipped connect ${p.mac1} (connected)")
-            if (need2) main.postDelayed({ connectA2dp(ctx, p.mac2) }, 400) else if (p.mac2.isNotEmpty()) log("skipped connect ${p.mac2} (connected)")
             if (need3) main.postDelayed({ connectA2dp(ctx, p.mac3) }, 800)
-            if (need1 || need2) p.grouped = false   // a fresh connection drops any prior sharing group
 
-            val settle = if (need1 || need2) 2000L else 0L
+            val settle = if (need1) 2000L else 0L
             val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             val musicActive = am.isMusicActive
             // Snapshot pre-GO state (connected = probe result before we connect anything) so STOP can
             // restore exactly what it found: only undo what GO turned on.
             p.snapConn1 = p.mac1.isNotEmpty() && p.mac1 in connected
-            p.snapConn2 = p.mac2.isNotEmpty() && p.mac2 in connected
             p.snapConn3 = p.mac3.isNotEmpty() && p.mac3 in connected
             p.snapMusicWasActive = musicActive
-            log("snapshot: music=$musicActive conn1=${p.snapConn1} conn2=${p.snapConn2} conn3=${p.snapConn3}")
+            log("snapshot: music=$musicActive conn1=${p.snapConn1} conn3=${p.snapConn3}")
             var doneAt = 0L
-            if (need2) doneAt = 400L; if (need3) doneAt = 800L
+            if (need3) doneAt = 800L
 
-            // Order: BT -> connects -> mobile data + hotspot -> player -> share -> play. Both network
+            // Order: BT -> connects -> mobile data + hotspot -> player -> play. Both network
             // tiles are toggled in one Quick Settings session before the player/switcher.
             var netAt = settle
             if (p.mobileData || p.hotspot) {
@@ -119,27 +112,19 @@ object GoAction {
             if (musicActive) log("skipped player launch (music active)")
             else { main.postDelayed({ launchPlayer(ctx, p.playerPkg) }, netAt); doneAt = maxOf(doneAt, netAt) }
 
-            val shareAt = netAt + (if (musicActive) 0L else 1000L)
-            val wantShare = p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty()
-            val alreadyGrouped = p.grouped && !need1 && !need2
-            // Open the output panel only to group the speakers for dual audio.
-            if (wantShare && !alreadyGrouped) {
-                main.postDelayed({ shareAudio(ctx, p.mac1, p.mac2, p.playerPkg) }, shareAt)
-                doneAt = maxOf(doneAt, shareAt + 9500L)   // poll's 8.5s window + dismiss
-            } else if (alreadyGrouped) log("skipped share (already grouped)")
-
-            // Start volume: OnePlus resets STREAM_MUSIC (often to max) as the sharing group forms and
-            // as the second A2DP sink connects, so a single set won't hold. Run a watchdog from just
+                        // Start volume: OnePlus can reset STREAM_MUSIC (often to max) as the A2DP sink connects,
+            // so a single set won't hold. Run a watchdog from just
             // after connect through play that keeps re-asserting the target (setStreamVolume, then
             // adjust nudges if the absolute-volume path ignores it), reacting to VOLUME_CHANGED too.
             // Runs in the background; it must NOT gate the ON transition (a warm all-on GO stays <2s).
             // The service already lives ~14s (sequenceDuration), which outlasts this window.
             if (p.volOn) main.postDelayed({ enforceStartVolume(ctx, p.vol, 12000L) }, maxOf(settle, 300L))
 
+            val playAt = netAt + (if (musicActive) 0L else 1000L)
             if (musicActive) log("skipped MEDIA_PLAY (music active)")
-            else { main.postDelayed({ playMedia(ctx, p.playerPkg) }, shareAt + 1500); doneAt = maxOf(doneAt, shareAt + 1500) }
+            else { main.postDelayed({ playMedia(ctx, p.playerPkg) }, playAt + 1500); doneAt = maxOf(doneAt, playAt + 1500) }
 
-            if (p.headunit) { main.postDelayed({ launchHeadunit(ctx, p.headunitIp) }, shareAt + 2000); doneAt = maxOf(doneAt, shareAt + 2000) }
+            if (p.headunit) { main.postDelayed({ launchHeadunit(ctx, p.headunitIp) }, playAt + 2000); doneAt = maxOf(doneAt, playAt + 2000) }
             main.postDelayed({ if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0); com.lazyneil.lazycar.audio.TabletSpeaker.onGo(ctx); TapService.launchApps(ctx) } }, doneAt + 300L)
         }
     }
@@ -182,12 +167,7 @@ object GoAction {
         }, 12000)
     }
 
-    /**
-     * Opens the OnePlus output switcher and lets TapService add the second speaker to the group.
-     * MediaRouter2 can't do it (the app only sees DEFAULT_ROUTE) and the OnePlus startSharing API
-     * needs the signature perm com.oplus.permission.safe.BLUETOOTH - see reverse/SHARING_API.md.
-     */
-    /** Live-apply the start volume to the grouped outputs (slider released while ON, or volumeOnly). */
+    /** Live-apply the start volume to the speaker (slider released while ON, or volumeOnly). */
     fun applyVolumesNow(ctx: Context) {
         val p = Prefs(ctx)
         log("volumeOnly: enforcing start volume ${p.vol}%")
@@ -252,16 +232,6 @@ object GoAction {
         volReceiver = null
     }
 
-    fun shareAudio(ctx: Context, mac1: String, mac2: String, playerPkg: String) {
-        try {
-            TapService.arm()                    // starts the poll that ticks every "Add device to group." row
-            log("shareAudio: armed poll, opening output switcher")
-            openOutputSwitcher(ctx, playerPkg)  // the poll re-opens it if it doesn't appear
-        } catch (e: Exception) {
-            log("shareAudio failed ${e.message}"); openOutputSwitcher(ctx, playerPkg)
-        }
-    }
-
     /**
      * Drive mobile data and/or the Wi-Fi hotspot to [wantOn] via their Quick Settings tiles (there's
      * no public setter for either without a privileged permission). [record] snapshots each tile's
@@ -274,23 +244,6 @@ object GoAction {
         if (data != null) t += TapService.Tile(listOf("SIM1", "Mobile data"), data, if (record) "snapData" else "", "mobile data")
         if (hotspot != null) t += TapService.Tile(listOf("hotspot"), hotspot, if (record) "snapHotspot" else "", "hotspot")
         if (t.isNotEmpty()) { log("network: ${t.joinToString { "${it.feature}->${it.wantOn}" }}"); TapService.armTiles(t) }
-    }
-
-    private fun openOutputSwitcher(ctx: Context, playerPkg: String) {
-        // OnePlus opens its media output dialog via a SystemUI broadcast; the public MEDIA_OUTPUT
-        // panel action does not resolve on this ROM. The receiver is exported, no permission needed.
-        try {
-            ctx.sendBroadcast(Intent("com.android.systemui.action.LAUNCH_MEDIA_OUTPUT_DIALOG")
-                .setPackage("com.android.systemui").putExtra("package_name", playerPkg))
-            log("sent LAUNCH_MEDIA_OUTPUT_DIALOG for $playerPkg")
-        } catch (e: Exception) {
-            log("output dialog broadcast failed ${e.message}")
-            try {
-                ctx.startActivity(Intent("android.settings.panel.action.MEDIA_OUTPUT")
-                    .putExtra("android.media.extra.PACKAGE_NAME", playerPkg)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } catch (e2: Exception) { log("panel fallback failed ${e2.message}") }
-        }
     }
 
     // ---- Bluetooth profile-proxy helper (dedup for connect / disconnect / getConnected) ----
@@ -364,7 +317,6 @@ object GoAction {
         val p = Prefs(ctx)
         setState(ctx, p, STOPPING)
         com.lazyneil.lazycar.audio.TabletSpeaker.onStop(ctx)
-        p.grouped = false
 
         if (!p.snapMusicWasActive) { log("restore: music playing -> paused"); pauseMedia(ctx) }
         else log("restore: music was already playing -> left")
@@ -376,7 +328,7 @@ object GoAction {
             log("restore: music volume -> index ${p.snapMusicVol}")
         } catch (e: Exception) {}
 
-        for ((mac, wasConnected) in listOf(p.mac1 to p.snapConn1, p.mac2 to p.snapConn2, p.mac3 to p.snapConn3))
+        for ((mac, wasConnected) in listOf(p.mac1 to p.snapConn1, p.mac3 to p.snapConn3))
             if (mac.isNotEmpty() && !wasConnected) { log("restore: $mac connected -> disconnected"); disconnectA2dp(ctx, mac) }
             else if (mac.isNotEmpty()) log("restore: $mac was already connected -> left")
 
@@ -427,12 +379,12 @@ object GoAction {
         }, 12000)
     }
 
-    /** Best-effort real-state probe on app open: ON iff both speakers are A2DP-connected. */
+    /** Best-effort real-state probe on app open: ON iff the speaker is A2DP-connected. */
     fun deriveState(ctx: Context, p: Prefs, done: (Int) -> Unit) {
         val es = effectiveState(p)
-        if (es == STARTING || es == STOPPING || p.mac1.isEmpty() || p.mac2.isEmpty()) { done(es); return }
+        if (es == STARTING || es == STOPPING || p.mac1.isEmpty()) { done(es); return }
         a2dpConnectedDevices(ctx) { connected ->
-            val st = if (p.mac1 in connected && p.mac2 in connected) ON else IDLE
+            val st = if (p.mac1 in connected) ON else IDLE
             if (st != p.state) setState(ctx, p, st)
             done(st)
         }

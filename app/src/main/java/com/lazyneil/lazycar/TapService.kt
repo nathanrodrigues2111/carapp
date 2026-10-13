@@ -18,30 +18,14 @@ import android.widget.Toast
 import java.util.Collections
 
 /**
- * Zero-tap dual audio. Two jobs:
- *  - buttons: click a system confirm button (the BT "Allow"/"Turn on" enable dialog). Event-driven.
- *  - adds: in the OnePlus output switcher, tick every "Add device to group." checkbox so all
- *    connected speakers join the sharing group, then dismiss. POLLING, not event-driven: the OnePlus
- *    dialog throttles/mislabels its accessibility events, so instead of waiting for the right event
- *    we scan getWindows() every 400ms while armed and click what we find. No privileged permission.
+ * Accessibility taps for what Android hides from apps: system confirm buttons (BT enable), the
+ * mobile data and hotspot quick-settings tiles, the screen-share consent, Wi-Fi join and split launch.
  */
 class TapService : AccessibilityService() {
     class Tile(val labels: List<String>, val wantOn: Boolean, val snapKey: String, val feature: String)
 
     companion object {
         @Volatile private var instance: TapService? = null
-
-        // ---- add-to-group mode (output switcher) ----
-        @Volatile var armedUntil: Long = 0L
-        @Volatile var ownsPanel: Boolean = false     // true only when LazyCar opened the panel
-        @Volatile var finishing: Boolean = false
-        private val clicked = Collections.synchronizedSet(mutableSetOf<String>())
-        fun arm(windowMs: Long = 8500L) {
-            armedUntil = SystemClock.uptimeMillis() + windowMs
-            ownsPanel = true; finishing = false; clicked.clear()
-            instance?.startAddsPoll()
-        }
-        fun disarm() { armedUntil = 0L; ownsPanel = false }
 
         // ---- button mode (BT enable dialog) ----
         @Volatile var buttonTexts: List<String> = emptyList()
@@ -251,9 +235,6 @@ class TapService : AccessibilityService() {
     }
 
     private val h = Handler(Looper.getMainLooper())
-    private var pollN = 0
-    private var dialogSeen = false
-    private var reSent = false
     private var tileOpened = false
     private var tileFinished = false
     private val tileDone = Collections.synchronizedSet(mutableSetOf<String>())
@@ -285,73 +266,6 @@ class TapService : AccessibilityService() {
         val ok = btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         android.util.Log.e("LazyCar", "TapService clicked confirm '${btn.text}' ok=$ok")
         disarmButtons()
-    }
-
-    // ---- polling add-to-group ----
-
-    fun startAddsPoll() {
-        pollN = 0; dialogSeen = false; reSent = false
-        h.removeCallbacks(pollRunnable)
-        h.post(pollRunnable)
-    }
-
-    private val pollRunnable = object : Runnable {
-        override fun run() {
-            if (armedUntil == 0L || finishing) return
-            if (SystemClock.uptimeMillis() >= armedUntil) { finishPoll(); return }
-            pollN++
-            var winCount = 0; var adds = 0; var removes = 0; var sawDialog = false
-            val names = Prefs(applicationContext).let { p -> listOf(p.name1, p.name2, p.name3) }.map { it.trim() }.filter { it.isNotEmpty() }
-            val seen = mutableSetOf<String>()
-            for (w in (windows ?: emptyList())) {
-                val root = w.root ?: continue
-                winCount++
-                if (root.packageName != "com.android.systemui") continue
-                if (find(root) { it.viewIdResourceName?.let { id -> id.endsWith("/media_output_dialog") || id.endsWith("/list_result") } == true } != null) sawDialog = true
-                forEach(root) { n ->
-                    // Match by desc first, then by tick state, so an id or wording change in a OnePlus update does not break it.
-                    if (n.viewIdResourceName?.endsWith("/check_box_area") != true && !n.isCheckable) return@forEach
-                    val title = rowTitle(n) ?: return@forEach
-                    if (!seen.add(title)) return@forEach
-                    when (groupState(n, title, names)) {
-                        1 -> {
-                            sawDialog = true; adds++
-                            if (title !in clicked) {
-                                val target = if (n.isClickable) n else clickableAncestor(n) ?: n
-                                val ok = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                                clicked.add(title)
-                                android.util.Log.e("LazyCar", "TapService poll#$pollN click add '$title' ok=$ok")
-                            }
-                        }
-                        -1 -> { sawDialog = true; removes++ }
-                    }
-                }
-            }
-            if (sawDialog) dialogSeen = true
-            else if (pollN == 6) (windows ?: emptyList()).forEach { w ->   // diagnostics for the next OnePlus UI change
-                android.util.Log.e("LazyCar", "WINDOW type=${w.type} title=${w.title} pkg=${w.root?.packageName}"); dump(w.root, 0) }
-            android.util.Log.e("LazyCar", "TapService poll#$pollN windows=$winCount add=$adds remove=$removes clicked=${clicked.size}")
-
-            // Dialog never showed up -> re-open it once (~1.6s in).
-            if (!dialogSeen && pollN >= 4 && !reSent) { reSent = true; reopenSwitcher() }
-
-            // Done when everything connected is grouped (no Add rows, >=2 Remove). Window is fallback.
-            if (dialogSeen && adds == 0 && removes >= 2) { finishPoll(); return }
-            h.postDelayed(this, 400)
-        }
-    }
-
-    private fun finishPoll() {
-        if (finishing) return
-        finishing = true
-        Prefs(applicationContext).grouped = clicked.isNotEmpty() || dialogSeen
-        android.util.Log.e("LazyCar", "TapService poll done (clicked=${clicked.size}, grouped=${Prefs(applicationContext).grouped})")
-        val owned = ownsPanel
-        disarm()
-        h.postDelayed({
-            if (owned) performGlobalAction(GLOBAL_ACTION_BACK)
-            if (clicked.isNotEmpty()) Toast.makeText(applicationContext, "Dual audio on", Toast.LENGTH_LONG).show()
-        }, 800)
     }
 
     // ---- quick-settings tile toggle (mobile data / hotspot) ----
@@ -402,52 +316,10 @@ class TapService : AccessibilityService() {
 
     private fun onoff(b: Boolean) = if (b) "on" else "off"
 
-    private fun reopenSwitcher() {
-        val pkg = Prefs(applicationContext).playerPkg
-        android.util.Log.e("LazyCar", "TapService re-sending output dialog for $pkg")
-        try {
-            sendBroadcast(Intent("com.android.systemui.action.LAUNCH_MEDIA_OUTPUT_DIALOG")
-                .setPackage("com.android.systemui").putExtra("package_name", pkg))
-        } catch (e: Exception) { android.util.Log.e("LazyCar", "re-send failed ${e.message}") }
-    }
-
-    /** 1 = can be added to the group, -1 = already grouped, 0 = neither (phone speaker, the active device alone). */
-    private fun groupState(n: AccessibilityNodeInfo, title: String, names: List<String>): Int {
-        val d = n.contentDescription?.toString() ?: ""
-        if (d.contains("remove", true) && d.contains("group", true)) return -1
-        if (d.contains("add", true) && d.contains("group", true)) return 1
-        val box = if (n.isCheckable) n else find(n) { it.isCheckable || it.viewIdResourceName?.endsWith("/check_box") == true }
-        if (box?.isChecked == true) return -1
-        val row = rowOf(n)
-        val inUse = row != null && find(row) { it.viewIdResourceName?.endsWith("/subtitle") == true &&
-            it.text?.toString()?.contains("in use", true) == true } != null
-        val known = names.any { title.contains(it, true) || it.contains(title, true) }
-        // Post-update OnePlus UI: no add/remove desc, box not checkable; an "In use" row is already playing.
-        return if (inUse) -1 else if (known) 1 else 0
-    }
-
-    private fun rowOf(n: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        var row: AccessibilityNodeInfo? = n
-        while (row != null && row.viewIdResourceName?.endsWith("/main_content") != true) row = row.parent
-        return row
-    }
-
-    /** Title text of the device row (id .../main_content) that contains node [n]. */
-    private fun rowTitle(n: AccessibilityNodeInfo): String? {
-        val r = rowOf(n) ?: return null
-        return find(r) { it.viewIdResourceName?.endsWith("/title") == true }?.text?.toString()
-    }
-
     private fun clickableAncestor(n: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         var p = n.parent
         while (p != null) { if (p.isClickable) return p; p = p.parent }
         return null
-    }
-
-    private fun forEach(n: AccessibilityNodeInfo?, action: (AccessibilityNodeInfo) -> Unit) {
-        if (n == null) return
-        action(n)
-        for (i in 0 until n.childCount) forEach(n.getChild(i), action)
     }
 
     private fun find(n: AccessibilityNodeInfo?, pred: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
