@@ -112,18 +112,42 @@ class GpsService : Service(), LocationListener {
         }
     }
 
-    // Send mode: GPS fix every second, broadcast as JSON over UDP.
+    private var gpsAt = 0L
+    private var last: ByteArray? = null
+    private var lastFixAt = 0L
+    private var sentAt = 0L
+    private val tick = android.os.Handler(Looper.getMainLooper())
+    // Stationary fused fixes arrive every 20 to 30 s; repeat the last one at 1 Hz (up to 60 s) so Maps never starves.
+    private val repeat = object : Runnable {
+        override fun run() {
+            val now = SystemClock.elapsedRealtime()
+            last?.let { if (now - sentAt > 900 && now - lastFixAt < 60000) send(it) }
+            if (running) tick.postDelayed(this, 1000)
+        }
+    }
+
+    // Send mode: GPS fix every second, broadcast as JSON over UDP. Fused fills in while GPS has no fix (indoors, tunnels).
     private fun startSend() {
         socket = DatagramSocket().apply { broadcast = true }
         lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
+        lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
         lm.registerGnssStatusCallback(gnss, android.os.Handler(Looper.getMainLooper()))
+        tick.postDelayed(repeat, 1000)
     }
 
     override fun onLocationChanged(l: Location) {
+        val now = SystemClock.elapsedRealtime()
+        if (l.provider == LocationManager.GPS_PROVIDER) gpsAt = now else if (now - gpsAt < 3000) return
         val data = JSONObject().put("lat", l.latitude).put("lon", l.longitude).put("alt", l.altitude)
             .put("acc", l.accuracy.toDouble()).put("speed", l.speed.toDouble())
-            .put("bearing", l.bearing.toDouble()).put("time", l.time).put("sats", sats).toString().toByteArray()
+            .put("bearing", l.bearing.toDouble()).put("time", l.time).put("sats", sats).put("src", l.provider).toString().toByteArray()
         acc = l.accuracy; speed = l.speed; gotFix()
+        last = data; lastFixAt = now
+        send(data)
+    }
+
+    private fun send(data: ByteArray) {
+        sentAt = SystemClock.elapsedRealtime()
         thread {
             val s = socket ?: return@thread
             for (addr in broadcastTargets()) try { s.send(DatagramPacket(data, data.size, addr, PORT)) } catch (_: Exception) {}
@@ -172,6 +196,9 @@ class GpsService : Service(), LocationListener {
                             altitude = j.optDouble("alt", 0.0); accuracy = j.optDouble("acc", 10.0).toFloat()
                             speed = j.optDouble("speed", 0.0).toFloat(); bearing = j.optDouble("bearing", 0.0).toFloat()
                             time = System.currentTimeMillis(); elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                            // Maps trusts a fix more when every accuracy field is present.
+                            verticalAccuracyMeters = accuracy * 1.5f; speedAccuracyMetersPerSecond = 0.5f
+                            bearingAccuracyDegrees = if (speed > 1f) 10f else 90f
                         })
                     }
                     acc = j.optDouble("acc", 0.0).toFloat(); speed = j.optDouble("speed", 0.0).toFloat()
@@ -184,6 +211,7 @@ class GpsService : Service(), LocationListener {
 
     private fun stopAll() {
         running = false
+        tick.removeCallbacks(repeat); last = null
         socket?.close(); socket = null
         wifiLock?.release(); wifiLock = null
         if (::lm.isInitialized) {
