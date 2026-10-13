@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material 3; DynamicColors.applyToActivityIfAvailable() overlays the
+         wallpaper-derived Material You palette on Android 12+. -->
+    <style name="Theme.RearView" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Ported from targetSdk 28: keep the old inset behaviour on Android 15+. -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@style/RearView.WindowAnimation</item>
+    </style>
+
+    <!-- Shared-axis style page transitions. Set on the window rather than via
+         overridePendingTransition so the system back gesture animates too. -->
+    <style name="RearView.WindowAnimation" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/nav_enter</item>
+        <item name="android:activityOpenExitAnimation">@anim/nav_exit</item>
+        <item name="android:activityCloseEnterAnimation">@anim/nav_pop_enter</item>
+        <item name="android:activityCloseExitAnimation">@anim/nav_pop_exit</item>
+    </style>
+
+    <!-- Settings is a normal page, not a video surface: it keeps the system
+         bars and a themed background rather than the camera screen's black. -->
+    <style name="Theme.RearView.Settings" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Ported from targetSdk 28: keep the old inset behaviour on Android 15+. -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:windowBackground">?attr/colorSurface</item>
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:navigationBarColor">?attr/colorSurface</item>
+        <item name="android:windowAnimationStyle">@style/RearView.WindowAnimation</item>
+    </style>
+
+    <!-- AMOLED: pure-black surfaces, applied on top of the dark theme. -->
+    <style name="ThemeOverlay.RearView.Amoled" parent="">
+        <item name="android:colorBackground">@android:color/black</item>
+        <item name="colorSurface">@android:color/black</item>
+        <item name="colorSurfaceDim">@android:color/black</item>
+        <item name="colorSurfaceContainerLowest">@android:color/black</item>
+        <item name="colorSurfaceContainerLow">@android:color/black</item>
+        <item name="colorSurfaceContainer">@android:color/black</item>
+        <item name="colorSurfaceContainerHigh">#0D0D0D</item>
+        <item name="colorSurfaceContainerHighest">#141414</item>
+    </style>
+
+    <!-- ── Settings page building blocks ───────────────────────────────── -->
+
+    <style name="RearView.SectionLabel" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">28dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceTitleSmall</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+    </style>
+
+    <style name="RearView.SubLabel" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="RearView.SwitchCaption" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodySmall</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <!-- One segment of the theme picker: an icon only, taking an equal share of
+         the row so the four always fit whatever the window width. iconPadding 0
+         with no text is what centres the icon in the segment. -->
+    <style name="RearView.ThemeOption" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">0dp</item>
+        <item name="android:paddingEnd">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconSize">20dp</item>
+    </style>
+
+    <!-- A credit that opens someone's GitHub profile: reads as a link, sits
+         flush with the text above it rather than indented like a button. -->
+    <style name="RearView.LinkButton" parent="Widget.Material3.Button.TextButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">-8dp</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="icon">@drawable/ic_open_in_new</item>
+        <item name="iconSize">16dp</item>
+        <item name="iconGravity">textStart</item>
+    </style>
+
+    <style name="RearView.Section" parent="Widget.Material3.CardView.Filled">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="cardCornerRadius">20dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="cardBackgroundColor">?attr/colorSurfaceContainerHigh</item>
+    </style>
+</resources>

@@ -97,6 +97,7 @@ class SettingsActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, on -> p.mobileData = on }
         }
 
+        bindDevice()
         buildHeadunitPicker()
         applyAccent()
         findViewById<View>(R.id.accentRow).setOnClickListener { showAccentDialog() }
@@ -106,7 +107,7 @@ class SettingsActivity : AppCompatActivity() {
 
         val v = try { packageManager.getPackageInfo(packageName, 0) } catch (e: Exception) { null }
         findViewById<TextView>(R.id.versionText).text =
-            if (v != null) "LazyCar v${v.versionName} (${v.longVersionCode})" else "LazyCar"
+            if (v != null) "CarApp v${v.versionName} (${v.longVersionCode})" else "CarApp"
     }
 
     override fun onResume() {
@@ -117,6 +118,45 @@ class SettingsActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         p.headunitIp = findViewById<TextInputEditText>(R.id.ipField).text.toString().trim()
+    }
+
+    private fun bindDevice() {
+        val tablet = Role.isTablet(this)
+        // Phone-only car audio controls are hidden on the tablet, the camera row on the phone.
+        intArrayOf(R.id.dualSwitch, R.id.dualCaption, R.id.headunitSwitch, R.id.headunitDetected,
+            R.id.headunitExtra, R.id.hotspotSwitch, R.id.hotspotCaption, R.id.mobileSwitch, R.id.a11yRow)
+            .forEach { if (tablet) findViewById<View>(it).visibility = View.GONE }
+        findViewById<View>(R.id.camRow).apply {
+            visibility = if (tablet) View.VISIBLE else View.GONE
+            setOnClickListener { startActivity(Intent(this@SettingsActivity, com.lazyneil.lazycar.rear.RearSettingsActivity::class.java)) }
+        }
+        val names = mapOf(Role.AUTO to "Auto", Role.PHONE to "Phone", Role.TABLET to "Tablet")
+        findViewById<TextView>(R.id.roleValue).text = names[Role.override(this)] +
+            if (Role.override(this) == Role.AUTO) " (" + names[Role.detected()] + ")" else ""
+        findViewById<View>(R.id.roleRow).setOnClickListener {
+            val keys = names.keys.toList()
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Device role")
+                .setSingleChoiceItems(keys.map { names[it] }.toTypedArray(), keys.indexOf(Role.override(this))) { d, w ->
+                    d.dismiss()
+                    if (keys[w] == Role.override(this)) return@setSingleChoiceItems
+                    Role.set(this, keys[w])
+                    // Back to a fresh home for the new role.
+                    startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                }
+                .show()
+        }
+        val gps = com.lazyneil.lazycar.gps.GpsService
+        val m = gps.autoMode(this)
+        val target = if (tablet) "receive" else "send"
+        findViewById<MaterialSwitch>(R.id.gpsSwitch).apply {
+            text = if (tablet) "Use phone GPS" else "Share GPS with tablet"
+            isChecked = m != "stop"
+            setOnCheckedChangeListener { _, on -> gps.launch(this@SettingsActivity, if (on) target else "stop") }
+        }
+        findViewById<TextView>(R.id.gpsCaption).text = if (tablet)
+            "Receives the phone's location over its hotspot and feeds it to every app"
+        else "Broadcasts this phone's location to the head unit tablet over the hotspot"
     }
 
     private fun refreshA11y() {
@@ -177,7 +217,7 @@ class SettingsActivity : AppCompatActivity() {
         val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
         val track = ColorStateList(states, intArrayOf(accent, 0xFF3A3F45.toInt()))
         val thumb = ColorStateList(states, intArrayOf(Accent.onColor(accent), 0xFF9AA0A6.toInt()))
-        intArrayOf(R.id.dualSwitch, R.id.amoledSwitch, R.id.headunitSwitch,
+        intArrayOf(R.id.gpsSwitch, R.id.dualSwitch, R.id.amoledSwitch, R.id.headunitSwitch,
             R.id.hotspotSwitch, R.id.mobileSwitch).forEach {
             findViewById<MaterialSwitch>(it).apply { trackTintList = track; thumbTintList = thumb }
         }

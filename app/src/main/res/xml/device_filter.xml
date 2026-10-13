@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- UVC webcams: most enumerate as a Miscellaneous/Interface-Association
+         composite device (class 239, subclass 2, protocol 1)... -->
+    <usb-device class="239" subclass="2" protocol="1" />
+    <!-- ...some enumerate directly as Video class (14). -->
+    <usb-device class="14" />
+    <!-- If your specific webcam doesn't trigger auto-launch, plug it in, run
+         `adb shell lsusb` (or check the AUSBC demo app) to get its vendor-id /
+         product-id and add a line like:
+         <usb-device vendor-id="1234" product-id="5678" />  (decimal values) -->
+</resources>

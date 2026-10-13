@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Video + guide lines only. The Lines/Settings controls live on the activity
+     so they stay reachable when there is no camera and hence no fragment. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <FrameLayout
+        android:id="@+id/camera_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <dev.lazyneil.rearview.GuidelineView
+        android:id="@+id/guidelines"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</FrameLayout>

@@ -57,7 +57,7 @@ class GoService : Service() {
                 nm.createNotificationChannel(NotificationChannel(chId, "Car setup", NotificationManager.IMPORTANCE_LOW))
         }
         return Notification.Builder(this, chId)
-            .setContentTitle("LazyCar")
+            .setContentTitle("CarApp")
             .setContentText("Setting up for the car…")
             .setSmallIcon(R.drawable.ic_car_glyph)
             .build()

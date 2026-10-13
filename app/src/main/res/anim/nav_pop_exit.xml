@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Back navigation: the page you are leaving slides off to the right. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:interpolator/fast_out_slow_in">
+
+    <translate
+        android:duration="300"
+        android:fromXDelta="0"
+        android:toXDelta="7%p" />
+
+    <alpha
+        android:duration="220"
+        android:fromAlpha="1.0"
+        android:toAlpha="0.0" />
+</set>

@@ -32,8 +32,8 @@ class GoWidget : AppWidgetProvider() {
         val glyphTint = if (on) 0xFF000000.toInt() else Accent.onColor(accent)
         val pill = android.content.res.ColorStateList.valueOf(pillColor)
         val desc = when (st) {
-            GoAction.ON -> "LazyCar STOP"; GoAction.STARTING -> "LazyCar starting"
-            GoAction.STOPPING -> "LazyCar stopping"; else -> "LazyCar GO"
+            GoAction.ON -> "CarApp STOP"; GoAction.STARTING -> "CarApp starting"
+            GoAction.STOPPING -> "CarApp stopping"; else -> "CarApp GO"
         }
         for (id in ids) {
             val v = RemoteViews(ctx.packageName, R.layout.widget_go)

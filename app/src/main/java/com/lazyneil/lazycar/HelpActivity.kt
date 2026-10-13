@@ -26,21 +26,21 @@ class HelpActivity : AppCompatActivity() {
         "What does STOP do?" to
             "STOP restores exactly what was on before you tapped GO. Anything already on stays on; only what GO switched on gets turned back off.",
         "How do I set it up the first time?" to
-            "1. Pair your outputs in Android's Bluetooth settings.\n2. Enable OnePlus Audio sharing once in Bluetooth settings.\n3. Turn on LazyCar in Accessibility (button below).\n4. Add the LazyCar widget to your home screen.",
-        "Why does LazyCar need Accessibility?" to
-            "Android hides dual-audio and hotspot controls from apps. LazyCar uses Accessibility only to tap the system panel for you, nothing else, and no data is collected.",
+            "1. Pair your outputs in Android's Bluetooth settings.\n2. Enable OnePlus Audio sharing once in Bluetooth settings.\n3. Turn on CarApp in Accessibility (button below).\n4. Add the CarApp widget to your home screen.",
+        "Why does CarApp need Accessibility?" to
+            "Android hides dual-audio and hotspot controls from apps. CarApp uses Accessibility only to tap the system panel for you, nothing else, and no data is collected.",
         "Only one output gets ticked?" to
             "That usually means OnePlus Audio sharing isn't enabled. Open Bluetooth settings, turn Audio sharing on, then try GO again.",
         "Widget tap does nothing?" to
-            "Check that LazyCar is still enabled in Accessibility, because a system update can switch it off. Re-enable it and the widget works again.",
+            "Check that CarApp is still enabled in Accessibility, because a system update can switch it off. Re-enable it and the widget works again.",
         "Bluetooth prompt keeps showing?" to
-            "Android asks permission to turn Bluetooth on. Tap Allow once and LazyCar can turn it on for you from then on.",
+            "Android asks permission to turn Bluetooth on. Tap Allow once and CarApp can turn it on for you from then on.",
         "Can I use headphones or car stereo instead of speakers?" to
             "Yes. Any paired Bluetooth audio device works: headphones, earbuds or a car stereo can be picked as an output.",
-        "Does LazyCar send any data?" to
-            "No. LazyCar sends no data anywhere. Everything happens on your phone.",
+        "Does CarApp send any data?" to
+            "No. CarApp sends no data anywhere. Everything happens on your phone.",
         "How do I add the widget?" to
-            "Long-press your home screen, tap Widgets, find LazyCar, and drag the GO widget where you want it.",
+            "Long-press your home screen, tap Widgets, find CarApp, and drag the GO widget where you want it.",
         "Can I set the volume?" to
             "Turn on Start volume and pick a level. GO sets it before the music starts, so it never blasts off. Volume applies to both outputs together: OnePlus shares one level in Audio sharing, so both speakers get louder or quieter as one."
     )

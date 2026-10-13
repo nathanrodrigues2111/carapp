@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The REC pill sits on live video, not on a themed surface: it needs its own
+     dark scrim to stay readable over a bright driveway. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#B3000000" />
+    <corners android:radius="20dp" />
+</shape>

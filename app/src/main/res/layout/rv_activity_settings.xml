@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface"
+        app:elevation="0dp"
+        app:liftOnScroll="true">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:navigationIcon="@drawable/ic_arrow_back"
+            app:title="Settings"
+            app:titleCentered="false" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <!-- Side padding widens on large screens (values-w840dp) so the text
+             doesn't run edge-to-edge across a landscape tablet. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/settings_side_padding"
+            android:paddingBottom="40dp">
+
+                <!-- ── Display ────────────────────────────────────────── -->
+                <TextView
+                    style="@style/RearView.SectionLabel"
+                    android:text="Display" />
+
+                <com.google.android.material.card.MaterialCardView style="@style/RearView.Section">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/sw_lines"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:minHeight="48dp"
+                            android:text="Parking guide lines" />
+
+                        <TextView
+                            style="@style/RearView.SwitchCaption"
+                            android:text="Distance bands that bend with the turn, using the tablet’s gyroscope." />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/sw_mirror"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:minHeight="48dp"
+                            android:text="Mirror the video" />
+
+                        <TextView
+                            style="@style/RearView.SwitchCaption"
+                            android:text="Left and right match a rear-view mirror. Turn off for a raw camera view." />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/sw_clean"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:minHeight="48dp"
+                            android:text="Clean mode" />
+
+                        <TextView
+                            style="@style/RearView.SwitchCaption"
+                            android:text="Nothing on screen but the picture. Double-tap the video, or swipe up on it, to bring the buttons back for a few seconds." />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- ── Recording ──────────────────────────────────────── -->
+                <TextView
+                    style="@style/RearView.SectionLabel"
+                    android:text="Recording" />
+
+                <com.google.android.material.card.MaterialCardView style="@style/RearView.Section">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/sw_autorec"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:minHeight="48dp"
+                            android:text="Record automatically" />
+
+                        <TextView
+                            style="@style/RearView.SwitchCaption"
+                            android:text="Start a clip the moment the picture appears and close it when the camera loses power, so every reverse is saved without touching anything." />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/sw_audio"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:minHeight="48dp"
+                            android:text="Keep the sound" />
+
+                        <TextView
+                            style="@style/RearView.SwitchCaption"
+                            android:text="Off removes the audio track from each finished clip. The camera engine cannot write an mp4 without recording sound first, so the Microphone permission is needed either way." />
+
+                        <TextView
+                            android:id="@+id/txt_storage"
+                            style="@style/RearView.SubLabel"
+                            android:layout_marginTop="16dp" />
+
+                        <TextView
+                            android:id="@+id/txt_rec_location"
+                            style="@style/RearView.SwitchCaption"
+                            android:textIsSelectable="true" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_recordings"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="Open recordings"
+                            app:icon="@drawable/ic_gallery" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- ── Theme ──────────────────────────────────────────── -->
+                <TextView
+                    style="@style/RearView.SectionLabel"
+                    android:text="Theme" />
+
+                <com.google.android.material.card.MaterialCardView style="@style/RearView.Section">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <!-- Icons, not labels: four words ran off the right edge
+                             of a narrow window (AMOLED came out clipped), and
+                             the caption below names whatever is selected so the
+                             icons never have to carry the meaning alone. -->
+                        <com.google.android.material.button.MaterialButtonToggleGroup
+                            android:id="@+id/theme_group"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/theme_system"
+                                style="@style/RearView.ThemeOption"
+                                android:contentDescription="System theme"
+                                app:icon="@drawable/ic_theme_system" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/theme_light"
+                                style="@style/RearView.ThemeOption"
+                                android:contentDescription="Light theme"
+                                app:icon="@drawable/ic_theme_light" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/theme_dark"
+                                style="@style/RearView.ThemeOption"
+                                android:contentDescription="Dark theme"
+                                app:icon="@drawable/ic_theme_dark" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/theme_amoled"
+                                style="@style/RearView.ThemeOption"
+                                android:contentDescription="AMOLED theme"
+                                app:icon="@drawable/ic_theme_amoled" />
+                        </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                        <TextView
+                            android:id="@+id/txt_theme_caption"
+                            style="@style/RearView.SwitchCaption"
+                            android:layout_marginTop="10dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- ── In-car setup guide ─────────────────────────────── -->
+                <TextView
+                    style="@style/RearView.SectionLabel"
+                    android:text="Set it up in your car" />
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/card_setup"
+                    style="@style/RearView.Section">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:lineSpacingExtra="2dp"
+                            android:text="There is no “detect reverse gear” in software. The reverse light switches the camera’s USB power, and Android launching this app on USB-attach IS the trigger."
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                        <!-- SettingsActivity inflates item_setup_step.xml into here. -->
+                        <LinearLayout
+                            android:id="@+id/setup_steps"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+
+                        <HorizontalScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="20dp"
+                            android:background="@drawable/bg_status_chip"
+                            android:padding="16dp"
+                            android:scrollbars="none">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="monospace"
+                                android:text="@string/setup_wiring"
+                                android:textAppearance="?attr/textAppearanceBodySmall"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </HorizontalScrollView>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- ── Tablet checklist ───────────────────────────────── -->
+                <TextView
+                    style="@style/RearView.SectionLabel"
+                    android:text="Tablet checklist" />
+
+                <com.google.android.material.card.MaterialCardView style="@style/RearView.Section">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:lineSpacingExtra="3dp"
+                            android:text="@string/checklist_body"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_permissions"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:text="Grant permissions" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_battery"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Open app info (battery, permissions)" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- ── Diagnostics ────────────────────────────────────── -->
+                <TextView
+                    style="@style/RearView.SectionLabel"
+                    android:text="Diagnostics" />
+
+                <com.google.android.material.card.MaterialCardView style="@style/RearView.Section">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            style="@style/RearView.SubLabel"
+                            android:text="USB devices" />
+
+                        <TextView
+                            android:id="@+id/txt_camera"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:fontFamily="monospace"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:textIsSelectable="true" />
+
+                        <TextView
+                            style="@style/RearView.SubLabel"
+                            android:layout_marginTop="16dp"
+                            android:text="Sensors" />
+
+                        <TextView
+                            android:id="@+id/txt_sensors"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:fontFamily="monospace"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/sw_debug"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:minHeight="48dp"
+                            android:text="Show status and debug messages" />
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_refresh"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Refresh" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_copy_diag"
+                                style="@style/Widget.Material3.Button.TextButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="Copy diagnostics" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- ── About ──────────────────────────────────────────── -->
+                <TextView
+                    style="@style/RearView.SectionLabel"
+                    android:text="About" />
+
+                <com.google.android.material.card.MaterialCardView style="@style/RearView.Section">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:id="@+id/txt_version"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_credit_author"
+                            style="@style/RearView.LinkButton"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/about_author" />
+
+                        <!-- Credits as links to the people themselves, which is
+                             the least the two libraries this app rests on
+                             deserve. -->
+                        <TextView
+                            style="@style/RearView.SubLabel"
+                            android:layout_marginTop="20dp"
+                            android:text="Camera engine" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_credit_ausbc"
+                            style="@style/RearView.LinkButton"
+                            android:text="AUSBC by jiangdongguo" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_credit_uvc"
+                            style="@style/RearView.LinkButton"
+                            android:text="UVCCamera by saki4510t" />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

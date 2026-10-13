@@ -30,6 +30,46 @@
             android:paddingHorizontal="16dp"
             android:paddingBottom="24dp">
 
+            <!-- Device: role, GPS link, camera -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/CardBox"
+                android:layout_marginBottom="12dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <LinearLayout android:id="@+id/roleRow" style="@style/Row56">
+                        <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:text="Device role" />
+                        <TextView
+                            android:id="@+id/roleValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/secondaryText"
+                            android:textSize="15sp" />
+                        <ImageView style="@style/ChevronIcon" />
+                    </LinearLayout>
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/gpsSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
+                        android:textColor="@color/white"
+                        android:textSize="17sp" />
+                    <TextView
+                        android:id="@+id/gpsCaption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/secondaryText"
+                        android:textSize="13sp" />
+                    <LinearLayout android:id="@+id/camRow" style="@style/Row56" android:layout_marginTop="8dp">
+                        <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:text="Reverse camera settings" />
+                        <ImageView style="@style/ChevronIcon" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <com.google.android.material.card.MaterialCardView
                 style="@style/CardBox"
                 android:layout_marginBottom="12dp">
@@ -51,6 +91,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:id="@+id/dualCaption"
                         android:text="Auto-ticks both outputs in Audio sharing"
                         android:textColor="@color/secondaryText"
                         android:textSize="13sp" />
@@ -149,6 +190,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:id="@+id/hotspotCaption"
                         android:text="Turns on with GO, restored on STOP"
                         android:textColor="@color/secondaryText"
                         android:textSize="13sp" />

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Overridden in values-w840dp so settings text keeps a readable measure
+         on a landscape tablet instead of stretching the full width. -->
+    <dimen name="settings_side_padding">20dp</dimen>
+</resources>

@@ -12,7 +12,7 @@ android {
         minSdk = 31
         targetSdk = 35
         versionCode = (System.currentTimeMillis() / 60000L).toInt()
-        versionName = "0.2.0"
+        versionName = "0.3.0"
     }
     buildTypes {
         release {
@@ -28,10 +28,20 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 
+// Visible name is CarApp; applicationId stays com.lazyneil.lazycar so installs upgrade in place.
+android.applicationVariants.all {
+    outputs.all { (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = "CarApp.apk" }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("com.google.android.material:material:1.14.0")
+    // UVC webcam (reverse camera). 3.3.x is broken on JitPack; immersionbar and webpdecoder are dead JCenter deps.
+    implementation("com.github.jiangdongguo.AndroidUSBCamera:libausbc:3.2.7") {
+        exclude(group = "com.gyf.immersionbar")
+        exclude(group = "com.zlc.glide")
+    }
     testImplementation("junit:junit:4.13.2")
 }

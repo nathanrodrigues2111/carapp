@@ -1,9 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- GPS link (phone sends, tablet receives and mocks) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_MOCK_LOCATION" tools:ignore="MockLocation,ProtectedPermissions" />
+
+    <!-- Reverse camera (tablet). AUSBC needs CAMERA even for UVC, the webcam mic needs RECORD_AUDIO. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <queries>
         <package android:name="com.andrerinas.wirelesshelper" />
@@ -24,7 +44,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
-        android:label="LazyCar"
+        android:label="@string/app_name"
         android:theme="@style/Theme.LazyCar">
 
         <activity
@@ -67,7 +87,7 @@
         <service
             android:name=".TapService"
             android:exported="true"
-            android:label="LazyCar dual-audio tap"
+            android:label="CarApp dual-audio tap"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
@@ -85,6 +105,73 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="one-tap car audio + bluetooth setup automation" />
         </service>
+
+        <activity
+            android:name=".DashboardActivity"
+            android:exported="false" />
+
+        <!-- Reverse camera, ported from RearView -->
+        <activity
+            android:name=".rear.RearActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.RearView"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+
+        <!-- USB attach trigger: the reverse light powers the webcam, which launches the camera.
+             Role.applyComponents disables this alias on the phone. -->
+        <activity-alias
+            android:name=".rear.UsbLaunch"
+            android:exported="true"
+            android:targetActivity=".rear.RearActivity">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
+        </activity-alias>
+
+        <activity
+            android:name=".rear.RearSettingsActivity"
+            android:exported="false"
+            android:label="Camera settings"
+            android:parentActivityName=".rear.RearActivity"
+            android:theme="@style/Theme.RearView.Settings" />
+
+        <activity
+            android:name=".rear.RecordingsActivity"
+            android:exported="false"
+            android:label="Recordings"
+            android:parentActivityName=".rear.RearActivity"
+            android:theme="@style/Theme.RearView.Settings" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/rv_file_paths" />
+        </provider>
+
+        <!-- GPS link, ported from LazyGPS -->
+        <service
+            android:name=".gps.GpsService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <receiver
+            android:name=".gps.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>

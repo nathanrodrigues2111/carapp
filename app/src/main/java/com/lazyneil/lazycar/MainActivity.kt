@@ -70,6 +70,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+        if (Role.isTablet(this)) {   // tablet home is the camera + GPS dashboard
+            super.onCreate(savedInstanceState)
+            startActivity(Intent(this, DashboardActivity::class.java)); finish(); return
+        }
+        Role.applyComponents(this)
         p = Prefs(this)
         amoledApplied = p.amoled
         accentApplied = p.accent
@@ -93,10 +98,11 @@ class MainActivity : AppCompatActivity() {
             go.requestLayout()
             insets
         }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
-            != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
-        }
+        val want = arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
+            .filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (want.isNotEmpty()) ActivityCompat.requestPermissions(this, want.toTypedArray(), 1)
+        com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
 
         findViewById<ImageButton>(R.id.settingsBtn).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -121,6 +127,7 @@ class MainActivity : AppCompatActivity() {
     // Re-render GO/STOP/spinner the moment GoAction changes state while we are open.
     override fun onStart() {
         super.onStart()
+        if (isFinishing) return
         stateReceiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) { refreshGoButton() }
         }
@@ -136,6 +143,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (isFinishing) return
         if (p.amoled != amoledApplied || p.accent != accentApplied) { recreate(); return }   // AMOLED/accent changed in Settings
         refreshSetup()
         buildOutputs()                       // reflect dual-audio + BT state changes made in Settings
@@ -151,6 +159,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (!::p.isInitialized) return
         save()
         btReceiver?.let { try { unregisterReceiver(it) } catch (e: Exception) {} }
         btReceiver = null
@@ -195,7 +204,7 @@ class MainActivity : AppCompatActivity() {
             !a11y -> {
                 title.text = "Setup needed"
                 body.text = "1. Tap Open settings\n" +
-                    "2. Find LazyCar under Installed apps / Downloaded services\n" +
+                    "2. Find CarApp under Installed apps / Downloaded services\n" +
                     "3. Turn it on, then tap Allow"
                 btn.text = "Open settings"
                 btn.setOnClickListener { openAccessibilitySettings() }
@@ -237,6 +246,7 @@ class MainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(rc: Int, perms: Array<out String>, res: IntArray) {
         super.onRequestPermissionsResult(rc, perms, res)
         buildOutputs()
+        com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
     }
 
     // ---- players ----

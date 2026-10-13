@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <FrameLayout
+        android:id="@+id/fragment_host"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Catches the double-tap / swipe-up that reveals the controls in clean
+         mode. Deliberately BELOW the empty state so its buttons keep working:
+         clean mode only matters once there is a picture, and then the empty
+         state is gone. -->
+    <View
+        android:id="@+id/gesture_catcher"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Shown whenever there is no live video, so the app never just sits on a
+         black screen looking broken. MainActivity fills in the icon/title/body
+         for the specific reason (no camera, no permission, starting, stalled). -->
+    <!-- A ScrollView, and the card lays out sideways: this screen is
+         landscape-locked, so a tall centred column gets clipped the moment the
+         window is short (letterboxing, split screen, a small tablet). -->
+    <ScrollView
+        android:id="@+id/empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?attr/colorSurface"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="0dp">
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_margin="16dp"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+                app:cardCornerRadius="28dp"
+                app:cardElevation="0dp">
+
+                <!-- Orientation is flipped at runtime by MainActivity: sideways
+                     when there is width for it, stacked in portrait. Done in
+                     code, not with a -land layout, because this activity keeps
+                     its own configuration changes (rotating must not restart
+                     the camera) and so never re-inflates. -->
+                <LinearLayout
+                    android:id="@+id/empty_card"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="28dp">
+
+                    <FrameLayout
+                        android:layout_width="72dp"
+                        android:layout_height="72dp"
+                        android:background="@drawable/bg_icon_circle">
+
+                        <ImageView
+                            android:id="@+id/empty_icon"
+                            android:layout_width="34dp"
+                            android:layout_height="34dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_usb"
+                            app:tint="?attr/colorOnSecondaryContainer" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:id="@+id/empty_text_column"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="24dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/empty_title"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:maxWidth="360dp"
+                            android:text="No camera connected"
+                            android:textAppearance="?attr/textAppearanceHeadlineSmall" />
+
+                        <TextView
+                            android:id="@+id/empty_body"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:lineSpacingExtra="4dp"
+                            android:maxWidth="360dp"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                        <LinearLayout
+                            android:id="@+id/empty_status"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="18dp"
+                            android:background="@drawable/bg_status_chip"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="9dp">
+
+                            <com.google.android.material.progressindicator.CircularProgressIndicator
+                                android:id="@+id/empty_spinner"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:indeterminate="true"
+                                app:indicatorSize="16dp"
+                                app:trackThickness="2dp" />
+
+                            <TextView
+                                android:id="@+id/empty_hint"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="10dp"
+                                android:maxWidth="380dp"
+                                android:textAppearance="?attr/textAppearanceBodySmall"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/empty_actions"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="20dp"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_empty_primary"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Setup guide" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_empty_secondary"
+                                style="@style/Widget.Material3.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="Settings" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </FrameLayout>
+    </ScrollView>
+
+    <!-- Lives on the activity, not the camera fragment: without a camera there
+         is no fragment, and Settings has to stay reachable. Hidden entirely
+         when launched over the lockscreen (minimal mode). -->
+    <LinearLayout
+        android:id="@+id/controls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="20dp"
+        android:alpha="0.9"
+        android:orientation="horizontal">
+
+        <!-- Start/stop recording. Only useful over a live picture, so
+             MainActivity hides it until frames are flowing. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_record"
+            style="@style/Widget.Material3.Button.IconButton.Filled.Tonal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Record"
+            android:visibility="gone"
+            app:icon="@drawable/ic_record"
+            app:iconTint="?attr/colorError" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_lines"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_recordings"
+            style="@style/Widget.Material3.Button.IconButton.Filled.Tonal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:contentDescription="Recordings"
+            app:icon="@drawable/ic_gallery" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_settings"
+            style="@style/Widget.Material3.Button.IconButton.Filled.Tonal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            app:icon="@drawable/ic_settings" />
+    </LinearLayout>
+
+    <!-- REC pill. Shown in every mode, including over the lockscreen: a
+         recording nobody can see running is worse than a bit of clutter. -->
+    <LinearLayout
+        android:id="@+id/rec_chip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="20dp"
+        android:background="@drawable/bg_rec_chip"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="9dp"
+        android:visibility="gone">
+
+        <View
+            android:id="@+id/rec_dot"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:background="@drawable/bg_rec_dot" />
+
+        <TextView
+            android:id="@+id/rec_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:fontFamily="monospace"
+            android:text="REC 0:00"
+            android:textAppearance="?attr/textAppearanceLabelLarge"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+
+    <!-- Floating status card: fully hidden unless there is something to say. -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/overlay_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="20dp"
+        android:alpha="0.95"
+        android:visibility="gone"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="0dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:id="@+id/status_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textIsSelectable="true"
+                    android:visibility="gone" />
+            </ScrollView>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_copy"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Copy log"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_dismiss"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Dismiss"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_permissions"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Grant permissions"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+</FrameLayout>

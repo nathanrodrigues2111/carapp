@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- In-car setup guide (Settings). Kept here rather than inline so the
+         wiring wording stays in one place and matches the project README. -->
+    <string name="setup_1_title">Mount the camera</string>
+    <string name="setup_1_body">Any UVC “plug and play, no driver” USB webcam works. Outside the car it must be waterproof, or mount a normal webcam inside, behind the rear windscreen. That stays dry and works surprisingly well.</string>
+
+    <string name="setup_2_title">Run the cable to the dash</string>
+    <string name="setup_2_body">A USB 2.0 extension from the boot to the dash. 5 m is the passive limit, beyond that use an active (repeater) extension. Then a USB-C OTG adapter into the tablet.</string>
+
+    <string name="setup_3_title">Cut only the red +5 V wire</string>
+    <string name="setup_3_body">Splice the extension somewhere convenient and cut <b>only</b> the red +5 V wire. Route both ends through a 12 V relay’s normally-open contacts. D+, D− and GND stay joined. With no 5 V the webcam is electrically dead and Android sees it as unplugged, which is exactly the trigger we want.</string>
+
+    <string name="setup_4_title">Drive the relay off the reverse light</string>
+    <string name="setup_4_body">Relay coil + to the reverse lamp’s positive wire, coil − to chassis ground. Relay modules have a flyback diode built in; with a bare relay, put a 1N4007 across the coil. The car’s 12 V never touches the USB data lines.</string>
+
+    <string name="setup_5_title">That’s the whole trigger</string>
+    <string name="setup_5_body">Shift into reverse → lamp powers the coil → contacts close → the webcam appears on USB → Android auto-launches CarApp full screen, over the lockscreen. Leave reverse → the camera loses power → CarApp closes itself.</string>
+
+    <string name="setup_wiring">Reverse lamp +12V ─────────┐\nReverse lamp GND ───────┐  │\n                        │  │  (coil)\n                     ┌──┴──┴──┐\n                     │  RELAY  │\n                     └──┬───┬──┘\n                        │   │  (N/O contacts)\nUSB ext red (+5V) ──────┘   └────── continues to webcam\n   …D+, D−, GND pass through uncut…\n\nTABLET ─[OTG]─[USB ext, +5V via relay]─[WEBCAM]</string>
+
+    <string name="checklist_body">•  <b>Screen lock must be Swipe or None.</b> Showing over the lockscreen does not work over a PIN or pattern lock.\n\n•  <b>Keep OTG enabled.</b> Some Samsung and Xiaomi tablets switch OTG off again after it sits idle.\n\n•  <b>Turn off battery optimisation</b> for CarApp so Android does not kill it.\n\n•  <b>Grant Camera and Microphone once.</b> Camera: the video will not start without it. Microphone: the webcam has a mic, and without it Android re-asks on every plug-in and refuses to remember “always open CarApp”.\n\n•  <b>Charging:</b> while the tablet powers the webcam it usually cannot charge on the same port. Use a powered USB-C hub that supports host + charge, or a Qi pad.</string>
+
+    <string name="about_author">Built by lazyneil</string>
+    <string name="about_url_lazyneil">https://github.com/nathanrodrigues2111</string>
+    <string name="about_url_ausbc">https://github.com/jiangdongguo</string>
+    <string name="about_url_uvccamera">https://github.com/saki4510t</string>
+</resources>
