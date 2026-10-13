@@ -18,11 +18,15 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.slider.Slider
+import com.lazyneil.lazycar.audio.StreamReceiver
 import com.lazyneil.lazycar.gps.GpsService
+import com.lazyneil.lazycar.media.LibraryActivity
+import com.lazyneil.lazycar.media.PhoneMedia
 import com.lazyneil.lazycar.rear.RearActivity
 import com.lazyneil.lazycar.rear.UsbDevices
 
-/** Tablet home: one big card for the phone GPS link, one for the reverse camera. */
+/** Tablet home: phone Now Playing on top, then the phone GPS link and the reverse camera. */
 class DashboardActivity : AppCompatActivity() {
 
     private lateinit var p: Prefs
@@ -58,6 +62,7 @@ class DashboardActivity : AppCompatActivity() {
             if (missing().isNotEmpty()) requestPermissions(missing(), 1)
             else startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
+        setupNowPlaying()
         Role.applyComponents(this)
         if (missing().isNotEmpty()) requestPermissions(missing(), 1)
     }
@@ -68,10 +73,55 @@ class DashboardActivity : AppCompatActivity() {
         if (p.amoled != amoledApplied || p.accent != accentApplied) { recreate(); return }
         GpsService.startIfIdle(this)
         TapService.joinHotspot()
+        PhoneMedia.start(this)
+        PhoneMedia.onChange = { renderNowPlaying() }
         handler.post(tick)
     }
 
-    override fun onPause() { super.onPause(); handler.removeCallbacks(tick) }
+    override fun onPause() { super.onPause(); handler.removeCallbacks(tick); PhoneMedia.onChange = null }
+
+    private var seeking = false
+    private var shownArt: android.graphics.Bitmap? = null
+
+    private fun setupNowPlaying() {
+        fun tap(id: Int, c: String, extra: org.json.JSONObject.() -> Unit = {}) =
+            findViewById<View>(id).setOnClickListener { PhoneMedia.cmd(c, extra) }
+        tap(R.id.npPrev, "prev"); tap(R.id.npNext, "next"); tap(R.id.npPlay, "toggle")
+        tap(R.id.npVolDown, "vol") { put("d", -1) }; tap(R.id.npVolUp, "vol") { put("d", 1) }
+        findViewById<View>(R.id.npLibrary).setOnClickListener { startActivity(Intent(this, LibraryActivity::class.java)) }
+        findViewById<Slider>(R.id.npSeek).addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
+            override fun onStartTrackingTouch(s: Slider) { seeking = true }
+            override fun onStopTrackingTouch(s: Slider) { seeking = false; PhoneMedia.cmd("seek") { put("pos", s.value.toLong()) } }
+        })
+    }
+
+    private fun clock(ms: Long) = (ms / 1000).let { "%d:%02d".format(it / 60, it % 60) }
+
+    private fun renderNowPlaying() {
+        val np = PhoneMedia.np; val has = PhoneMedia.hasTrack
+        // Main focus while the phone streams: bigger art.
+        val streaming = StreamReceiver.running && SystemClock.elapsedRealtime() - StreamReceiver.lastAt <= 2000
+        findViewById<View>(R.id.npArtBox).layoutParams.let { val px = ((if (streaming) 260 else 200) * resources.displayMetrics.density).toInt()
+            if (it.width != px) { it.width = px; it.height = px; findViewById<View>(R.id.npArtBox).requestLayout() } }
+        findViewById<TextView>(R.id.npLabel).text = if (has) "Now playing on phone, ${np.optString("app")}" else "Now playing"
+        findViewById<TextView>(R.id.npTitle).text = when { !PhoneMedia.connected -> "Phone not connected"; has -> np.optString("title"); else -> "Nothing playing" }
+        findViewById<TextView>(R.id.npArtist).text = when {
+            !PhoneMedia.connected -> "Open CarApp on the phone and allow notification access"
+            has -> listOf(np.optString("artist"), np.optString("album")).filter { it.isNotEmpty() }.joinToString("  ")
+            else -> "Start music on the phone" }
+        if (shownArt !== PhoneMedia.art) { shownArt = PhoneMedia.art; findViewById<ImageView>(R.id.npArt).setImageBitmap(shownArt) }
+        findViewById<MaterialButton>(R.id.npPlay).setIconResource(if (PhoneMedia.playing) R.drawable.ic_pause else R.drawable.ic_play)
+        val dur = np.optLong("dur"); val pos = PhoneMedia.position()
+        findViewById<Slider>(R.id.npSeek).apply {
+            isEnabled = has && dur > 0
+            if (!seeking) { valueTo = maxOf(dur, 1).toFloat(); value = pos.coerceIn(0, maxOf(dur, 1)).toFloat() }
+        }
+        findViewById<TextView>(R.id.npPos).text = if (dur > 0) clock(pos) else ""
+        findViewById<TextView>(R.id.npDur).text = if (dur > 0) clock(dur) else ""
+        findViewById<TextView>(R.id.npVol).text = if (PhoneMedia.connected) "Phone volume ${np.optInt("vol")} of ${np.optInt("volMax")}" else ""
+        for (id in intArrayOf(R.id.npPrev, R.id.npPlay, R.id.npNext, R.id.npVolDown, R.id.npVolUp, R.id.npLibrary))
+            findViewById<View>(id).isEnabled = PhoneMedia.connected
+    }
 
     override fun onRequestPermissionsResult(rc: Int, perms: Array<out String>, res: IntArray) {
         super.onRequestPermissionsResult(rc, perms, res)
@@ -83,6 +133,7 @@ class DashboardActivity : AppCompatActivity() {
     private fun dot(id: Int, color: Int) { findViewById<View>(id).backgroundTintList = ColorStateList.valueOf(color) }
 
     private fun render() {
+        renderNowPlaying()
         val miss = missing()
         // The accessibility service is what turns Wi-Fi on and joins the phone hotspot.
         val a11y = (android.provider.Settings.Secure.getString(contentResolver,

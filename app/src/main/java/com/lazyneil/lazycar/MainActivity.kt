@@ -220,6 +220,22 @@ class MainActivity : AppCompatActivity() {
                 }
                 card.visibility = View.VISIBLE
             }
+            !com.lazyneil.lazycar.media.MediaListener.granted(this) -> {
+                title.text = "Tablet controls need notification access"
+                body.text = "1. Tap Open settings\n" +
+                    "2. Turn on CarApp media control\n" +
+                    "3. The tablet can then show and control what plays here"
+                btn.text = "Open settings"
+                btn.setOnClickListener { startActivity(com.lazyneil.lazycar.media.MediaListener.settingsIntent()) }
+                card.visibility = View.VISIBLE
+            }
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED -> {
+                title.text = "Music library permission"
+                body.text = "Lets the tablet browse the songs stored on this phone"
+                btn.text = "Grant permission"
+                btn.setOnClickListener { ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_MEDIA_AUDIO), 2) }
+                card.visibility = View.VISIBLE
+            }
             else -> card.visibility = View.GONE
         }
     }

@@ -20,6 +20,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Phone music library for the tablet's Library screen -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_MOCK_LOCATION" tools:ignore="MockLocation,ProtectedPermissions" />
 
     <!-- Reverse camera (tablet). AUSBC needs CAMERA even for UVC, the webcam mic needs RECORD_AUDIO. -->
@@ -28,6 +30,13 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <queries>
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="audio/*" />
+        </intent>
         <package android:name="com.andrerinas.wirelesshelper" />
         <package android:name="com.andrerinas.headunitrevived" />
         <package android:name="com.google.android.projection.gearhead" />
@@ -192,6 +201,24 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- Tablet controls the phone player: listener grant = access to every media session -->
+        <service
+            android:name=".media.MediaListener"
+            android:exported="true"
+            android:label="CarApp media control"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+        <receiver
+            android:name=".media.PhoneMedia$Button"
+            android:exported="false" />
+        <activity
+            android:name=".media.LibraryActivity"
+            android:exported="false"
+            android:parentActivityName=".DashboardActivity" />
 
         <!-- Tablet speaker over Wi-Fi: phone captures media audio, tablet plays it -->
         <activity

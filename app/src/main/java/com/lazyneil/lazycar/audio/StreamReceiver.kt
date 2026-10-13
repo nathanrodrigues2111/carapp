@@ -98,9 +98,8 @@ class StreamReceiver : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         getSystemService(NotificationManager::class.java)
             .createNotificationChannel(NotificationChannel("speaker", "Tablet speaker", NotificationManager.IMPORTANCE_LOW))
-        startForeground(47475, Notification.Builder(this, "speaker").setContentTitle("Tablet speaker")
-            .setContentText("Ready for phone audio").setSmallIcon(R.drawable.ic_car_glyph).setOngoing(true).build(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        startForeground(47475, com.lazyneil.lazycar.media.PhoneMedia.notification(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        com.lazyneil.lazycar.media.PhoneMedia.start(this)
         if (alive) return START_STICKY
         alive = true; running = true
         try { start() } catch (e: Exception) { Log.e("LazyCar", "speaker receive", e); stopSelf() }

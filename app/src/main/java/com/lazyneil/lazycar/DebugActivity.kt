@@ -99,6 +99,17 @@ class DebugActivity : AppCompatActivity() {
         if (tablet) rows += Row("Rear camera", ::camera,
             listOf("Open preview" to { startActivity(Intent(this, RearActivity::class.java)) }))
         else rows += Row("Speaker and Wi-Fi stream", ::audio, listOf("Refresh" to { loadA2dp() }))
+        rows += if (tablet) Row("Phone media control", {
+            val m = com.lazyneil.lazycar.media.PhoneMedia
+            if (m.connected) St.PASS to "Connected to ${m.phone}" + (if (m.hasTrack) ", ${m.np.optString("app")}: ${m.np.optString("title")}" else ", nothing playing")
+            else St.WAITING to "Looking for the phone on Wi-Fi" })
+        else Row("Media control for the tablet", {
+            val m = com.lazyneil.lazycar.media.MediaListener
+            when {
+                !m.granted(this) -> St.FAIL to "Notification access off, the tablet cannot see or control the player"
+                !m.bound -> St.WAITING to "Granted, waiting for Android to start the listener"
+                else -> St.PASS to "Listening, ${m.clients} tablet(s), player ${m.player.ifEmpty { "none" }}"
+            } }, fix = com.lazyneil.lazycar.media.MediaListener.settingsIntent())
         rows += Row("Accessibility service", ::a11y, fix = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         rows += Row("Battery optimisation", ::battery, fix = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         if (tablet) rows += Row("Mock location app", ::mock, fix = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
