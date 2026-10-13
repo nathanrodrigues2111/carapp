@@ -155,7 +155,8 @@ class StreamReceiver : Service() {
                 if (e > 50 && depthMs - Wire.CHUNK_MS >= targetMs) { dropped++; errMs = 0.0; continue }
                 if (e < -50) { write(ShortArray(((-e).coerceAtMost(500.0) * Wire.RATE / 1000).toInt() * 2)); putBack(c); errMs = 0.0; continue }
                 errMs = errMs * 0.98 + e * 0.02
-                val r = if (low) 0.995 else if (abs(errMs) < 1) 1.0 else 1 + (errMs / 2000).coerceIn(-0.005, if (depthMs < targetMs + 10) 0.0 else 0.005)
+                // Drift only: at most 500 ppm. Big errors take the jump above instead of pinning the resampler.
+                val r = if (low) 0.9995 else if (abs(errMs) < 1) 1.0 else 1 + (errMs / 20000).coerceIn(-0.0005, if (depthMs < targetMs + 10) 0.0 else 0.0005)
                 ppm = ((r - 1) * 1e6).toInt()
                 write(soften(rs.process(c.pcm, r)))
                 last = c.pcm; fades = 0
@@ -198,7 +199,8 @@ class StreamReceiver : Service() {
         val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; receiveBufferSize = 1 shl 20; bind(InetSocketAddress(Wire.TABLET_PORT)) }
         socket = s
         val ctx = this
-        acousticMs = TabletSpeaker.acoustic(ctx).toDouble()
+        // An older build let this run away to the clamp; anything beyond the new bound restarts from 0.
+        acousticMs = TabletSpeaker.acoustic(ctx).toDouble().let { if (abs(it) > Acoustic.MAX_MS) { TabletSpeaker.saveAcoustic(ctx, 0); 0.0 } else it }
         synchronized(outputs) {
             outputs.clear()
             outputs += Output("speaker", AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, ctx) { acousticMs + TabletSpeaker.delayMs(ctx) }

@@ -167,19 +167,20 @@ object Ui {
 
                 val bt = if (tablet) PhoneMedia.connected
                     else am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
-                jblChip?.text = if (tablet) (if (bt) "Via phone" else "Phone offline") else if (bt) "Connected" else "Not connected"
+                val dev = (jblChip?.tag as? String).orEmpty()
+                jblChip?.text = (if (bt) "Connected" else "Not connected") + if (dev.isNotEmpty()) ", $dev" else ""
                 dot(jblDot, if (bt) GREEN else off, bt)
 
                 val on = TabletSpeaker.enabled(a)
-                val live: Boolean; val waiting: Boolean; val ms: Int
+                val live: Boolean; val waiting: Boolean
                 if (tablet) {
                     live = StreamReceiver.running && SystemClock.elapsedRealtime() - StreamReceiver.lastAt <= 2000
-                    waiting = StreamReceiver.running; ms = StreamReceiver.rttMs.toInt()
+                    waiting = StreamReceiver.running
                 } else {
                     live = StreamSender.running && StreamSender.tablet.isNotEmpty()
-                    waiting = StreamSender.running; ms = StreamSender.outMs
+                    waiting = StreamSender.running
                 }
-                tabChip?.text = when { !on -> "Off"; live -> "Live, $ms ms"; waiting -> "Waiting"; tablet -> "Idle"; else -> "Starts with GO" }
+                tabChip?.text = when { !on -> "Off"; live -> "Connected"; waiting -> "Waiting"; else -> "Starts with GO" }
                 dot(tabDot, when { live -> GREEN; on && waiting -> AMBER; else -> off }, live)
                 root.postDelayed(this, 500)
             }

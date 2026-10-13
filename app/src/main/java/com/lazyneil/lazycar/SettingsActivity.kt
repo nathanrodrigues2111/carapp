@@ -164,8 +164,8 @@ class SettingsActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, on -> gps.launch(this@SettingsActivity, if (on) target else "stop") }
         }
         findViewById<TextView>(R.id.gpsCaption).text = if (tablet)
-            "Receives the phone's location over its hotspot and feeds it to every app"
-        else "Broadcasts this phone's location to the head unit tablet over the hotspot"
+            "Uses the phone's location over Wi-Fi, for every app on the tablet"
+        else "Sends this phone's location to the tablet over Wi-Fi"
         com.lazyneil.lazycar.audio.TabletSpeaker.addSettings(this, findViewById(R.id.audioAnchor))
     }
 
@@ -324,7 +324,7 @@ class SettingsActivity : AppCompatActivity() {
         val icon = findViewById<ImageView>(R.id.outJblIcon)
         fun show() {
             val d = r.audio.firstOrNull { it.first == p.mac1 }
-            name.text = d?.second ?: p.name1.ifEmpty { "JBL (Bluetooth)" }
+            findViewById<TextView>(R.id.outJblChip).tag = d?.second ?: p.name1   // device name, shown with the status
             icon.setImageResource(d?.third ?: BtDevices.ICON)
         }
         show()
@@ -369,10 +369,10 @@ class SettingsActivity : AppCompatActivity() {
             if (content.getChildAt(i + 1) !is android.widget.LinearLayout || h.visibility != View.VISIBLE || h.id == R.id.versionText) continue
             nav.addView(TextView(this).apply {
                 text = h.text; textSize = 16f; setTextColor(Ui.attr(this@SettingsActivity, R.attr.carText))
-                gravity = android.view.Gravity.CENTER_VERTICAL; minHeight = dp(56); setPadding(dp(16), 0, dp(16), 0)
+                gravity = android.view.Gravity.CENTER_VERTICAL; minHeight = dp(52); setPadding(dp(16), 0, dp(16), 0)
                 setBackgroundResource(R.drawable.bg_pill_ripple)
                 setOnClickListener { scroll.smoothScrollTo(0, h.top) }
-            }, android.widget.LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(4) })
+            }, android.widget.LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(4) })
         }
     }
 
@@ -388,8 +388,7 @@ class SettingsActivity : AppCompatActivity() {
             g.error.isNotEmpty() -> g.error
             g.mode == "idle" -> "Off"
             age < 0 -> if (send) "Waiting for a GPS fix" else "Waiting for the phone. Is its hotspot on?"
-            else -> "${if (age <= 5) "Live" else "Last fix ${age}s ago"}. ${g.acc.toInt()} m, ${(g.speed * 3.6f).toInt()} km/h" +
-                (if (g.sats >= 0) ", ${g.sats} satellites" else "") + (if (g.source.isNotEmpty()) ". ${g.source}" else "")
+            else -> "GPS: ${g.source.ifEmpty { "phone" }.lowercase()}, ${g.acc.toInt()} m" + if (age > 5) ", last fix ${age}s ago" else ""
         }
         if (!Role.isTablet(this)) return
         val cam = getSystemService(android.hardware.usb.UsbManager::class.java).deviceList.values

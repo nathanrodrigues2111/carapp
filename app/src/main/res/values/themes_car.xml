@@ -70,6 +70,10 @@
         <item name="android:stepSize">1</item>
         <item name="labelBehavior">gone</item>
         <item name="tickVisible">false</item>
+        <!-- One continuous pill: no gap around the thumb, no stop dot, slim thumb -->
+        <item name="thumbTrackGapSize">0dp</item>
+        <item name="trackStopIndicatorSize">0dp</item>
+        <item name="thumbWidth">4dp</item>
     </style>
     <style name="CarSeek" parent="Widget.Material3Expressive.Slider.Xsmall">
         <item name="android:layout_width">match_parent</item>

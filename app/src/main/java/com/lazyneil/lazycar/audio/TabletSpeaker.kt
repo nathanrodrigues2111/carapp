@@ -35,6 +35,17 @@ object TabletSpeaker {
         else -> "on, connected"
     }
 
+    /** One line for Settings; the full numbers are in Debug. */
+    fun line(ctx: Context): String = if (Role.isTablet(ctx)) {
+        val r = StreamReceiver
+        when {
+            !r.running -> "Off"
+            SystemClock.elapsedRealtime() - r.lastAt > 2000 -> "Waiting for the phone"
+            r.outputs.all { kotlin.math.abs(it.errMs) < 20 } -> "In sync"
+            else -> "Syncing..."
+        }
+    } else summary(ctx).replaceFirstChar { it.uppercase() }
+
     fun status(ctx: Context): String = if (Role.isTablet(ctx)) {
         val r = StreamReceiver
         when {
@@ -89,7 +100,7 @@ object TabletSpeaker {
         box.addView(status)
         if (tablet) {
             val label = caption("")
-            fun show(v: Int) { label.text = "Sync trim ${if (v > 0) "+" else ""}$v ms on top of auto sync (positive plays the tablet later)" }
+            fun show(v: Int) { label.text = "Sync trim ${if (v > 0) "+" else ""}$v ms" }
             show(delayMs(a))
             box.addView(label)
             box.addView(Slider(a).apply {
@@ -103,7 +114,7 @@ object TabletSpeaker {
         }
         parent.addView(box, parent.indexOfChild(anchor) + 1)
         val tick = object : Runnable {
-            override fun run() { status.text = status(a); if (box.isAttachedToWindow || !a.isFinishing) box.postDelayed(this, 1000) }
+            override fun run() { status.text = line(a); if (box.isAttachedToWindow || !a.isFinishing) box.postDelayed(this, 1000) }
         }
         box.post(tick)
     }

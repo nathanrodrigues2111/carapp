@@ -20,18 +20,20 @@
         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
             android:layout_marginStart="@dimen/sp4" android:orientation="vertical">
             <TextView android:id="@+id/outJblName" style="@style/T.Title" android:layout_width="match_parent"
-                android:layout_height="wrap_content" android:text="JBL (Bluetooth)" />
+                android:layout_height="wrap_content" android:text="JBL" />
             <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center_vertical">
                 <View android:id="@+id/outJblDot" style="@style/Dot" android:layout_width="8dp" android:layout_height="8dp" />
                 <TextView android:id="@+id/outJblChip" style="@style/T.Label" android:layout_width="wrap_content"
                     android:layout_height="wrap_content" android:layout_marginStart="@dimen/sp2" />
             </LinearLayout>
         </LinearLayout>
-        <TextView android:id="@+id/outJblPct" style="@style/T.Label" android:layout_width="56dp"
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+        <com.google.android.material.slider.Slider android:id="@+id/outJblSlider" style="@style/CarSlider" android:layout_width="0dp"
+            android:layout_weight="1" android:contentDescription="JBL volume" app:trackIconActiveStart="@drawable/ic_speaker" />
+        <TextView android:id="@+id/outJblPct" style="@style/T.Label" android:layout_width="48dp"
             android:layout_height="wrap_content" android:gravity="end" android:textColor="?attr/carText" />
     </LinearLayout>
-    <com.google.android.material.slider.Slider android:id="@+id/outJblSlider" style="@style/CarSlider"
-        android:contentDescription="JBL volume" app:trackIconActiveStart="@drawable/ic_speaker" />
 
     <LinearLayout android:layout_width="match_parent" android:layout_height="64dp" android:layout_marginTop="@dimen/sp2"
         android:gravity="center_vertical" android:orientation="horizontal">
@@ -40,16 +42,18 @@
         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
             android:layout_marginStart="@dimen/sp4" android:orientation="vertical">
             <TextView style="@style/T.Title" android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="Tablet (Wi-Fi)" />
+                android:text="Tablet speaker" />
             <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center_vertical">
                 <View android:id="@+id/outTabDot" style="@style/Dot" android:layout_width="8dp" android:layout_height="8dp" />
                 <TextView android:id="@+id/outTabChip" style="@style/T.Label" android:layout_width="wrap_content"
                     android:layout_height="wrap_content" android:layout_marginStart="@dimen/sp2" />
             </LinearLayout>
         </LinearLayout>
-        <TextView android:id="@+id/outTabPct" style="@style/T.Label" android:layout_width="56dp"
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+        <com.google.android.material.slider.Slider android:id="@+id/outTabSlider" style="@style/CarSlider" android:layout_width="0dp"
+            android:layout_weight="1" android:contentDescription="Tablet speaker volume" app:trackIconActiveStart="@drawable/ic_tablet" />
+        <TextView android:id="@+id/outTabPct" style="@style/T.Label" android:layout_width="48dp"
             android:layout_height="wrap_content" android:gravity="end" android:textColor="?attr/carText" />
     </LinearLayout>
-    <com.google.android.material.slider.Slider android:id="@+id/outTabSlider" style="@style/CarSlider"
-        android:contentDescription="Tablet volume" app:trackIconActiveStart="@drawable/ic_tablet" />
 </LinearLayout>

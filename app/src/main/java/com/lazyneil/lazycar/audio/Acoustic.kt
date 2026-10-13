@@ -30,7 +30,10 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
         const val N = 16384        // 2 s of mic at 8 kHz
         const val L = 4096         // +-512 ms of lag search
         const val F = 32768
+        const val MAX_MS = 120.0   // total acoustic correction on top of the measured BT latency
     }
+
+    private val seen = mutableListOf<Double>()   // consecutive confident residuals
 
     fun start() = Thread({ loop() }, "speaker-acoustic").apply { isDaemon = true; start() }
 
@@ -90,12 +93,22 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
             val res = lag(kj) - lag(kt)
             val msg = "peaks tablet ${"%.1f".format(lag(kt))} ms (x${"%.0f".format(st)}), other ${"%.1f".format(lag(kj))} ms (x${"%.0f".format(sj)})"
             if (st < 6 || abs(lag(kt)) > 200) { note = "no clear tablet peak, $msg"; residualMs = Double.NaN }
-            else if (sj < 6 || c[kj] < 0.2 * c[kt]) { note = "single peak, in sync within 20 ms, $msg"; residualMs = 0.0 }
+            else if (sj < 6 || c[kj] < 0.2 * c[kt]) { note = "single peak, in sync within 20 ms, $msg"; residualMs = 0.0; seen.clear() }
             else {
+                // The JBL peak must clearly beat the next candidate, and agree over 3 runs, before it moves anything.
+                val k3 = c.indices.filter { abs(it - kt) > SR / 50 && abs(it - kj) > SR / 50 }.maxBy { c[it] }
                 residualMs = res
-                StreamReceiver.acousticMs = (StreamReceiver.acousticMs + 0.8 * res).coerceIn(-500.0, 800.0)
-                TabletSpeaker.saveAcoustic(ctx, StreamReceiver.acousticMs.toInt())
-                note = "JBL ${"%.0f".format(res)} ms vs tablet, corrected, $msg"
+                if (c[kj] < 2 * c[k3]) { note = "ambiguous JBL peak, ignored, $msg"; seen.clear() }
+                else {
+                    seen += res; if (seen.size > 3) seen.removeAt(0)
+                    if (seen.size == 3 && seen.max() - seen.min() <= 10) {
+                        val step = (0.8 * seen.sorted()[1]).coerceIn(-60.0, 60.0)
+                        StreamReceiver.acousticMs = (StreamReceiver.acousticMs + step).coerceIn(-MAX_MS, MAX_MS)
+                        TabletSpeaker.saveAcoustic(ctx, StreamReceiver.acousticMs.toInt())
+                        seen.clear()
+                        note = "JBL ${"%.0f".format(res)} ms vs tablet, corrected ${"%+.0f".format(step)} ms, $msg"
+                    } else note = "JBL ${"%.0f".format(res)} ms vs tablet, confirming (${seen.size} of 3), $msg"
+                }
             }
             Log.e("LazyCar", "acoustic: $note acoustic=${"%.0f".format(StreamReceiver.acousticMs)}")
         } finally { try { rec.stop() } catch (_: Exception) {}; rec.release() }
