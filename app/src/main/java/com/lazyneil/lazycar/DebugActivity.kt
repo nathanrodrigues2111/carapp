@@ -192,7 +192,7 @@ class DebugActivity : AppCompatActivity() {
             return St.FAIL to "Location permission missing"
         if (GpsService.mode != "send") return St.FAIL to "Sharing is off" + GpsService.error.let { if (it.isEmpty()) "" else ", $it" }
         val at = GpsService.lastAt
-        if (at == 0L || ageSec(at) > 10) return St.WAITING to "Fix: no, waiting for GPS"
+        if (at == 0L || ageSec(at) > 60) return St.WAITING to "Fix: no, waiting for GPS or network location"
         val lm = getSystemService(LocationManager::class.java)
         val gpsFresh = try { lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { ageSec(it.elapsedRealtimeNanos / 1_000_000) < 5 } == true } catch (e: SecurityException) { false }
         val sats = GpsService.sats.takeIf { it >= 0 }?.let { ", $it sats" } ?: ""
