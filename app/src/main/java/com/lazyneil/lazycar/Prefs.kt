@@ -23,6 +23,12 @@ class Prefs(ctx: Context) {
         set(v) = put("launchA", v)
     var launchB: String get() = sp.getString("launchB", null) ?: if (tablet) "com.spotify.music" else ""
         set(v) = put("launchB", v)
+    // "none", "one" (launchA only) or "split" (launchA left, launchB right). Older installs infer it.
+    var launchMode: String get() = sp.getString("launchMode", null)
+            ?: when { launchB.isNotEmpty() -> "split"; launchA.isNotEmpty() -> "one"; else -> "none" }
+        set(v) = put("launchMode", v)
+    // Left app share of the width in split mode; 65 matches the launcher's saved pair.
+    var splitRatio: Int get() = i("splitRatio", 65); set(v) = sp.edit().putInt("splitRatio", v).apply()
     // Tablet joins this phone hotspot on start (saved network on the tablet).
     var hotspotSsid: String get() = sp.getString("hotspotSsid", null) ?: "Nathan's Oneplus"; set(v) = put("hotspotSsid", v)
     private fun b(k: String, def: Boolean) = sp.getBoolean(k, def)

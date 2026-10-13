@@ -175,15 +175,19 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun bindLaunch() {
-        fun render(iconId: Int, valueId: Int, pkg: String, empty: String) {
+        fun render(iconId: Int, valueId: Int, pkg: String, prefix: String) {
             val app = apps.firstOrNull { it.first == pkg }
             findViewById<ImageView>(iconId).setImageDrawable(app?.third)
-            findViewById<TextView>(valueId).text = app?.second ?: empty
+            findViewById<TextView>(valueId).text = prefix + (app?.second ?: "choose an app")
         }
         fun renderAll() {
-            render(R.id.launchAIcon, R.id.launchAValue, p.launchA, "None")
-            render(R.id.launchBIcon, R.id.launchBValue, p.launchB, "Second app in split screen: none")
-            findViewById<View>(R.id.launchBRow).visibility = if (p.launchA.isEmpty()) View.GONE else View.VISIBLE
+            val mode = p.launchMode
+            val split = mode == "split"
+            render(R.id.launchAIcon, R.id.launchAValue, p.launchA, if (split) "Left: " else "")
+            render(R.id.launchBIcon, R.id.launchBValue, p.launchB, "Right: ")
+            findViewById<View>(R.id.launchApps).visibility = if (mode == "none") View.GONE else View.VISIBLE
+            findViewById<View>(R.id.launchBRow).visibility = if (split) View.VISIBLE else View.GONE
+            findViewById<View>(R.id.splitExtra).visibility = if (split) View.VISIBLE else View.GONE
         }
         fun pick(title: String, set: (String) -> Unit) {
             val adapter = object : android.widget.ArrayAdapter<Triple<String, String, android.graphics.drawable.Drawable?>>(this, 0, apps) {
@@ -200,27 +204,37 @@ class SettingsActivity : AppCompatActivity() {
             }
             MaterialAlertDialogBuilder(this).setTitle(title)
                 .setAdapter(adapter) { d, w -> set(apps[w].first); renderAll(); d.dismiss() }
-                .setNeutralButton("None") { _, _ -> set(""); renderAll() }
                 .show()
         }
-        renderAll()
-        // The user's saved launcher pairs, offered one tap away when installed.
+        val modes = mapOf(R.id.modeNone to "none", R.id.modeOne to "one", R.id.modeSplit to "split")
+        findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.launchMode).apply {
+            check(modes.entries.first { it.value == p.launchMode }.key)
+            addOnButtonCheckedListener { _, id, checked -> if (checked) { p.launchMode = modes.getValue(id); renderAll() } }
+        }
+        val ratios = mapOf(R.id.ratio50 to 50, R.id.ratio65 to 65, R.id.ratio35 to 35)
+        findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.ratioGroup).apply {
+            check(ratios.entries.firstOrNull { it.value == p.splitRatio }?.key ?: R.id.ratio65)
+            addOnButtonCheckedListener { _, id, checked -> if (checked) p.splitRatio = ratios.getValue(id) }
+        }
+        findViewById<View>(R.id.swapBtn).setOnClickListener { val a = p.launchA; p.launchA = p.launchB; p.launchB = a; renderAll() }
+        // The user's saved launcher pairs, one tap away when installed.
         val presets = listOf("Maps + Spotify" to ("com.google.android.apps.maps" to "com.spotify.music"),
             "Maps + Poweramp" to ("com.google.android.apps.maps" to "com.maxmpz.audioplayer"))
             .filter { (_, pr) -> apps.any { it.first == pr.first } && apps.any { it.first == pr.second } }
         findViewById<View>(R.id.launchPresetRow).apply {
             visibility = if (presets.isEmpty()) View.GONE else View.VISIBLE
             setOnClickListener {
-                MaterialAlertDialogBuilder(this@SettingsActivity).setTitle("Split screen pair")
+                MaterialAlertDialogBuilder(this@SettingsActivity).setTitle("Split pair preset")
                     .setItems(presets.map { it.first }.toTypedArray()) { _, w ->
                         p.launchA = presets[w].second.first; p.launchB = presets[w].second.second; renderAll()
                     }.show()
             }
         }
         findViewById<View>(R.id.launchARow).setOnClickListener {
-            pick("App to open") { p.launchA = it; if (it.isEmpty()) p.launchB = "" }
+            pick(if (p.launchMode == "split") "Left app" else "App to open") { p.launchA = it }
         }
-        findViewById<View>(R.id.launchBRow).setOnClickListener { pick("Second app, split screen") { p.launchB = it } }
+        findViewById<View>(R.id.launchBRow).setOnClickListener { pick("Right app") { p.launchB = it } }
+        renderAll()
     }
 
     private fun refreshA11y() {

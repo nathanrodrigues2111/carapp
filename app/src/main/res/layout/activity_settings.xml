@@ -222,7 +222,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Launch on widget tap: one app, or two in split screen -->
+            <!-- Widget tap opens: nothing, one app, or a split screen pair -->
             <com.google.android.material.card.MaterialCardView
                 style="@style/CardBox"
                 android:layout_marginBottom="12dp">
@@ -232,12 +232,43 @@
                     android:orientation="vertical"
                     android:paddingHorizontal="16dp"
                     android:paddingVertical="12dp">
-                    <TextView style="@style/CardLabel" android:text="Launch on widget tap" />
-                    <LinearLayout android:id="@+id/launchPresetRow" style="@style/Row56" android:layout_marginTop="4dp">
-                        <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:text="Split screen presets" />
-                        <ImageView style="@style/ChevronIcon" />
-                    </LinearLayout>
-                    <LinearLayout android:id="@+id/launchARow" style="@style/Row56" android:layout_marginTop="4dp">
+                    <TextView style="@style/CardLabel" android:text="Widget tap opens" />
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/launchMode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/modeNone"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="None" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/modeOne"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="One app" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/modeSplit"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Split pair" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                    <LinearLayout
+                        android:id="@+id/launchApps"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="vertical">
+                    <LinearLayout android:id="@+id/launchARow" style="@style/Row56">
                         <FrameLayout style="@style/IconCircle">
                             <ImageView android:id="@+id/launchAIcon" style="@style/RowIcon" />
                         </FrameLayout>
@@ -250,6 +281,53 @@
                         </FrameLayout>
                         <TextView android:id="@+id/launchBValue" style="@style/RowTitle" />
                         <ImageView style="@style/ChevronIcon" />
+                    </LinearLayout>
+                        <LinearLayout
+                            android:id="@+id/splitExtra"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/swapBtn"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Swap sides" />
+                            <TextView style="@style/CardLabel" android:layout_marginTop="12dp" android:text="Split ratio, left : right" />
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/ratioGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/ratio50"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="50 : 50" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/ratio65"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="65 : 35" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/ratio35"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="35 : 65" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                            <LinearLayout android:id="@+id/launchPresetRow" style="@style/Row56" android:layout_marginTop="4dp">
+                                <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:text="Presets" />
+                                <ImageView style="@style/ChevronIcon" />
+                            </LinearLayout>
+                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

@@ -66,10 +66,11 @@ class TapService : AccessibilityService() {
         /** Widget tap: open the chosen app, or two apps in split screen. */
         fun launchApps(ctx: Context) {
             val p = Prefs(ctx)
-            if (p.launchA.isEmpty()) return
+            val mode = p.launchMode
+            if (mode == "none" || p.launchA.isEmpty()) return
             val svc = instance
-            if (svc == null) startPkg(ctx, p.launchA, 0)   // no accessibility: plain launch, no split
-            else svc.h.post { svc.launchPair(p.launchA, p.launchB) }
+            if (mode == "one" || p.launchB.isEmpty() || svc == null) startPkg(ctx, p.launchA, 0)   // no accessibility: no split
+            else svc.h.post { svc.launchPair(p.launchA, p.launchB, p.splitRatio) }
         }
 
         private fun startPkg(ctx: Context, pkg: String, flags: Int) {
@@ -87,8 +88,7 @@ class TapService : AccessibilityService() {
     // which gives exactly the user's saved split (sides and ratio). Apps cannot start a split
     // pair themselves, the shell API behind it is launcher only. Without a matching pair icon,
     // try LAUNCH_ADJACENT, then the split screen global action.
-    private fun launchPair(a: String, b: String) {
-        if (b.isEmpty()) { startPkg(this, a, 0); return }
+    private fun launchPair(a: String, b: String, ratio: Int) {
         val pm = packageManager
         fun label(pkg: String) = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (e: Exception) { pkg }
         val descs = setOf("App pair: ${label(a)} and ${label(b)}", "App pair: ${label(b)} and ${label(a)}")
@@ -101,16 +101,17 @@ class TapService : AccessibilityService() {
                 }
                 if (icon != null) {
                     val ok = (if (icon.isClickable) icon else clickableAncestor(icon) ?: icon).performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    android.util.Log.e("LazyCar", "split: tapped launcher pair '${icon.contentDescription}' ok=$ok"); return
+                    android.util.Log.e("LazyCar", "split: tapped launcher pair '${icon.contentDescription}' ok=$ok")
+                    h.postDelayed({ arrangeSplit(a, ratio, swapped = false, tries = 0) }, 1500); return
                 }
                 if (++tries < 10) { h.postDelayed(this, 300); return }
                 android.util.Log.e("LazyCar", "split: no launcher pair icon, launching side by side")
-                launchAdjacent(a, b)
+                launchAdjacent(a, b, ratio)
             }
         }, 700)
     }
 
-    private fun launchAdjacent(a: String, b: String) {
+    private fun launchAdjacent(a: String, b: String, ratio: Int) {
         startPkg(this, a, 0)
         val adjacent = Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
         h.postDelayed({ startPkg(this, b, adjacent) }, 1500)
@@ -120,8 +121,47 @@ class TapService : AccessibilityService() {
             startPkg(this, a, 0)
             h.postDelayed({ performGlobalAction(GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN) }, 1200)
             h.postDelayed({ startPkg(this, b, adjacent) }, 2600)
-            h.postDelayed({ android.util.Log.e("LazyCar", "split: side by side=${inSplit()}") }, 4500)
+            h.postDelayed({ arrangeSplit(a, ratio, swapped = false, tries = 0) }, 4500)
         }, 3500)
+    }
+
+    /** The launcher pair keeps its own sides and ratio; fix both with divider gestures:
+     *  double-tap swaps the apps, a drag moves the divider (it snaps to 50/50, 2:1 or 1:2). */
+    private fun arrangeSplit(left: String, ratio: Int, swapped: Boolean, tries: Int) {
+        val apps = (windows ?: emptyList())
+            .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+            .mapNotNull { w -> w.root?.packageName?.toString()?.let { it to android.graphics.Rect().also { r -> w.getBoundsInScreen(r) } } }
+            .filter { it.first != "com.android.systemui" && it.second.height() > 300 }   // skip status bar chips
+            .distinctBy { it.first }
+        if (apps.size < 2) {
+            if (tries < 6) h.postDelayed({ arrangeSplit(left, ratio, swapped, tries + 1) }, 500)
+            else android.util.Log.e("LazyCar", "split: not side by side")
+            return
+        }
+        val l = apps.minBy { it.second.left }; val r = apps.maxBy { it.second.left }
+        val x = (l.second.right + r.second.left) / 2f; val y = l.second.exactCenterY()
+        android.util.Log.e("LazyCar", "split: windows ${apps.map { "${it.first} ${it.second.toShortString()}" }} divider x=$x y=$y")
+        if (l.first != left && !swapped) {
+            android.util.Log.e("LazyCar", "split: swapping sides")
+            gesture(listOf(tap(x, y, 0), tap(x, y, 140)))
+            h.postDelayed({ arrangeSplit(left, ratio, swapped = true, tries = 0) }, 1500); return
+        }
+        val target = r.second.right * ratio / 100f
+        if (kotlin.math.abs(x - target) > r.second.right * 0.05f) {
+            android.util.Log.e("LazyCar", "split: moving divider to $ratio%")
+            val path = android.graphics.Path().apply { moveTo(x, y); lineTo(target, y) }
+            gesture(listOf(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 700)))
+        }
+        h.postDelayed({ android.util.Log.e("LazyCar", "split: done, left=${l.first}") }, 1200)
+    }
+
+    private fun tap(x: Float, y: Float, at: Long) = android.accessibilityservice.GestureDescription.StrokeDescription(
+        android.graphics.Path().apply { moveTo(x, y) }, at, 50)
+
+    private fun gesture(strokes: List<android.accessibilityservice.GestureDescription.StrokeDescription>) {
+        val b = android.accessibilityservice.GestureDescription.Builder()
+        strokes.forEach { b.addStroke(it) }
+        dispatchGesture(b.build(), null, null)
     }
 
     private fun inSplit() = (windows ?: emptyList())
