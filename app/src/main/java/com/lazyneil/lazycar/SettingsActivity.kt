@@ -428,15 +428,8 @@ class SettingsActivity : AppCompatActivity() {
     private fun renderLive() {
         Accent.now(this).let { if (it != shownAccent) { shownAccent = it; Ui.paintAccent(findViewById(R.id.root), it) } }
         val g = com.lazyneil.lazycar.gps.GpsService
-        val age = if (g.lastAt == 0L) -1 else (android.os.SystemClock.elapsedRealtime() - g.lastAt) / 1000
-        val send = g.mode == "send"
-        val live = g.mode != "idle" && age in 0..5
-        Ui.status(findViewById(R.id.gpsLive), when {
-            g.error.isNotEmpty() -> g.error
-            g.mode == "idle" -> "Off"
-            live -> "Connected"
-            else -> if (send) "Searching for a GPS fix" else "Searching for the phone"
-        }, when { live -> Ui.GREEN; g.mode != "idle" -> Ui.AMBER; else -> Ui.attr(this, R.attr.carTextDim) })
+        val live = g.live()
+        Ui.status(findViewById(R.id.gpsLive), g.status(), when { live -> Ui.GREEN; g.mode != "idle" -> Ui.AMBER; else -> Ui.attr(this, R.attr.carTextDim) })
         if (!Role.isTablet(this)) return
         val cam = getSystemService(android.hardware.usb.UsbManager::class.java).deviceList.values
             .firstOrNull { com.lazyneil.lazycar.rear.UsbDevices.isVideoDevice(it) }

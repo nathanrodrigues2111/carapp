@@ -53,6 +53,19 @@ class GpsService : Service(), LocationListener {
         /** Seconds the tablet holds the last phone fix before handing back to its own location. */
         fun holdSec(ctx: Context) = prefs(ctx).getInt("holdSec", 30)
 
+        /** Fix still being shared: the phone repeats its last fix for 60 s, the tablet needs a packet within 5 s. */
+        fun live() = mode != "idle" && lastAt != 0L &&
+            SystemClock.elapsedRealtime() - lastAt <= if (mode == "send") 60000 else 5000
+
+        /** One status line for every screen. */
+        fun status() = when {
+            error.isNotEmpty() -> error
+            mode == "idle" -> "Off"
+            !live() -> if (mode == "send") "Searching for a GPS fix" else "Searching for the phone"
+            else -> (if (mode == "send") "Sharing" else "Receiving") +
+                (if (source == "Phone network") ", network only" else "") + ", ${acc.toInt()} m"
+        }
+
         fun startIfIdle(ctx: Context) {
             if (mode == "idle") autoMode(ctx).takeIf { it != "stop" }?.let { launch(ctx, it, save = false) }
         }
@@ -96,6 +109,10 @@ class GpsService : Service(), LocationListener {
             .createNotificationChannel(NotificationChannel("gps", "GPS sharing", NotificationManager.IMPORTANCE_LOW))
         mode = m; error = ""; lastAt = 0; sats = -1; peer = ""; packets = 0; source = ""; running = true
         startForeground(NOTIF_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        // Both ends: with the screen off the CPU and Wi-Fi radio sleep, the 1 Hz repeat stalls and fixes reach the tablet 20 to 30 s apart.
+        radio = getSystemService(WifiManager::class.java).createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "lazygps").apply { setReferenceCounted(false); acquire() }
+        wake = getSystemService(android.os.PowerManager::class.java)
+            .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "lazycar:gps").apply { setReferenceCounted(false); acquire() }
         try { if (m == "send") startSend() else startReceive() } catch (e: Exception) { error = e.message ?: e.toString() }
         return START_STICKY
     }
@@ -138,7 +155,10 @@ class GpsService : Service(), LocationListener {
     private fun startSend() {
         socket = DatagramSocket().apply { broadcast = true }
         lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
-        lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
+        // The provider/minTime overload asks fused for BALANCED, which indoors means one 100 m fix every 30 s.
+        lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER,
+            android.location.LocationRequest.Builder(1000L).setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY).build(),
+            mainExecutor, this)
         lm.registerGnssStatusCallback(gnss, android.os.Handler(Looper.getMainLooper()))
         tick.postDelayed(repeat, 1000)
     }
@@ -203,9 +223,6 @@ class GpsService : Service(), LocationListener {
         // Some Wi-Fi drivers drop broadcast frames without this lock.
         val wm = getSystemService(WifiManager::class.java)
         wifiLock = wm.createMulticastLock("lazygps").apply { setReferenceCounted(false); acquire() }
-        radio = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "lazygps").apply { setReferenceCounted(false); acquire() }
-        wake = getSystemService(android.os.PowerManager::class.java)
-            .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "lazycar:gps").apply { setReferenceCounted(false); acquire() }
         val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; soTimeout = 1000; bind(InetSocketAddress(PORT)) }
         socket = s
         val holdMs = holdSec(this) * 1000L
@@ -215,22 +232,15 @@ class GpsService : Service(), LocationListener {
                 try {
                     val pkt = DatagramPacket(buf, buf.size)
                     try { s.receive(pkt) } catch (_: java.net.SocketTimeoutException) {
-                        if (mocking && SystemClock.elapsedRealtime() - lastAt > holdMs) setMocking(false)
+                        val age = SystemClock.elapsedRealtime() - lastAt
+                        if (mocking && age > holdMs) setMocking(false)
+                        // Maps calls a fix older than ~2 s "GPS signal lost"; bridge short packet gaps with the last fix.
+                        else if (mocking && age < 5000) lastJ?.let { inject(it) }
                         continue
                     }
                     val j = JSONObject(String(pkt.data, 0, pkt.length))
                     setMocking(true)
-                    for (p in PROVIDERS) {
-                        lm.setTestProviderLocation(p, Location(p).apply {
-                            latitude = j.getDouble("lat"); longitude = j.getDouble("lon")
-                            altitude = j.optDouble("alt", 0.0); accuracy = j.optDouble("acc", 10.0).toFloat()
-                            speed = j.optDouble("speed", 0.0).toFloat(); bearing = j.optDouble("bearing", 0.0).toFloat()
-                            time = System.currentTimeMillis(); elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
-                            // Maps trusts a fix more when every accuracy field is present.
-                            verticalAccuracyMeters = accuracy * 1.5f; speedAccuracyMetersPerSecond = 0.5f
-                            bearingAccuracyDegrees = if (speed > 1f) 10f else 90f
-                        })
-                    }
+                    inject(j); lastJ = j
                     acc = j.optDouble("acc", 0.0).toFloat(); speed = j.optDouble("speed", 0.0).toFloat()
                     sats = j.optInt("sats", -1); peer = pkt.address.hostAddress ?: ""; error = ""
                     source = if (j.optString("src", "gps") == "gps") "Phone GPS" else "Phone network"
@@ -241,9 +251,26 @@ class GpsService : Service(), LocationListener {
         }
     }
 
+    private var lastJ: JSONObject? = null
+
+    // Fresh time and elapsedRealtimeNanos on every injection: the phone's clock and uptime mean nothing here.
+    private fun inject(j: JSONObject) {
+        for (p in PROVIDERS) {
+            lm.setTestProviderLocation(p, Location(p).apply {
+                latitude = j.getDouble("lat"); longitude = j.getDouble("lon")
+                altitude = j.optDouble("alt", 0.0); accuracy = j.optDouble("acc", 10.0).toFloat()
+                speed = j.optDouble("speed", 0.0).toFloat(); bearing = j.optDouble("bearing", 0.0).toFloat()
+                time = System.currentTimeMillis(); elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                // Maps trusts a fix more when every accuracy field is present.
+                verticalAccuracyMeters = accuracy * 1.5f; speedAccuracyMetersPerSecond = 0.5f
+                bearingAccuracyDegrees = if (speed > 1f) 10f else 90f
+            })
+        }
+    }
+
     private fun stopAll() {
         running = false
-        tick.removeCallbacks(repeat); last = null
+        tick.removeCallbacks(repeat); last = null; lastJ = null
         socket?.close(); socket = null
         wifiLock?.release(); wifiLock = null
         radio?.release(); radio = null

@@ -194,8 +194,7 @@ class DashboardActivity : AppCompatActivity() {
         }
         val off = Ui.attr(this, R.attr.carTextDim)
         val mode = GpsService.mode
-        val age = if (GpsService.lastAt == 0L) -1 else (SystemClock.elapsedRealtime() - GpsService.lastAt) / 1000
-        val live = mode != "idle" && age in 0..5
+        val live = GpsService.live()
         Ui.dot(findViewById(R.id.stGpsDot), when { live -> Ui.GREEN; mode != "idle" -> Ui.AMBER; else -> off }, live)
         val stream = StreamReceiver.running && SystemClock.elapsedRealtime() - StreamReceiver.lastAt <= 2000
         Ui.dot(findViewById(R.id.stStreamDot), when { stream -> Ui.GREEN; StreamReceiver.running -> Ui.AMBER; else -> off }, stream)

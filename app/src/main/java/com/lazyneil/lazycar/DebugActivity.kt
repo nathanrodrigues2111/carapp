@@ -197,12 +197,11 @@ class DebugActivity : AppCompatActivity() {
         if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED)
             return St.FAIL to "Location permission missing"
         if (GpsService.mode != "send") return St.FAIL to "Sharing is off" + GpsService.error.let { if (it.isEmpty()) "" else ", $it" }
-        val at = GpsService.lastAt
-        if (at == 0L || ageSec(at) > 60) return St.WAITING to "Fix: no, waiting for GPS or network location"
+        if (!GpsService.live()) return St.WAITING to "Fix: no, waiting for GPS or network location"
         val lm = getSystemService(LocationManager::class.java)
         val gpsFresh = try { lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { ageSec(it.elapsedRealtimeNanos / 1_000_000) < 5 } == true } catch (e: SecurityException) { false }
         val sats = GpsService.sats.takeIf { it >= 0 }?.let { ", $it sats" } ?: ""
-        return St.PASS to "Fix: yes, accuracy ${GpsService.acc.toInt()} m$sats, source ${GpsService.source.ifEmpty { if (gpsFresh) "Phone GPS" else "Phone network" }}, packets ${GpsService.packets}"
+        return St.PASS to "${GpsService.status()}. Fix: yes, accuracy ${GpsService.acc.toInt()} m$sats, source ${GpsService.source.ifEmpty { if (gpsFresh) "Phone GPS" else "Phone network" }}, packets ${GpsService.packets}"
     }
 
     private fun gpsTablet(): Pair<St, String> {

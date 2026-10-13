@@ -69,7 +69,7 @@ object PhoneMedia {
     /** Library request; [done] gets the phone's reply on the main thread, or an error after 8 s. */
     fun request(c: String, id: String, q: String = "", done: (JSONObject) -> Unit) {
         val k = key(c, id, q)
-        val r = synchronized(pending) { (++reqSeq).also { pending[it] = { j -> if (!j.has("err")) store(k, j); done(j) } } }
+        val r = synchronized(pending) { (++reqSeq).also { pending[it] = { j -> if (j.optString("err").isEmpty()) store(k, j); done(j) } } }
         if (!connected) { fail(r, "Phone not connected"); return }
         cmd(c) { put("id", id).put("q", q).put("req", r) }
         main.postDelayed({ fail(r, "The phone did not answer. Unlock it and try again") }, 8000)
