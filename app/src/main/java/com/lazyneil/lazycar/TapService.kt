@@ -1,6 +1,7 @@
 package com.lazyneil.lazycar
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
@@ -62,9 +63,70 @@ class TapService : AccessibilityService() {
         }
         fun disarmTiles() { tileArmedUntil = 0L; tiles = emptyList() }
 
+        /** Widget tap: open the chosen app, or two apps in split screen. */
+        fun launchApps(ctx: Context) {
+            val p = Prefs(ctx)
+            if (p.launchA.isEmpty()) return
+            val svc = instance
+            if (svc == null) startPkg(ctx, p.launchA, 0)   // no accessibility: plain launch, no split
+            else svc.h.post { svc.launchPair(p.launchA, p.launchB) }
+        }
+
+        private fun startPkg(ctx: Context, pkg: String, flags: Int) {
+            val i = ctx.packageManager.getLaunchIntentForPackage(pkg) ?: return
+            try { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or flags)) }
+            catch (e: Exception) { android.util.Log.e("LazyCar", "launch $pkg: $e") }
+        }
+
         /** Tablet: get onto the phone hotspot. Safe to call often, it restarts the retry window. */
         fun joinHotspot() { instance?.let { it.h.post { it.startJoin() } } }
     }
+
+    // ---- split screen launch ----
+    // Best: tap the launcher's own app pair icon ("App pair: Maps and Spotify" on ZUI / Launcher3),
+    // which gives exactly the user's saved split (sides and ratio). Apps cannot start a split
+    // pair themselves, the shell API behind it is launcher only. Without a matching pair icon,
+    // try LAUNCH_ADJACENT, then the split screen global action.
+    private fun launchPair(a: String, b: String) {
+        if (b.isEmpty()) { startPkg(this, a, 0); return }
+        val pm = packageManager
+        fun label(pkg: String) = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (e: Exception) { pkg }
+        val descs = setOf("App pair: ${label(a)} and ${label(b)}", "App pair: ${label(b)} and ${label(a)}")
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        var tries = 0
+        h.postDelayed(object : Runnable {
+            override fun run() {
+                val icon = (windows ?: emptyList()).mapNotNull { it.root }.firstNotNullOfOrNull { r ->
+                    find(r) { it.contentDescription?.toString() in descs }
+                }
+                if (icon != null) {
+                    val ok = (if (icon.isClickable) icon else clickableAncestor(icon) ?: icon).performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    android.util.Log.e("LazyCar", "split: tapped launcher pair '${icon.contentDescription}' ok=$ok"); return
+                }
+                if (++tries < 10) { h.postDelayed(this, 300); return }
+                android.util.Log.e("LazyCar", "split: no launcher pair icon, launching side by side")
+                launchAdjacent(a, b)
+            }
+        }, 700)
+    }
+
+    private fun launchAdjacent(a: String, b: String) {
+        startPkg(this, a, 0)
+        val adjacent = Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+        h.postDelayed({ startPkg(this, b, adjacent) }, 1500)
+        h.postDelayed({
+            if (inSplit()) { android.util.Log.e("LazyCar", "split: adjacent launch worked"); return@postDelayed }
+            android.util.Log.e("LazyCar", "split: adjacent ignored, using split screen action")
+            startPkg(this, a, 0)
+            h.postDelayed({ performGlobalAction(GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN) }, 1200)
+            h.postDelayed({ startPkg(this, b, adjacent) }, 2600)
+            h.postDelayed({ android.util.Log.e("LazyCar", "split: side by side=${inSplit()}") }, 4500)
+        }, 3500)
+    }
+
+    private fun inSplit() = (windows ?: emptyList())
+        .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+        .mapNotNull { it.root?.packageName }.distinct().size >= 2
 
     // ---- tablet: join the phone hotspot ----
     // Android 16 blocks setWifiEnabled for normal apps, so this drives the Wi-Fi panel instead:

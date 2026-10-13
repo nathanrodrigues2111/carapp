@@ -27,11 +27,12 @@ object Role {
         GpsService.launch(ctx, GpsService.autoMode(ctx), save = false)
     }
 
-    /** Camera auto launch only on the tablet, the GO widget only on the phone. */
+    /** Camera auto launch and the Drive widget only on the tablet, the GO widget only on the phone. */
     fun applyComponents(ctx: Context) {
         val tablet = isTablet(ctx)
         toggle(ctx, "com.lazyneil.lazycar.rear.UsbLaunch", tablet)
         toggle(ctx, "com.lazyneil.lazycar.GoWidget", !tablet)
+        toggle(ctx, "com.lazyneil.lazycar.DriveWidget", tablet)
     }
 
     private fun toggle(ctx: Context, cls: String, on: Boolean) {

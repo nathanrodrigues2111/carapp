@@ -5,6 +5,7 @@ import android.content.Context
 /** Thin SharedPreferences wrapper. */
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("lazycar", Context.MODE_PRIVATE)
+    private val tablet = Role.isTablet(ctx)
     private fun s(k: String) = sp.getString(k, "") ?: ""
     private fun put(k: String, v: String) = sp.edit().putString(k, v).apply()
 
@@ -16,6 +17,12 @@ class Prefs(ctx: Context) {
     var name2: String get() = s("name2"); set(v) = put("name2", v)
     var name3: String get() = s("name3"); set(v) = put("name3", v)
     var headunitIp: String get() = s("ip"); set(v) = put("ip", v)
+    // Widget tap opens launchA, plus launchB beside it in split screen. Blank = none.
+    // Tablet default is the user's Maps + Spotify pair; the phone defaults to nothing (GO opens the player).
+    var launchA: String get() = sp.getString("launchA", null) ?: if (tablet) "com.google.android.apps.maps" else ""
+        set(v) = put("launchA", v)
+    var launchB: String get() = sp.getString("launchB", null) ?: if (tablet) "com.spotify.music" else ""
+        set(v) = put("launchB", v)
     // Tablet joins this phone hotspot on start (saved network on the tablet).
     var hotspotSsid: String get() = sp.getString("hotspotSsid", null) ?: "Nathan's Oneplus"; set(v) = put("hotspotSsid", v)
     private fun b(k: String, def: Boolean) = sp.getBoolean(k, def)

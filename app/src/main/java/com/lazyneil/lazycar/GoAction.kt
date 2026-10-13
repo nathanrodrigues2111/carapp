@@ -140,7 +140,7 @@ object GoAction {
             else { main.postDelayed({ playMedia(ctx) }, shareAt + 1500); doneAt = maxOf(doneAt, shareAt + 1500) }
 
             if (p.headunit) { main.postDelayed({ launchHeadunit(ctx, p.headunitIp) }, shareAt + 2000); doneAt = maxOf(doneAt, shareAt + 2000) }
-            main.postDelayed({ if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0) } }, doneAt + 300L)
+            main.postDelayed({ if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0); TapService.launchApps(ctx) } }, doneAt + 300L)
         }
     }
 

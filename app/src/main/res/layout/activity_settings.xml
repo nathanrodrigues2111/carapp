@@ -222,6 +222,38 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Launch on widget tap: one app, or two in split screen -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/CardBox"
+                android:layout_marginBottom="12dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="12dp">
+                    <TextView style="@style/CardLabel" android:text="Launch on widget tap" />
+                    <LinearLayout android:id="@+id/launchPresetRow" style="@style/Row56" android:layout_marginTop="4dp">
+                        <TextView style="@style/RowTitle" android:layout_marginStart="0dp" android:text="Split screen presets" />
+                        <ImageView style="@style/ChevronIcon" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/launchARow" style="@style/Row56" android:layout_marginTop="4dp">
+                        <FrameLayout style="@style/IconCircle">
+                            <ImageView android:id="@+id/launchAIcon" style="@style/RowIcon" />
+                        </FrameLayout>
+                        <TextView android:id="@+id/launchAValue" style="@style/RowTitle" />
+                        <ImageView style="@style/ChevronIcon" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/launchBRow" style="@style/Row56">
+                        <FrameLayout style="@style/IconCircle">
+                            <ImageView android:id="@+id/launchBIcon" style="@style/RowIcon" />
+                        </FrameLayout>
+                        <TextView android:id="@+id/launchBValue" style="@style/RowTitle" />
+                        <ImageView style="@style/ChevronIcon" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- Accessibility status + Help -->
             <com.google.android.material.card.MaterialCardView
                 style="@style/CardBox"

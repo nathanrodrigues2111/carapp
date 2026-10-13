@@ -106,6 +106,19 @@
                 android:value="one-tap car audio + bluetooth setup automation" />
         </service>
 
+        <!-- Tablet "Drive" widget. Role.applyComponents disables it on the phone. -->
+        <receiver
+            android:name=".DriveWidget"
+            android:exported="true"
+            android:label="Drive">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/drive_widget_info" />
+        </receiver>
+
         <activity
             android:name=".DashboardActivity"
             android:exported="false" />

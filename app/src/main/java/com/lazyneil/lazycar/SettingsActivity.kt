@@ -98,6 +98,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         bindDevice()
+        bindLaunch()
         buildHeadunitPicker()
         applyAccent()
         findViewById<View>(R.id.accentRow).setOnClickListener { showAccentDialog() }
@@ -161,6 +162,65 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.gpsCaption).text = if (tablet)
             "Receives the phone's location over its hotspot and feeds it to every app"
         else "Broadcasts this phone's location to the head unit tablet over the hotspot"
+    }
+
+    // ---- launch on widget tap ----
+    private val apps by lazy {
+        val pm = packageManager
+        pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+            .map { it.activityInfo.packageName }.distinct().filter { it != packageName }
+            .map { Triple(it, try { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() } catch (e: Exception) { it },
+                try { pm.getApplicationIcon(it) } catch (e: Exception) { null }) }
+            .sortedBy { it.second.lowercase() }
+    }
+
+    private fun bindLaunch() {
+        fun render(iconId: Int, valueId: Int, pkg: String, empty: String) {
+            val app = apps.firstOrNull { it.first == pkg }
+            findViewById<ImageView>(iconId).setImageDrawable(app?.third)
+            findViewById<TextView>(valueId).text = app?.second ?: empty
+        }
+        fun renderAll() {
+            render(R.id.launchAIcon, R.id.launchAValue, p.launchA, "None")
+            render(R.id.launchBIcon, R.id.launchBValue, p.launchB, "Second app in split screen: none")
+            findViewById<View>(R.id.launchBRow).visibility = if (p.launchA.isEmpty()) View.GONE else View.VISIBLE
+        }
+        fun pick(title: String, set: (String) -> Unit) {
+            val adapter = object : android.widget.ArrayAdapter<Triple<String, String, android.graphics.drawable.Drawable?>>(this, 0, apps) {
+                override fun getView(pos: Int, cv: View?, parent: android.view.ViewGroup): View {
+                    val row = cv as? TextView ?: TextView(this@SettingsActivity).apply {
+                        setPadding(dp(16), dp(14), dp(16), dp(14)); textSize = 16f; compoundDrawablePadding = dp(16)
+                    }
+                    val item = apps[pos]
+                    row.text = item.second
+                    item.third?.setBounds(0, 0, dp(36), dp(36))
+                    row.setCompoundDrawables(item.third, null, null, null)
+                    return row
+                }
+            }
+            MaterialAlertDialogBuilder(this).setTitle(title)
+                .setAdapter(adapter) { d, w -> set(apps[w].first); renderAll(); d.dismiss() }
+                .setNeutralButton("None") { _, _ -> set(""); renderAll() }
+                .show()
+        }
+        renderAll()
+        // The user's saved launcher pairs, offered one tap away when installed.
+        val presets = listOf("Maps + Spotify" to ("com.google.android.apps.maps" to "com.spotify.music"),
+            "Maps + Poweramp" to ("com.google.android.apps.maps" to "com.maxmpz.audioplayer"))
+            .filter { (_, pr) -> apps.any { it.first == pr.first } && apps.any { it.first == pr.second } }
+        findViewById<View>(R.id.launchPresetRow).apply {
+            visibility = if (presets.isEmpty()) View.GONE else View.VISIBLE
+            setOnClickListener {
+                MaterialAlertDialogBuilder(this@SettingsActivity).setTitle("Split screen pair")
+                    .setItems(presets.map { it.first }.toTypedArray()) { _, w ->
+                        p.launchA = presets[w].second.first; p.launchB = presets[w].second.second; renderAll()
+                    }.show()
+            }
+        }
+        findViewById<View>(R.id.launchARow).setOnClickListener {
+            pick("App to open") { p.launchA = it; if (it.isEmpty()) p.launchB = "" }
+        }
+        findViewById<View>(R.id.launchBRow).setOnClickListener { pick("Second app, split screen") { p.launchB = it } }
     }
 
     private fun refreshA11y() {
