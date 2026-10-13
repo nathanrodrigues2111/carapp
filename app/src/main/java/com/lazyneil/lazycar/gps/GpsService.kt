@@ -41,12 +41,17 @@ class GpsService : Service(), LocationListener {
         @Volatile var sats = -1
         @Volatile var peer = ""
         @Volatile var error = ""
+        @Volatile var packets = 0L      // sent (phone) or received (tablet) since start
+        @Volatile var source = ""       // "Phone GPS", "Phone network", "Tablet (phone offline)"
 
         private fun prefs(ctx: Context) = ctx.getSharedPreferences("lazygps", Context.MODE_PRIVATE)
 
         // Saved manual choice wins; otherwise the tablet receives and the phone sends.
         fun autoMode(ctx: Context) = prefs(ctx).getString("mode", null)
             ?: if (com.lazyneil.lazycar.Role.isTablet(ctx)) "receive" else "send"
+
+        /** Seconds the tablet holds the last phone fix before handing back to its own location. */
+        fun holdSec(ctx: Context) = prefs(ctx).getInt("holdSec", 30)
 
         fun startIfIdle(ctx: Context) {
             if (mode == "idle") autoMode(ctx).takeIf { it != "stop" }?.let { launch(ctx, it, save = false) }
@@ -86,7 +91,7 @@ class GpsService : Service(), LocationListener {
         lm = getSystemService(LocationManager::class.java)
         getSystemService(NotificationManager::class.java)
             .createNotificationChannel(NotificationChannel("gps", "GPS sharing", NotificationManager.IMPORTANCE_LOW))
-        mode = m; error = ""; lastAt = 0; sats = -1; peer = ""; running = true
+        mode = m; error = ""; lastAt = 0; sats = -1; peer = ""; packets = 0; source = ""; running = true
         startForeground(NOTIF_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         try { if (m == "send") startSend() else startReceive() } catch (e: Exception) { error = e.message ?: e.toString() }
         return START_STICKY
@@ -142,12 +147,13 @@ class GpsService : Service(), LocationListener {
             .put("acc", l.accuracy.toDouble()).put("speed", l.speed.toDouble())
             .put("bearing", l.bearing.toDouble()).put("time", l.time).put("sats", sats).put("src", l.provider).toString().toByteArray()
         acc = l.accuracy; speed = l.speed; gotFix()
+        source = if (l.provider == LocationManager.GPS_PROVIDER) "Phone GPS" else "Phone network"
         last = data; lastFixAt = now
         send(data)
     }
 
     private fun send(data: ByteArray) {
-        sentAt = SystemClock.elapsedRealtime()
+        sentAt = SystemClock.elapsedRealtime(); packets++
         thread {
             val s = socket ?: return@thread
             for (addr in broadcastTargets()) try { s.send(DatagramPacket(data, data.size, addr, PORT)) } catch (_: Exception) {}
@@ -170,26 +176,42 @@ class GpsService : Service(), LocationListener {
         return out
     }
 
+    private var mocking = false
+
+    // Phone fixes own gps/network/fused while packets flow; the test providers go away after the hold time so the tablet's own location returns.
+    private fun setMocking(on: Boolean) {
+        if (on == mocking) return
+        mocking = on
+        for (p in PROVIDERS) try {
+            if (on) {
+                try { lm.removeTestProvider(p) } catch (_: Exception) {}
+                lm.addTestProvider(p, ProviderProperties.Builder()
+                    .setHasAltitudeSupport(true).setHasSpeedSupport(true).setHasBearingSupport(true)
+                    .setAccuracy(ProviderProperties.ACCURACY_FINE).setPowerUsage(ProviderProperties.POWER_USAGE_LOW).build())
+                lm.setTestProviderEnabled(p, true)
+            } else lm.removeTestProvider(p)
+        } catch (e: Exception) { error = e.message ?: e.toString() }
+        if (!on) source = "Tablet (phone offline)"
+    }
+
     // Receive mode: listen forever, feed every packet into the test providers.
     private fun startReceive() {
-        for (p in PROVIDERS) {
-            try { lm.removeTestProvider(p) } catch (_: Exception) {}
-            lm.addTestProvider(p, ProviderProperties.Builder()
-                .setHasAltitudeSupport(true).setHasSpeedSupport(true).setHasBearingSupport(true)
-                .setAccuracy(ProviderProperties.ACCURACY_FINE).setPowerUsage(ProviderProperties.POWER_USAGE_LOW).build())
-            lm.setTestProviderEnabled(p, true)
-        }
         // Some Wi-Fi drivers drop broadcast frames without this lock.
         wifiLock = getSystemService(WifiManager::class.java).createMulticastLock("lazygps").apply { acquire() }
-        val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; bind(InetSocketAddress(PORT)) }
+        val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; soTimeout = 1000; bind(InetSocketAddress(PORT)) }
         socket = s
+        val holdMs = holdSec(this) * 1000L
         thread {
             val buf = ByteArray(2048)
             while (running) {
                 try {
                     val pkt = DatagramPacket(buf, buf.size)
-                    s.receive(pkt)
+                    try { s.receive(pkt) } catch (_: java.net.SocketTimeoutException) {
+                        if (mocking && SystemClock.elapsedRealtime() - lastAt > holdMs) setMocking(false)
+                        continue
+                    }
                     val j = JSONObject(String(pkt.data, 0, pkt.length))
+                    setMocking(true)
                     for (p in PROVIDERS) {
                         lm.setTestProviderLocation(p, Location(p).apply {
                             latitude = j.getDouble("lat"); longitude = j.getDouble("lon")
@@ -203,6 +225,8 @@ class GpsService : Service(), LocationListener {
                     }
                     acc = j.optDouble("acc", 0.0).toFloat(); speed = j.optDouble("speed", 0.0).toFloat()
                     sats = j.optInt("sats", -1); peer = pkt.address.hostAddress ?: ""; error = ""
+                    source = if (j.optString("src", "gps") == "gps") "Phone GPS" else "Phone network"
+                    packets++
                     gotFix()
                 } catch (e: Exception) { if (running) error = e.message ?: e.toString() }
             }
@@ -217,7 +241,7 @@ class GpsService : Service(), LocationListener {
         if (::lm.isInitialized) {
             lm.removeUpdates(this)
             lm.unregisterGnssStatusCallback(gnss)
-            if (mode == "receive") for (p in PROVIDERS) try { lm.removeTestProvider(p) } catch (_: Exception) {}
+            if (mode == "receive") setMocking(false)
         }
         mode = "idle"; targetsAt = 0
     }

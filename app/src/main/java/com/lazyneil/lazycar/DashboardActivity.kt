@@ -105,7 +105,7 @@ class DashboardActivity : AppCompatActivity() {
             GpsService.error.isNotEmpty() -> GpsService.error
             mode == "idle" -> "Turn it on in Settings"
             age < 0 -> if (mode == "send") "Waiting for a GPS fix" else "Waiting for the phone. Is its hotspot on?"
-            else -> "Last fix ${age}s ago" + if (GpsService.peer.isNotEmpty()) " from ${GpsService.peer}" else ""
+            else -> "Last fix ${age}s ago" + (if (GpsService.source.isNotEmpty()) ". Source: ${GpsService.source}" else "") + if (GpsService.peer.isNotEmpty()) " from ${GpsService.peer}" else ""
         }
         findViewById<TextView>(R.id.gpsStats).apply {
             visibility = if (mode != "idle" && age >= 0) View.VISIBLE else View.GONE
