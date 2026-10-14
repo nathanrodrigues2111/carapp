@@ -5,9 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.core.graphics.ColorUtils
 
-/** The accent is always taken from the album art; cyan (the token default) when there is no art. */
+/** The accent is always taken from the album art; neutral near-white when there is no art. */
 object Accent {
-    private const val CYAN = 0xFF00E5FF.toInt()
+    private const val CYAN = 0xFFF2F2F2.toInt()
 
     /** Current album art, app wide: PhoneMedia sets it on the tablet, MediaListener and the home screen on the phone. */
     @Volatile var art: Bitmap? = null
