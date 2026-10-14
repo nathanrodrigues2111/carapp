@@ -95,6 +95,8 @@ object TabletSpeaker {
         // The on/off switch sits on the Tablet speaker volume row; the slider shows only while it is on.
         val slider = a.findViewById<View>(R.id.outTabSlider)
         a.findViewById<MaterialSwitch>(R.id.outTabSwitch)?.apply {
+            // Not restored from saved state: a recreate() (accent change) restoring a stale value fired the listener and saved off.
+            isSaveEnabled = false
             isChecked = enabled(a); slider?.visibility = if (isChecked) View.VISIBLE else View.GONE
             setOnCheckedChangeListener { _, v -> sp(a).edit().putBoolean("on", v).apply(); slider?.visibility = if (v) View.VISIBLE else View.GONE
                 if (tablet) StreamReceiver.sync(a) else if (v) StreamSender.start(a) else StreamSender.stop(a) }

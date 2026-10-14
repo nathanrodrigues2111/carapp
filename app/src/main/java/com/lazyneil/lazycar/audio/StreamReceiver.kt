@@ -96,6 +96,7 @@ class StreamReceiver : Service() {
         private val ts = AudioTimestamp()
         @Volatile private var nextSeq = -1
         @Volatile var written = 0L
+        val lim = Limiter()
 
         fun put(c: Chunk) = synchronized(jb) {
             if (nextSeq < 0 || c.seq >= nextSeq) jb[c.seq] = c
@@ -141,24 +142,27 @@ class StreamReceiver : Service() {
                 val c = take()
                 if (c == null) {
                     // Nothing in time: conceal with the last frame, fading, before the track runs dry.
+                    // First gap chunk: the last chunk played backwards (starts where the audio left off) fading to 0, then silence. No step, no click.
                     if (last != null && client < 15) {
-                        val g = if (fades < 6) 0.6f * (1 - fades / 6f) else 0f
-                        val l = last
-                        write(ShortArray(l.size) { (l[it] * g).toInt().toShort() }); fades++; concealed++; skip()
+                        val l = last; val n = l.size / 2
+                        write(lim.process(FloatArray(l.size) { if (fades > 0) 0f else l[2 * (n - 1 - it / 2) + it % 2] * (1 - (it / 2) / n.toFloat()) }))
+                        fades++; concealed++; skip()
                     } else Thread.sleep(2)
                     continue
                 }
                 val deadline = c.jblNs + (extraMs() * 1e6).toLong()
                 val e = (playNow - deadline) / 1e6
                 // Far off (start, stall, big clock step): jump once, then micro resampling keeps it there.
-                val low = depthMs < targetMs                                              // jitter protection wins over sync
-                if (e > 50 && depthMs - Wire.CHUNK_MS >= targetMs) { dropped++; errMs = 0.0; continue }
+                // The JBL latency is the whole budget: playing late to grow the buffer only trades sync for drops later.
+                if (e > 50 && depthMs > 40) { dropped++; errMs = 0.0; continue }
                 if (e < -50) { write(ShortArray(((-e).coerceAtMost(500.0) * Wire.RATE / 1000).toInt() * 2)); putBack(c); errMs = 0.0; continue }
                 errMs = errMs * 0.98 + e * 0.02
                 // Drift only: at most 500 ppm. Big errors take the jump above instead of pinning the resampler.
-                val r = if (low) 0.9995 else if (abs(errMs) < 1) 1.0 else 1 + (errMs / 20000).coerceIn(-0.0005, if (depthMs < targetMs + 10) 0.0 else 0.0005)
+                val r = if (abs(errMs) < 1) 1.0 else 1 + (errMs / 20000).coerceIn(-0.0005, if (depthMs < 30) 0.0 else 0.0005)
                 ppm = ((r - 1) * 1e6).toInt()
-                write(soften(rs.process(c.pcm, r)))
+                val x = rs.process(c.pcm, r)
+                if (fades > 0) for (i in x.indices) x[i] *= (i / 2) / (x.size / 2f)   // fade back in after a gap
+                write(lim.process(x))
                 last = c.pcm; fades = 0
             }
             track.stop(); track.release()
@@ -246,7 +250,7 @@ class StreamReceiver : Service() {
                     kbps = (bytes * 8 / (now - secAt)).toInt(); bytes = 0; secAt = now
                     rms = kotlin.math.sqrt(sq / maxOf(n, 1)).toInt(); sq = 0.0; n = 0
                     Log.e("LazyCar", "speaker recv kbps=$kbps rms=$rms rtt=${"%.1f".format(rttMs)} jitter=${"%.1f".format(jitterMs)} target=$targetMs phoneOut=$phoneOutMs acoustic=${"%.0f".format(acousticMs)} lost=$lost " +
-                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} buf=${it.bufferMs} -> ${it.routed}" })
+                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} clip=${it.lim.clipped} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
                 }
             } catch (_: Exception) {}
         }
@@ -318,13 +322,34 @@ class Resampler {
     }
 }
 
-/** +6 dB with a soft knee limiter above -4 dBFS instead of hard clipping. */
-fun soften(x: FloatArray, gain: Float = 2f): ShortArray {
-    val t = 0.63f
-    return ShortArray(x.size) {
-        val v = x[it] * gain / 32768f
-        val a = abs(v)
-        val y = if (a <= t) v else Math.copySign(t + (1 - t) * tanh(((a - t) / (1 - t)).toDouble()).toFloat(), v)
-        (y * 32767f).toInt().toShort()
+/**
+ * +6 dB into a stereo linked peak limiter at -1 dBFS: 1 ms lookahead, ~0.2 ms attack, 10 ms hold, 150 ms release.
+ * Gain moves smoothly, so loud passages get quieter instead of distorted (the old per sample tanh crackled).
+ */
+class Limiter(private val gain: Float = 2f) {
+    private val la = 48; private val ceil = 0.891f
+    private val rel = (1 - kotlin.math.exp(-1.0 / (0.15 * Wire.RATE))).toFloat()
+    private val dl = FloatArray(la * 2); private val need = FloatArray(la) { 1f }
+    private var p = 0; private var g = 1f; private var hold = 0
+    @Volatile var clipped = 0L      // samples the final clamp had to touch, should stay 0
+    @Volatile var reductionDb = 0f  // deepest gain reduction in the last call
+    fun process(x: FloatArray): ShortArray {
+        val out = ShortArray(x.size); var minG = 1f
+        var i = 0
+        while (i + 1 < x.size) {
+            val l = x[i] * gain / 32768f; val r = x[i + 1] * gain / 32768f
+            val pk = maxOf(abs(l), abs(r))
+            need[p] = if (pk > ceil) ceil / pk else 1f
+            var t = 1f; for (v in need) if (v < t) t = v                  // lowest gain needed within the lookahead
+            if (t < g) { g += (t - g) * 0.2f; hold = 480 } else if (hold > 0) hold-- else g += (1 - g) * rel
+            if (g < minG) minG = g
+            val dl0 = dl[2 * p]; val dl1 = dl[2 * p + 1]; dl[2 * p] = l; dl[2 * p + 1] = r
+            p = (p + 1) % la
+            out[i] = pcm(dl0 * g); out[i + 1] = pcm(dl1 * g)
+            i += 2
+        }
+        reductionDb = (20 * kotlin.math.log10(minG.toDouble())).toFloat()
+        return out
     }
+    private fun pcm(v: Float): Short { val s = v * 32767f; if (s > 32767f || s < -32768f) clipped++; return s.coerceIn(-32768f, 32767f).toInt().toShort() }
 }

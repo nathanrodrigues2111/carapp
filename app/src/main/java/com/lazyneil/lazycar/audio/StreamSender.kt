@@ -89,6 +89,7 @@ class StreamSender : Service() {
     private var socket: DatagramSocket? = null
     private var lock: WifiManager.MulticastLock? = null
     private var wifiLow: WifiManager.WifiLock? = null
+    private var wifi: WifiManager.WifiLock? = null
     private var wake: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?) = null
@@ -108,6 +109,9 @@ class StreamSender : Service() {
             alive = true; running = true; error = ""; tablet = ""
             lock = getSystemService(WifiManager::class.java).createMulticastLock("speaker").apply { acquire() }
             wifiLow = getSystemService(WifiManager::class.java).createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "speaker-ll").apply { acquire() }
+            // Low latency only applies while our activity is in front; high perf keeps Wi-Fi power save off in the background too.
+            @Suppress("DEPRECATION")
+            wifi = getSystemService(WifiManager::class.java).createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "speaker").apply { acquire() }
             wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "carapp:speaker").apply { acquire() }
             capture(mp)
         } catch (e: Exception) { error = e.message ?: e.toString(); Log.e("LazyCar", "speaker send", e); stopSelf() }
@@ -148,7 +152,7 @@ class StreamSender : Service() {
             while (alive) {
                 val r = rec.read(pkt, Wire.HEADER, Wire.CHUNK)
                 if (r <= 0) { if (r < 0) { error = "Capture read $r"; break }; continue }
-                for (i in 0 until r / 2) { val v = bb.getShort(Wire.HEADER + i * 2).toInt(); sq += v * v.toDouble() }
+                for (i in 0 until r / 2) { val v = java.lang.Short.reverseBytes(bb.getShort(Wire.HEADER + i * 2)).toInt(); sq += v * v.toDouble() }   // PCM is little endian
                 val now = SystemClock.elapsedRealtime()
                 if (now - tsAt > 100) { tsAt = now; haveTs = rec.getTimestamp(rts, android.media.AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS }
                 // Mixer time of this chunk's first frame, so the tablet gets a smooth timeline despite bursty reads.
@@ -200,6 +204,7 @@ class StreamSender : Service() {
         projection?.stop(); projection = null
         lock?.release(); lock = null
         wifiLow?.release(); wifiLow = null
+        wifi?.release(); wifi = null
         wake?.release(); wake = null
         super.onDestroy()
     }
