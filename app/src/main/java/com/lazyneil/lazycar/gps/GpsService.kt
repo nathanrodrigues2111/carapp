@@ -54,13 +54,6 @@ class GpsService : Service(), LocationListener {
         fun autoMode(ctx: Context) = prefs(ctx).getString("mode", null)
             ?: if (com.lazyneil.lazycar.Role.isTablet(ctx)) "receive" else "send"
 
-        /** Seconds the tablet holds the last phone fix before handing back to its own location. */
-        fun holdSec(ctx: Context) = prefs(ctx).getInt("holdSec", 30)
-
-        /** Off by default: this tablet's own GNSS never gets a fix, so the mock stays even when the phone goes quiet. */
-        fun handBack(ctx: Context) = prefs(ctx).getBoolean("handBack", false)
-        fun setHandBack(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("handBack", on).apply()
-
         /** Indoors a stationary fused fix comes every 20 s to minutes; the phone repeats it at 1 Hz for this long. */
         const val HOLD_MS = 300_000L
 
@@ -292,7 +285,7 @@ class GpsService : Service(), LocationListener {
 
     private var mocking = false
 
-    // Phone fixes own gps/network/fused while packets flow; the test providers go away after the hold time so the tablet's own location returns.
+    // Phone fixes own gps/network/fused for the whole receive run; the test providers go away only when it stops.
     private fun setMocking(on: Boolean) {
         if (on == mocking) return
         mocking = on
@@ -312,14 +305,12 @@ class GpsService : Service(), LocationListener {
     // Receive mode: listen forever, feed every packet into the test providers.
     private fun startReceive() {
         mocking = true; setMocking(false)   // drop test providers a previous process left behind
-        val handBack = handBack(this)
-        if (!handBack) setMocking(true)     // the broken real GNSS never owns gps while receive runs
+        setMocking(true)     // the tablet's broken GNSS never owns gps: only phone fixes, via the mock providers
         // Some Wi-Fi drivers drop broadcast frames without this lock.
         val wm = getSystemService(WifiManager::class.java)
         wifiLock = wm.createMulticastLock("lazygps").apply { setReferenceCounted(false); acquire() }
         val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; soTimeout = 1000; bind(InetSocketAddress(PORT)) }
         socket = s
-        val holdMs = holdSec(this) * 1000L
         thread {
             val buf = ByteArray(2048)
             while (running) {
@@ -327,14 +318,12 @@ class GpsService : Service(), LocationListener {
                     val pkt = DatagramPacket(buf, buf.size)
                     try { s.receive(pkt) } catch (_: java.net.SocketTimeoutException) {
                         val age = SystemClock.elapsedRealtime() - lastAt
-                        if (handBack && mocking && age > holdMs) setMocking(false)
                         // Maps calls a fix older than ~2 s "GPS signal lost"; bridge short packet gaps with the last fix.
-                        else if (mocking && age < 5000) lastJ?.let { inject(it) }
+                        if (age < 5000) lastJ?.let { inject(it) }
                         continue
                     }
                     val j = JSONObject(String(pkt.data, 0, pkt.length))
-                    setMocking(true)
-                    inject(j); lastJ = j
+                    setMocking(true); inject(j); lastJ = j
                     acc = j.optDouble("acc", 0.0).toFloat(); speed = j.optDouble("speed", 0.0).toFloat()
                     sats = j.optInt("sats", -1); peer = pkt.address.hostAddress ?: ""; error = ""
                     source = if (j.optString("src", "gps") == "gps") "Phone GPS" else "Phone network"
