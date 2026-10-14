@@ -72,8 +72,10 @@ class GpsService : Service(), LocationListener {
                 (if (source == "Phone network") ", network only" else "") + ", ${acc.toInt()} m"
         }
 
+        @Volatile var degraded = false
+
         fun startIfIdle(ctx: Context) {
-            if (mode == "idle") autoMode(ctx).takeIf { it != "stop" }?.let { launch(ctx, it, save = false) }
+            if (mode == "idle" || degraded) autoMode(ctx).takeIf { it != "stop" }?.let { launch(ctx, it, save = false) }
         }
 
         fun launch(ctx: Context, m: String, save: Boolean = true) {
@@ -114,7 +116,13 @@ class GpsService : Service(), LocationListener {
         getSystemService(NotificationManager::class.java)
             .createNotificationChannel(NotificationChannel("gps", "GPS sharing", NotificationManager.IMPORTANCE_LOW))
         mode = m; error = ""; lastAt = 0; sats = -1; peer = ""; packets = 0; source = ""; running = true
-        startForeground(NOTIF_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        // Location type is refused from the background (boot, force-stop restart) without while-in-use eligibility:
+        // run under specialUse instead and upgrade on the next startIfIdle (activity resume or GO).
+        degraded = try { startForeground(NOTIF_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION); false }
+        catch (e: Exception) {
+            Log.w("LazyGPS", "location FGS refused, falling back", e)
+            startForeground(NOTIF_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE); true
+        }
         // With the screen off the CPU and Wi-Fi radio sleep, the 1 Hz repeat stalls and fixes reach the tablet 20 to 30 s apart.
         radio = getSystemService(WifiManager::class.java).createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "lazygps").apply { setReferenceCounted(false) }
         wake = getSystemService(android.os.PowerManager::class.java)

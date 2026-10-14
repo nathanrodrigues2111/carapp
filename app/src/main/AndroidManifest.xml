@@ -192,7 +192,11 @@
         <service
             android:name=".gps.GpsService"
             android:exported="false"
-            android:foregroundServiceType="location" />
+            android:foregroundServiceType="location|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="phone GPS sharing started from boot before location is allowed" />
+        </service>
 
         <receiver
             android:name=".gps.BootReceiver"
