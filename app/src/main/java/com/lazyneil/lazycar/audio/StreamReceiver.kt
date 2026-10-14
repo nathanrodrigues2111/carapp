@@ -49,6 +49,7 @@ class StreamReceiver : Service() {
         @Volatile var jitterMs = 0.0    // peak arrival spread, decays
         @Volatile var targetMs = 0      // jitter buffer the deadline never goes below
         @Volatile var acousticMs = 0.0  // mic measured correction on top of the phone's numbers
+        const val MAX_LATE_MS = 0       // user: sync with the speaker first; any late was heard as out of sync
         @Volatile var lagMs = 0         // best case phone mixer to our arrival (capture + network)
         val outputs = mutableListOf<Output>()
 
@@ -166,7 +167,7 @@ class StreamReceiver : Service() {
                     // The speaker's latency (phoneOut) is the budget. If what is left after the HAL cannot cover the measured
                     // jitter (targetMs), play late behind the JBL instead of dropping out. 20 ms steps, so no realign every second.
                     // Grows at once (+10 ms margin), shrinks only after 5 min with 30 ms spare: each change is a realign.
-                    val l = (targetMs - (budgetMs() + extraMs().toInt() - hal)).coerceIn(0, 250)
+                    val l = (targetMs - (budgetMs() + extraMs().toInt() - hal)).coerceIn(0, MAX_LATE_MS)
                     if (SystemClock.elapsedRealtime() - resetAt < 10_000) {}   // jitter settles after a (re)start
                     else if (l > lateMs) { lateMs = l + 10; spareSince = 0 }
                     else if (l < lateMs - 30) { if (spareSince == 0L) spareSince = now else if (now - spareSince > 300_000_000_000L) { lateMs = l + 10; spareSince = 0 } }
