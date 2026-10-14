@@ -19,10 +19,7 @@ object SettingsSync {
         Key("duckNav", "lazycar", "duckNav", true),
         Key("speakerOn", "speaker", "on", true),        // phone "send" and tablet "play" are one switch
         Key("syncTrim", "speaker", "delay", 0),
-        Key("gpsShare", "lazygps", "mode", true),
-        Key("launchMode", "lazycar", "launchMode", ""),   // widget / GO launch options, editable on either device
-        Key("launchA", "lazycar", "launchA", ""),
-        Key("launchB", "lazycar", "launchB", ""))        // stored as a mode; shared as on / off
+        Key("gpsShare", "lazygps", "mode", true))        // stored as a mode; shared as on / off
 
     private lateinit var app: Context
     private var send: ((JSONArray) -> Unit)? = null
