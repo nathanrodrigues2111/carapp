@@ -193,7 +193,8 @@ class GpsService : Service(), LocationListener {
     }
 
     // Fused only after 10 s without a GNSS fix, HIGH_ACCURACY (Wi-Fi based, ~10 to 20 m indoors; BALANCED is 100 m).
-    // Its Wi-Fi scans are covered by the tablet's jitter buffer. In the car GNSS works, so no scanning at all.
+    // 10 s interval: GMS Wi-Fi scans follow it (1 s interval scanned ~7 times a minute and stalled the audio up to 1 s).
+    // In the car GNSS works, so no scanning at all.
     private val fusedL = android.location.LocationListener { onLocationChanged(it) }
     private var fusedOn = false
     private var fusedAt = 0L    // when fused was (re)registered
@@ -206,7 +207,7 @@ class GpsService : Service(), LocationListener {
         if (on && last == null) try { lm.getLastKnownLocation(LocationManager.FUSED_PROVIDER)
             ?.takeIf { SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos < HOLD_MS * 1_000_000 }?.let { onLocationChanged(it) } } catch (_: SecurityException) {}
         if (on) lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER,
-            android.location.LocationRequest.Builder(1000L).setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY).build(),
+            android.location.LocationRequest.Builder(10_000L).setMinUpdateIntervalMillis(1000L).setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY).build(),
             mainExecutor, fusedL)
         else lm.removeUpdates(fusedL)
     }
