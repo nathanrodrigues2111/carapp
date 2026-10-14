@@ -24,6 +24,13 @@ object Accent {
     @Suppress("UNUSED_PARAMETER")
     fun forArt(ctx: Context, art: Bitmap?) = fromPhone ?: Ui.artColor(art) ?: CYAN
 
+    private var pushed = 0
+    /** Call after art or fromPhone changes: home screen widgets follow the accent. Main thread or not. */
+    fun publish(ctx: Context) {
+        val c = now(ctx); if (c == pushed) return; pushed = c
+        android.os.Handler(android.os.Looper.getMainLooper()).post { GoWidget.refresh(ctx); DriveWidget.refresh(ctx) }
+    }
+
     /** Readable foreground for a given accent: near-black on light accents, white on dark ones. */
     fun onColor(argb: Int): Int =
         if (ColorUtils.calculateLuminance(argb) > 0.18) 0xFF140600.toInt() else Color.WHITE

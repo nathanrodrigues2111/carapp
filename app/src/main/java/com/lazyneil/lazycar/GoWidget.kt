@@ -19,17 +19,16 @@ class GoWidget : AppWidgetProvider() {
             ctx, 0, Intent(ctx, GoService::class.java).setAction(GoService.ACTION_TOGGLE),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        // Always the car glyph; state shows in the pill colour only. IDLE: accent pill + car.
-        // ON: red pill + white car. BUSY: grey pill + spinner (glyph hidden).
+        // Same states as the GO button: OFF neutral grey with a grey car, ON the live art accent,
+        // BUSY grey with a spinner (glyph hidden).
         val busy = st == GoAction.STARTING || st == GoAction.STOPPING
         val accent = Accent.color(ctx)
         val on = st == GoAction.ON
         val pillColor = when {
-            busy -> 0xFF22252B.toInt()
-            on -> 0xFFFF5252.toInt()
-            else -> accent
+            on -> accent
+            else -> ctx.getColor(R.color.card)
         }
-        val glyphTint = if (on) 0xFF000000.toInt() else Accent.onColor(accent)
+        val glyphTint = if (on) Accent.onColor(accent) else 0x99FFFFFF.toInt()
         val pill = android.content.res.ColorStateList.valueOf(pillColor)
         val desc = when (st) {
             GoAction.ON -> "CarApp STOP"; GoAction.STARTING -> "CarApp starting"

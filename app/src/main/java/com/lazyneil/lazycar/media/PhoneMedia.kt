@@ -123,7 +123,7 @@ object PhoneMedia {
                 lastGo = go
                 if (j.has("art")) { art = j.optString("art").takeIf { it.isNotEmpty() }?.let { decode(it) }; com.lazyneil.lazycar.Accent.art = art }
                 else j.put("art", "")
-                com.lazyneil.lazycar.Accent.fromPhone = j.optInt("accent").takeIf { it != 0 }
+                com.lazyneil.lazycar.Accent.fromPhone = j.optInt("accent").takeIf { it != 0 }; com.lazyneil.lazycar.Accent.publish(ctx)
                 np = j; npAt = SystemClock.elapsedRealtime()
                 // Report our speaker level so the phone slider is live; hardware buttons included.
                 Volumes.localPct(ctx).let { if (it != sentTvol) { sentTvol = it; Volumes.saveTablet(ctx, it); cmd("tvol") { put("pct", it) } } }

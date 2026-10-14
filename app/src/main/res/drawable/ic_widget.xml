@@ -1,14 +1,15 @@
+<!-- Widget picker preview: static, so it uses the accent token default. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="44dp" android:height="44dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#1E88E5"
+    <path android:fillColor="#FF00E5FF"
         android:pathData="M24,62 L24,54 C24,51 26,49 29,49 L36,49 C39,41 45,37 54,37 L63,37 C69,37 73,41 77,49 L84,51 C87,52 88,54 88,57 L88,62 Z" />
-    <path android:fillColor="#1E88E5"
+    <path android:fillColor="#FF00E5FF"
         android:pathData="M28,62 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z" />
-    <path android:fillColor="#1E88E5"
+    <path android:fillColor="#FF00E5FF"
         android:pathData="M66,62 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z" />
-    <path android:fillColor="#7FB0FF"
+    <path android:fillColor="#99F5F5F7"
         android:pathData="M61,30 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0 Z" />
-    <path android:fillColor="#7FB0FF"
+    <path android:fillColor="#99F5F5F7"
         android:pathData="M69.5,28 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
 </vector>

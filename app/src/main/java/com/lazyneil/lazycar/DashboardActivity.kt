@@ -94,6 +94,9 @@ class DashboardActivity : AppCompatActivity() {
         Ui.press(*intArrayOf(R.id.npPrev, R.id.npNext, R.id.npPlay, R.id.npLibrary, R.id.settingsBtn)
             .map { findViewById<View>(it) }.toTypedArray())
         Role.applyComponents(this)
+        // One CarApp task: each launcher pair launch starts CarApp in a new task, so drop the older ones.
+        getSystemService(android.app.ActivityManager::class.java).appTasks
+            .filter { it.taskInfo.taskId != taskId }.forEach { try { it.finishAndRemoveTask() } catch (_: Exception) {} }
         if (missing().isNotEmpty()) requestPermissions(missing(), 1)
     }
 

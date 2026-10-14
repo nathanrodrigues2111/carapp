@@ -61,7 +61,7 @@ class TapService : AccessibilityService() {
         /** Maps + CarApp side by side. Split method (Advanced): auto = the launcher's saved pair, else the
          *  standard adjacent launch; lenovo = saved pair only; standard = adjacent launch only. */
         fun launchDrive(ctx: Context) {
-            val adjacent = Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+            val adjacent = Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT   // no MULTIPLE_TASK: reuse the existing tasks
             val svc = instance ?: return startPkg(ctx, MAPS, adjacent)   // no accessibility: plain adjacent launch
             val p = Prefs(ctx)
             // GO from the phone and CarApp coming to the front can both ask at once: one split per 10 s.
@@ -119,7 +119,7 @@ class TapService : AccessibilityService() {
 
     private fun launchAdjacent(a: String, b: String, ratio: Int) {
         startPkg(this, a, 0)
-        val adjacent = Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+        val adjacent = Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT   // no MULTIPLE_TASK: one task per app
         h.postDelayed({ startPkg(this, b, adjacent) }, 1500)
         h.postDelayed({
             if (inSplit()) { android.util.Log.e("LazyCar", "split: adjacent launch worked"); arrangeSplit(a, ratio, swapped = false, tries = 0); return@postDelayed }
@@ -143,6 +143,16 @@ class TapService : AccessibilityService() {
             if (tries < 6) h.postDelayed({ arrangeSplit(left, ratio, swapped, tries + 1) }, 500)
             else android.util.Log.e("LazyCar", "split: not side by side")
             return
+        }
+        // Maps that was navigating goes picture in picture when the pair launch goes HOME, and ZUI then
+        // moves that task into the split with its small PiP bounds: an empty pane. Re-open Maps once to fill it.
+        val tall = apps.maxOf { it.second.height() }
+        apps.firstOrNull { it.second.height() < tall * 0.8f }?.let { small ->
+            if (tries < 100) {
+                android.util.Log.e("LazyCar", "split: ${small.first} still has PiP bounds ${small.second.toShortString()}, re-opening it")
+                startPkg(this, small.first, Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+                h.postDelayed({ arrangeSplit(left, ratio, swapped, 100) }, 1500); return
+            }
         }
         val l = apps.minBy { it.second.left }; val r = apps.maxBy { it.second.left }
         val x = (l.second.right + r.second.left) / 2f; val y = l.second.exactCenterY()

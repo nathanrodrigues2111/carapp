@@ -148,7 +148,7 @@ class MediaListener : NotificationListenerService() {
         j.put("go", com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this)) == com.lazyneil.lazycar.GoAction.ON)
         val key = listOf(c?.packageName, j.optString("title"), j.optString("artist"), j.optString("album")).joinToString("|")
         val needArt = out.any { it.artKey != key }
-        if (key != accentKey) { accentKey = key; com.lazyneil.lazycar.Accent.art = m?.let { art(it) }; trackAccent = com.lazyneil.lazycar.Accent.now(this) }
+        if (key != accentKey) { accentKey = key; com.lazyneil.lazycar.Accent.art = m?.let { art(it) }; trackAccent = com.lazyneil.lazycar.Accent.now(this); com.lazyneil.lazycar.Accent.publish(this) }
         j.put("accent", trackAccent)
         val a = if (needArt && m != null) jpeg(art(m), 1024, 92) else null
         for (cl in out) {

@@ -377,7 +377,7 @@ class MainActivity : AppCompatActivity() {
                 .filter { !it.isNullOrEmpty() }.joinToString(" · "))
         val art = m?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m?.getBitmap(MediaMetadata.METADATA_KEY_ART)
         if (art?.sameAs(shownArt) != true && !(art == null && shownArt == null)) {
-            shownArt = art; Accent.art = art
+            shownArt = art; Accent.art = art; Accent.publish(this)
             Ui.swapArt(findViewById(R.id.npArt), art)
             findViewById<ImageView>(R.id.npBackdrop).setImageBitmap(art)
             refreshGoButton()   // GO, its glow and the progress follow the art accent

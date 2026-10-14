@@ -18,7 +18,10 @@ object SettingsSync {
         Key("openWithMaps", "lazycar", "openWithMaps", true),
         Key("speakerOn", "speaker", "on", true),        // phone "send" and tablet "play" are one switch
         Key("syncTrim", "speaker", "delay", 0),
-        Key("gpsShare", "lazygps", "mode", true))        // stored as a mode; shared as on / off
+        Key("gpsShare", "lazygps", "mode", true),
+        Key("launchMode", "lazycar", "launchMode", ""),   // widget / GO launch options, editable on either device
+        Key("launchA", "lazycar", "launchA", ""),
+        Key("launchB", "lazycar", "launchB", ""))        // stored as a mode; shared as on / off
 
     private lateinit var app: Context
     private var send: ((JSONArray) -> Unit)? = null
@@ -34,6 +37,7 @@ object SettingsSync {
     private fun value(k: Key): Any = when {
         k.name == "gpsShare" -> sp(k.file).getString(k.key, null) != "stop"
         k.def is Int -> sp(k.file).getInt(k.key, k.def)
+        k.def is String -> sp(k.file).getString(k.key, null) ?: ""
         else -> sp(k.file).getBoolean(k.key, k.def as Boolean)
     }
 
@@ -76,6 +80,7 @@ object SettingsSync {
                     k.name == "gpsShare" -> com.lazyneil.lazycar.gps.GpsService.launch(app,
                         if (!j.optBoolean("v")) "stop" else if (Role.isTablet(app)) "receive" else "send")
                     k.def is Int -> sp(k.file).edit().putInt(k.key, j.optInt("v")).commit()
+                    k.def is String -> sp(k.file).edit().putString(k.key, j.optString("v")).commit()
                     else -> sp(k.file).edit().putBoolean(k.key, j.optBoolean("v")).commit()
                 }
                 stamps().edit().putLong(k.name, ts).commit()
