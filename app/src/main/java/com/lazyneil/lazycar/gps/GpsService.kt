@@ -170,7 +170,7 @@ class GpsService : Service(), LocationListener {
                 if (fusedOn && now - maxOf(fixAt, fusedAt) > 60000) fused(false)
                 // Each HIGH_ACCURACY fix costs a Wi-Fi scan that stalls the audio stream: only while moving or not yet precise.
                 val want = now - gpsAt > 10000 && !holding
-                if (want != fusedOn) Log.i("LazyGPS", if (want) "gps: moving, high accuracy"
+                if (want != fusedOn) Log.e("LazyCar", if (want) "gps: moving, high accuracy"
                     else "gps: still, holding precise fix age=${(now - lastFixAt) / 1000}s acc=${lastLoc?.accuracy?.toInt()}m")
                 fused(want)
             }
@@ -216,7 +216,11 @@ class GpsService : Service(), LocationListener {
         override fun onSensorChanged(e: SensorEvent) {
             val g = Math.sqrt((e.values[0] * e.values[0] + e.values[1] * e.values[1] + e.values[2] * e.values[2]).toDouble()).toFloat()
             if (gMean == 0f) gMean = g
-            if (Math.abs(g - gMean) > MOVE_G) movedAt = SystemClock.elapsedRealtime()
+            val d = Math.abs(g - gMean)
+            if (d > MOVE_G) {
+                if (SystemClock.elapsedRealtime() - movedAt >= STILL_MS) Log.e("LazyCar", "gps: motion d=${"%.2f".format(d)} m/s2")
+                movedAt = SystemClock.elapsedRealtime()
+            }
             gMean += (g - gMean) * 0.1f
         }
         override fun onAccuracyChanged(s: Sensor?, a: Int) {}
