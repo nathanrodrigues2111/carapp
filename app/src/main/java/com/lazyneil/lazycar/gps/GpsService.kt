@@ -3,7 +3,6 @@ package com.lazyneil.lazycar.gps
 import com.lazyneil.lazycar.R
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -30,7 +29,7 @@ import kotlin.concurrent.thread
 class GpsService : Service(), LocationListener {
     companion object {
         const val PORT = 47474
-        private const val NOTIF_ID = 47474   // GoService owns id 1
+        private const val NOTIF_ID = com.lazyneil.lazycar.GoService.NOTIF_ID   // one shared CarApp notification
         val PROVIDERS = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.FUSED_PROVIDER)
 
         // Live status, polled by the UI once a second.
@@ -116,8 +115,6 @@ class GpsService : Service(), LocationListener {
         Log.i("LazyGPS", "start $m")
         stopAll()
         lm = getSystemService(LocationManager::class.java)
-        getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(NotificationChannel("gps", "GPS sharing", NotificationManager.IMPORTANCE_LOW))
         mode = m; error = ""; lastAt = 0; sats = -1; peer = ""; packets = 0; source = ""; running = true
         // Location type is refused from the background (boot, force-stop restart) without while-in-use eligibility:
         // run under specialUse instead and upgrade on the next startIfIdle (activity resume or GO).
@@ -142,17 +139,14 @@ class GpsService : Service(), LocationListener {
             else -> "Accuracy ${acc.toInt()} m"
         }
         val open = PendingIntent.getActivity(this, 0, Intent(this, com.lazyneil.lazycar.MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        return Notification.Builder(this, "gps").setContentTitle(title).setContentText(text)
-            .setSmallIcon(R.drawable.ic_pin).setContentIntent(open).setOngoing(true).build()
+        return Notification.Builder(this, com.lazyneil.lazycar.GoService.channel(this)).setContentTitle(title).setContentText(text)
+            .setSmallIcon(R.drawable.ic_pin).setContentIntent(open).build()
     }
 
     // Refresh the notification text at most every 5 s.
     private fun gotFix() {
         lastAt = SystemClock.elapsedRealtime()
-        if (lastAt - notifiedAt > 5000) {
-            notifiedAt = lastAt
-            getSystemService(NotificationManager::class.java).notify(NOTIF_ID, notification())
-        }
+        // No notify(): the id is shared, GO and the speaker own its text.
     }
 
     private var gpsAt = 0L
@@ -198,8 +192,8 @@ class GpsService : Service(), LocationListener {
         }
     }
 
-    // Fused only after 10 s without a GNSS fix, and BALANCED: HIGH_ACCURACY made GMS Wi-Fi scan every ~9.6 s,
-    // each scan stalled the tablet audio stream ~120 ms. In the car GNSS works, so no scanning at all.
+    // Fused only after 10 s without a GNSS fix, HIGH_ACCURACY (Wi-Fi based, ~10 to 20 m indoors; BALANCED is 100 m).
+    // Its Wi-Fi scans are covered by the tablet's jitter buffer. In the car GNSS works, so no scanning at all.
     private val fusedL = android.location.LocationListener { onLocationChanged(it) }
     private var fusedOn = false
     private var fusedAt = 0L    // when fused was (re)registered
@@ -212,7 +206,7 @@ class GpsService : Service(), LocationListener {
         if (on && last == null) try { lm.getLastKnownLocation(LocationManager.FUSED_PROVIDER)
             ?.takeIf { SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos < HOLD_MS * 1_000_000 }?.let { onLocationChanged(it) } } catch (_: SecurityException) {}
         if (on) lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER,
-            android.location.LocationRequest.Builder(1000L).setQuality(android.location.LocationRequest.QUALITY_BALANCED_POWER_ACCURACY).build(),
+            android.location.LocationRequest.Builder(1000L).setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY).build(),
             mainExecutor, fusedL)
         else lm.removeUpdates(fusedL)
     }
