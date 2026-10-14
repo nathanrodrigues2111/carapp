@@ -32,13 +32,19 @@ object GoAction {
     private fun log(m: String) = android.util.Log.e("LazyCar", m)
     private fun step(name: String, since: Long) = log("step $name took ${SystemClock.uptimeMillis() - since}ms")
 
-    /** Current state, with recovery: STARTING/STOPPING older than 30s is treated as IDLE. */
+    /** Set while a Start/Stop sequence runs in this process; a fresh process (killed mid-sequence) has none. */
+    @Volatile private var busy = false
+    /** Ms (uptime) the running sequence needs; GoService stays alive until then. */
+    @Volatile var endAt = 0L
+
+    /** Current state, with recovery: STARTING/STOPPING with no sequence running, or older than 30s, is IDLE. */
     fun effectiveState(p: Prefs): Int {
         val s = p.state
-        if ((s == STARTING || s == STOPPING) && System.currentTimeMillis() - p.stateTs > STUCK_MS) return IDLE
+        if ((s == STARTING || s == STOPPING) && (!busy || System.currentTimeMillis() - p.stateTs > STUCK_MS)) return IDLE
         return s
     }
     private fun setState(ctx: Context, p: Prefs, st: Int) {
+        busy = st == STARTING || st == STOPPING
         p.state = st; GoWidget.refresh(ctx)
         ctx.sendBroadcast(Intent(ACTION_STATE).setPackage(ctx.packageName))
         log("state -> $st")
@@ -380,14 +386,15 @@ object GoAction {
         }, 12000)
     }
 
-    /** Best-effort real-state probe on app open: ON iff the speaker is A2DP-connected. */
+    /** Real-state probe on app open: clears a stuck busy state, and ON drops to IDLE once the speaker is gone.
+     *  Never promotes IDLE to ON: the speaker being connected does not mean Start ran. */
     fun deriveState(ctx: Context, p: Prefs, done: (Int) -> Unit) {
         val es = effectiveState(p)
-        if (es == STARTING || es == STOPPING || p.mac1.isEmpty()) { done(es); return }
+        if (es != p.state) setState(ctx, p, es)
+        if (es != ON || p.mac1.isEmpty()) { done(es); return }
         a2dpConnectedDevices(ctx) { connected ->
-            val st = if (p.mac1 in connected) ON else IDLE
-            if (st != p.state) setState(ctx, p, st)
-            done(st)
+            if (p.mac1 !in connected && p.state == ON) setState(ctx, p, IDLE)
+            done(p.state)
         }
     }
 

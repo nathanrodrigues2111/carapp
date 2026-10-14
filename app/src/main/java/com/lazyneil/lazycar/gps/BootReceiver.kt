@@ -10,7 +10,12 @@ class BootReceiver : BroadcastReceiver() {
         com.lazyneil.lazycar.TapService.ensureEnabled(ctx)   // an update force stops us, which disables accessibility
         ctx.getSharedPreferences("lazycar", Context.MODE_PRIVATE).edit().putLong("bootAt", System.currentTimeMillis()).apply()
         com.lazyneil.lazycar.Role.applyComponents(ctx)
-        if (com.lazyneil.lazycar.Role.isTablet(ctx)) com.lazyneil.lazycar.audio.StreamReceiver.sync(ctx)
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {   // nothing survives a reboot; an update keeps the state
+            com.lazyneil.lazycar.Prefs(ctx).state = com.lazyneil.lazycar.GoAction.IDLE; com.lazyneil.lazycar.GoWidget.refresh(ctx)
+        }
+        if (com.lazyneil.lazycar.Role.isTablet(ctx)) {
+            com.lazyneil.lazycar.audio.StreamReceiver.sync(ctx); com.lazyneil.lazycar.media.PhoneMedia.start(ctx)
+        }
         val m = GpsService.autoMode(ctx)
         if (m != "stop") GpsService.launch(ctx, m)
     }
