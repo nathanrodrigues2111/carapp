@@ -2,12 +2,11 @@ package com.lazyneil.lazycar
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Color
-import androidx.core.graphics.ColorUtils
 
 /** The accent is always taken from the album art; neutral near-white when there is no art. */
 object Accent {
     private const val CYAN = 0xFFF2F2F2.toInt()
+    private const val BG = 0xFF000000.toInt()
 
     /** Current album art, app wide: PhoneMedia sets it on the tablet, MediaListener and the home screen on the phone. */
     @Volatile var art: Bitmap? = null
@@ -22,7 +21,7 @@ object Accent {
 
     /** Accent for [art]: the phone's value when it sent one, else extracted here, else cyan. */
     @Suppress("UNUSED_PARAMETER")
-    fun forArt(ctx: Context, art: Bitmap?) = fromPhone ?: Ui.artColor(art) ?: CYAN
+    fun forArt(ctx: Context, art: Bitmap?) = Contrast.lift(fromPhone ?: Ui.artColor(art) ?: CYAN, BG)   // >= 3:1 on the black background
 
     private var pushed = 0
     /** Call after art or fromPhone changes: home screen widgets follow the accent. Main thread or not. */
@@ -31,7 +30,6 @@ object Accent {
         android.os.Handler(android.os.Looper.getMainLooper()).post { GoWidget.refresh(ctx); DriveWidget.refresh(ctx) }
     }
 
-    /** Readable foreground for a given accent: near-black on light accents, white on dark ones. */
-    fun onColor(argb: Int): Int =
-        if (ColorUtils.calculateLuminance(argb) > 0.18) 0xFF140600.toInt() else Color.WHITE
+    /** Content on an accent fill: black or white, whichever has the higher WCAG contrast. */
+    fun onColor(argb: Int): Int = Contrast.onColor(argb)
 }

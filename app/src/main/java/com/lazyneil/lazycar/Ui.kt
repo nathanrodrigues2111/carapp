@@ -87,7 +87,7 @@ object Ui {
         val checked = intArrayOf(android.R.attr.state_checked)
         val sw = ColorStateList(arrayOf(checked, intArrayOf()), intArrayOf(c, attr(root.context, R.attr.carSurfaceHigh)))
         // Light accents (grey or pale art): dark ON thumb and a thin dark ring on slider thumbs for contrast.
-        val light = ColorUtils.calculateLuminance(c) > 0.6
+        val light = Accent.onColor(c) != Color.WHITE   // the accent wants dark content
         val thumb = ColorStateList(arrayOf(checked, intArrayOf()), intArrayOf(Accent.onColor(c), attr(root.context, R.attr.carTextDim)))
         val d = root.resources.displayMetrics.density
         fun walk(v: View) {
