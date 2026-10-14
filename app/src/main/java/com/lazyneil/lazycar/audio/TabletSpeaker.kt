@@ -68,7 +68,7 @@ object TabletSpeaker {
                 "Clock offset locked, round trip ${"%.1f".format(r.rttMs)} ms. JBL latency (phone measured) ${r.phoneOutMs} ms. " +
                 "Acoustic correction ${"%+.0f".format(r.acousticMs)} ms, last residual ${if (Acoustic.residualMs.isNaN()) "n/a" else "%+.0f ms".format(Acoustic.residualMs)} (${Acoustic.note}). " +
                 "Jitter ${"%.0f".format(r.jitterMs)} ms, buffer target ${r.targetMs} ms" +
-                r.outputs.joinToString("") { ". ${it.name}: ${it.aheadMs} ms ahead, sync error ${"%+.1f".format(it.errMs)} ms, resample ${it.ppm} ppm, jitter depth ${it.depthMs} ms, track buffer ${it.bufferMs} ms, underruns ${it.underruns}, concealed ${it.concealed}, dropped ${it.dropped}, silenced ${it.mutes}" } +
+                r.outputs.joinToString("") { (if (it.protect) ". Protecting speaker" else "") + ". ${it.name}: ${it.aheadMs} ms ahead, sync error ${"%+.1f".format(it.errMs)} ms, resample ${it.ppm} ppm, jitter depth ${it.depthMs} ms, track buffer ${it.bufferMs} ms, underruns ${it.underruns}, concealed ${it.concealed}, dropped ${it.dropped}, silenced ${it.mutes}" } +
                 ", lost ${r.lost}"
         }
     } else {

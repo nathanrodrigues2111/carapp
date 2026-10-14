@@ -259,7 +259,7 @@ object Ui {
         val tick = object : Runnable {
             override fun run() {
                 if (a.isFinishing || !root.isAttachedToWindow) return
-                show(0, jbl, jblPct, if (tablet) (if (PhoneMedia.connected) Volumes.jblFromNp(PhoneMedia.np) else -1) else Volumes.localPct(a))
+                show(0, jbl, jblPct, if (tablet) (if (PhoneMedia.connected) Volumes.jblFromNp(PhoneMedia.np) else -1) else Volumes.jblPct(a))
                 show(1, tab, tabPct, if (tablet) Volumes.localPct(a) else if (MediaListener.clients > 0) MediaListener.tabletPct else -1)
 
                 val bt = if (tablet) PhoneMedia.connected

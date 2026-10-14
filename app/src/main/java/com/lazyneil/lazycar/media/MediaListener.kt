@@ -145,7 +145,7 @@ class MediaListener : NotificationListenerService() {
             j.put("state", st.state).put("pos", pos).put("speed", st.playbackSpeed.toDouble())
         }
         val am = getSystemService(AudioManager::class.java)
-        j.put("vol", am.getStreamVolume(AudioManager.STREAM_MUSIC)).put("volMax", am.getStreamMaxVolume(AudioManager.STREAM_MUSIC))
+        Volumes.jblStream().let { st -> j.put("vol", am.getStreamVolume(st)).put("volMax", am.getStreamMaxVolume(st)) }
         j.put("go", com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this)) == com.lazyneil.lazycar.GoAction.ON)
         val key = listOf(c?.packageName, j.optString("title"), j.optString("artist"), j.optString("album")).joinToString("|")
         val needArt = out.any { it.artKey != key }
@@ -200,7 +200,7 @@ class MediaListener : NotificationListenerService() {
             "next" -> t?.skipToNext()
             "prev" -> t?.skipToPrevious()
             "seek" -> t?.seekTo(j.optLong("pos"))
-            "vol" -> getSystemService(AudioManager::class.java).adjustStreamVolume(AudioManager.STREAM_MUSIC,
+            "vol" -> getSystemService(AudioManager::class.java).adjustStreamVolume(Volumes.jblStream(),
                 if (j.optInt("d") > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER, 0).also { main.postDelayed({ push() }, 150) }
             "volSet" -> com.lazyneil.lazycar.media.Volumes.setJblLocal(this, j.optInt("pct")).also { main.postDelayed({ push() }, 150) }
             "tvol" -> tabletPct = j.optInt("pct")

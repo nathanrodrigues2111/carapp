@@ -42,6 +42,11 @@ class StreamSender : Service() {
         @Volatile var outMs = 0         // mixer to JBL latency, from the monitor track
         @Volatile var capMs = 0         // mixer to our read() latency, from the AudioRecord timestamp
         @Volatile var halMs = -1        // hidden AudioManager.getOutputLatency(STREAM_MUSIC), cross-check only
+        /** Shared timeline: CarApp plays the JBL itself, [Wire.SHARED_MS] after capture, on the accessibility stream
+         *  (own volume via TapService), with STREAM_MUSIC at 0 so the apps' direct path is silent. */
+        @Volatile var shared = false
+        @Volatile var jbl: StreamReceiver.Output? = null
+        @Volatile var duckRemote = false
 
         /** ms from writing a frame to it leaving the device, from the track's own timestamp. */
         fun latencyMs(t: android.media.AudioTrack, written: Long): Int? {
@@ -119,9 +124,12 @@ class StreamSender : Service() {
     }
 
     private fun capture(mp: MediaProjection) {
+        startShared()
         val cfg = AudioPlaybackCaptureConfiguration.Builder(mp)
             .addMatchingUsage(AudioAttributes.USAGE_MEDIA).addMatchingUsage(AudioAttributes.USAGE_GAME)
-            .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN).build()
+            .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+            // Shared: music volume is 0, so phone Maps prompts only play through us (450 ms late, both outputs).
+            .apply { if (shared) addMatchingUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE) }.build()
         val fmt = AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(Wire.RATE)
             .setChannelMask(AudioFormat.CHANNEL_IN_STEREO).build()
         val rec = AudioRecord.Builder().setAudioFormat(fmt).setAudioPlaybackCaptureConfig(cfg)
@@ -137,7 +145,8 @@ class StreamSender : Service() {
             val buf = ByteArray(64)
             while (alive) try {
                 val p = DatagramPacket(buf, buf.size); s.receive(p)
-                if (p.length == 14 && String(buf, 0, 6) == Wire.MAGIC) {
+                if (p.length >= 14 && String(buf, 0, 6) == Wire.MAGIC) {
+                    duckRemote = p.length >= 15 && buf[14] == 1.toByte(); jbl?.duck = duckRemote
                     beaconNs = System.nanoTime(); beaconT = ByteBuffer.wrap(buf, 6, 8).long; beaconAt = SystemClock.elapsedRealtime()
                     dest = p.socketAddress; tablet = p.address.hostAddress ?: ""
                 }
@@ -150,6 +159,7 @@ class StreamSender : Service() {
             val bb = ByteBuffer.wrap(pkt)
             val dp = DatagramPacket(pkt, pkt.size); var prevRd = 0L; var gapMax = 0   // one packet object, reused
             var seq = 0; var bytes = 0L; var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
+            val pool = Array(512) { ShortArray(Wire.CHUNK / 2) }   // JBL copies, reused (the JBL queue holds < 1 s)
             var readFrames = 0L; val rts = android.media.AudioTimestamp(); var tsAt = 0L; var haveTs = false
             while (alive) {
                 val r = rec.read(pkt, Wire.HEADER, Wire.CHUNK)
@@ -163,9 +173,15 @@ class StreamSender : Service() {
                 n += r / 2; readFrames += r / 4
                 val d = dest
                 if (d != null && now - beaconAt < 5000) {
-                    bb.putInt(0, seq++).putLong(4, beaconT).putLong(12, beaconNs).putLong(20, System.nanoTime()).putLong(28, mixNs).putInt(36, outMs)
+                    bb.putInt(0, seq).putLong(4, beaconT).putLong(12, beaconNs).putLong(20, System.nanoTime()).putLong(28, mixNs).putInt(36, if (shared) Wire.SHARED_MS else outMs)
                     try { dp.setData(pkt, 0, Wire.HEADER + r); dp.socketAddress = d; s.send(dp); bytes += Wire.HEADER + r } catch (_: Exception) {}
                 } else tablet = ""
+                seq++
+                jbl?.let { o ->
+                    val sh = if (r == Wire.CHUNK) pool[(seq - 1) and 511] else ShortArray(r / 2)
+                    ByteBuffer.wrap(pkt, Wire.HEADER, r).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(sh)
+                    o.put(StreamReceiver.Chunk(seq - 1, sh, mixNs + Wire.SHARED_MS * 1_000_000L))
+                }
                 if (now - secAt >= 1000) {
                     rms = sqrt(sq / maxOf(n, 1)).toInt(); kbps = (bytes * 8 / (now - secAt)).toInt()
                     if (haveTs)
@@ -201,7 +217,53 @@ class StreamSender : Service() {
         }
     }
 
+    private var volGuard: android.content.BroadcastReceiver? = null
+
+    private fun startShared() {
+        if (!Wire.SHARED_ON) return   // ponytail: off until tested on the phone (installs need a tap on the phone)
+        val am = getSystemService(android.media.AudioManager::class.java)
+        if (am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).none { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }) { Log.e("LazyCar", "speaker shared: no A2DP output, playing direct"); return }
+        val p = getSharedPreferences("speaker", MODE_PRIVATE)
+        val m = android.media.AudioManager.STREAM_MUSIC; val a = android.media.AudioManager.STREAM_ACCESSIBILITY
+        val mMax = am.getStreamMaxVolume(m)
+        val saved = p.getInt("musicSaved", -1).takeIf { it >= 0 } ?: am.getStreamVolume(m)   // >= 0: a crash left music at 0
+        p.edit().putInt("musicSaved", saved).apply()
+        am.setStreamVolume(m, 0, 0)
+        am.setStreamVolume(a, Math.round(saved * am.getStreamMaxVolume(a) / mMax.toFloat()), 0)
+        // Accessibility volume follows music unless TapService asks for its own: then shared cannot work.
+        if (am.getStreamVolume(m) != 0 || (saved > 0 && am.getStreamVolume(a) == 0)) {
+            Log.e("LazyCar", "speaker shared: accessibility volume not independent, playing direct"); restoreMusic(); return
+        }
+        shared = true
+        jbl = StreamReceiver.Output("jbl", android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, this,
+            AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY, bufMs = 150, budgetMs = { Wire.SHARED_MS - capMs }) { 0.0 }.also { it.run { alive } }
+        // Anything that raises music (keys the key filter missed, GO's start volume, OnePlus resets) goes back to 0;
+        // a one or two step raise is the user, so it moves our level instead.
+        volGuard = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                if (!shared || i.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1) != m) return
+                val v = am.getStreamVolume(m); if (v == 0) return
+                if (v <= 2 * maxOf(1, mMax / 16)) am.adjustStreamVolume(a, android.media.AudioManager.ADJUST_RAISE, android.media.AudioManager.FLAG_SHOW_UI)
+                am.setStreamVolume(m, 0, 0)
+            }
+        }.also { androidx.core.content.ContextCompat.registerReceiver(this, it,
+            android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION"), androidx.core.content.ContextCompat.RECEIVER_EXPORTED) }
+        Log.e("LazyCar", "speaker shared: on, music $saved/$mMax -> accessibility ${am.getStreamVolume(a)}/${am.getStreamMaxVolume(a)}")
+    }
+
+    /** Music back to the level our accessibility stream was at, so the direct path continues seamlessly. */
+    private fun restoreMusic() {
+        val am = getSystemService(android.media.AudioManager::class.java)
+        val p = getSharedPreferences("speaker", MODE_PRIVATE)
+        val m = android.media.AudioManager.STREAM_MUSIC; val a = android.media.AudioManager.STREAM_ACCESSIBILITY
+        val v = if (shared) Math.round(am.getStreamVolume(a) * am.getStreamMaxVolume(m) / am.getStreamMaxVolume(a).toFloat()) else p.getInt("musicSaved", -1)
+        if (v >= 0) am.setStreamVolume(m, v, 0)
+        p.edit().remove("musicSaved").apply()
+    }
+
     override fun onDestroy() {
+        volGuard?.let { unregisterReceiver(it) }; volGuard = null
+        restoreMusic(); shared = false; jbl = null
         alive = false; running = false; tablet = ""; kbps = 0; rms = 0
         socket?.close(); socket = null
         projection?.stop(); projection = null
@@ -222,5 +284,7 @@ object Wire {
     const val CHUNK = 960          // 5 ms of 48 kHz stereo 16-bit, fits one Wi-Fi frame
     const val CHUNK_MS = 5
     const val FORMAT = "lossless PCM 48 kHz 16-bit stereo"
+    const val SHARED_ON = false
+    const val SHARED_MS = 450      // capture to speaker on both outputs in shared mode; JBL A2DP ~250 + room for stalls
     const val HEADER = 40          // seq int, echoed tablet beacon ns, phone ns at beacon, phone ns at send, phone mixer ns of frame 0, phone to JBL ms int
 }

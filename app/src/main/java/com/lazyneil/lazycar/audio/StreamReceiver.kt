@@ -51,6 +51,7 @@ class StreamReceiver : Service() {
         @Volatile var jitterMs = 0.0    // peak arrival spread, decays
         @Volatile var targetMs = 0      // jitter buffer the deadline never goes below
         @Volatile var acousticMs = 0.0  // mic measured correction on top of the phone's numbers
+        @Volatile var lagMs = 0         // best case phone mixer to our arrival (capture + network)
         val outputs = mutableListOf<Output>()
 
         fun sync(ctx: Context) {
@@ -66,7 +67,13 @@ class StreamReceiver : Service() {
     class Chunk(val seq: Int, val pcm: ShortArray, val jblNs: Long)
 
     /** One AudioTrack pinned to one device, fed from a reorder buffer keyed by sequence number. */
-    class Output(val name: String, type: Int, ctx: Context, val extraMs: () -> Double) {
+    class Output(val name: String, type: Int, ctx: Context, usage: Int = AudioAttributes.USAGE_MEDIA, private val bufMs: Int = 200,
+                 /** ms from a chunk's arrival to its deadline; the track buffer is sized to fit inside it. */
+                 private val budgetMs: () -> Int = { 1000 }, val extraMs: () -> Double) {
+        @Volatile var protect = false   // too many glitches: silent until clean for 5 s
+        /** Lower music for directions: -12 dB, 100 ms down, 300 ms up. */
+        @Volatile var duck = false
+        private var duckG = 1f
         private val jb = TreeMap<Int, Chunk>()
         @Volatile var aheadMs = 0       // queued plus in the track, ms of audio ahead of the speaker
         @Volatile var depthMs = 0       // jitter protection: reorder buffer plus unplayed client buffer
@@ -75,20 +82,23 @@ class StreamReceiver : Service() {
         @Volatile var concealed = 0
         @Volatile var dropped = 0
         @Volatile var mutes = 0         // fail-safe silences
+        @Volatile var realigns = 0      // 10 ms crossfade jumps to fix big sync errors
         val underruns get() = track.underrunCount
         val device: AudioDeviceInfo? = ctx.getSystemService(AudioManager::class.java)
             .getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.type == type }
         private val minBuf = AudioTrack.getMinBufferSize(Wire.RATE, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT)
         private val track = AudioTrack.Builder()
-            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(usage)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
             .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(Wire.RATE)
                 .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
-            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-            .setBufferSizeInBytes(minBuf * 4)
+            // Big track buffer, normal mixer: a busy device (app launch, GC, Maps) can stall our thread for
+            // [bufMs] without an underrun. The shared 450 ms timeline leaves room for it.
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)   // the normal mixer path adds ~80 ms of HAL latency here
+            .setBufferSizeInBytes(maxOf(minBuf, Wire.RATE * 4 * (bufMs + 50) / 1000))
             .build().apply { setPreferredDevice(device); setVolume(1f) }
-        // Capacity 4x min, but only fill 2x: every ms of track buffer is a ms later than the JBL. Grows on underruns.
-        private var fill = (minBuf / 4 * 2).coerceAtMost(track.bufferCapacityInFrames).also { track.bufferSizeInFrames = it }
+        // Filled to bufMs; grows on underruns up to the capacity.
+        private var fill = (Wire.RATE * bufMs / 1000).coerceAtMost(track.bufferCapacityInFrames).also { track.bufferSizeInFrames = it }
         val bufferMs get() = track.bufferSizeInFrames * 1000 / Wire.RATE
         val routed get() = track.routedDevice?.productName?.toString() + " (" + (track.routedDevice?.type ?: -1) + ")"
         /** Mono 8 kHz copy of what we wrote, for the mic correlation. Index = written frames / 6. */
@@ -126,7 +136,11 @@ class StreamReceiver : Service() {
             var last: ShortArray? = null; var fades = 0
             // Fail-safe: any gap or a near empty buffer fades out over 5 ms and stays silent (timeline keeps running)
             // until the buffer has been healthy for 1 s, then fades in over 50 ms. Silence instead of crackle.
-            var muted = false; var healthySince = 0L; var fadeIn = 0
+            var sizedAt = 0L
+            var muted = false; var healthySince = 0L; var fadeIn = 0; var fadeLen = Wire.RATE / 20
+            // Speaker protection: any glitch fades out in 5 ms; more than 3 in 10 s keeps us silent until 5 s clean.
+            val events = LongArray(4); var ev = 0
+            fun glitch() { val t = SystemClock.elapsedRealtime(); events[ev++ and 3] = t; healthySince = 0; if (events.all { t - it < 10_000 }) protect = true }
             var dec = 0f; var decN = 0; var seenUnder = 0
             fun write(s: ShortArray) {
                 written += track.write(s, 0, s.size).coerceAtLeast(0) / 2
@@ -141,8 +155,13 @@ class StreamReceiver : Service() {
                 aheadMs = (aheadNs / 1_000_000).toInt()
                 val client = ((written - track.playbackHeadPosition) * 1000 / Wire.RATE).toInt()
                 depthMs = client + synchronized(jb) { jb.size } * Wire.CHUNK_MS
-                if (track.underrunCount > seenUnder) { seenUnder = track.underrunCount
-                    if (fill < track.bufferCapacityInFrames) { fill = minOf(track.bufferCapacityInFrames, fill + minBuf / 16); track.bufferSizeInFrames = fill } }
+                if (track.underrunCount > seenUnder) { seenUnder = track.underrunCount; glitch() }
+                // Track write ahead = what is left of the budget after the HAL latency and 40 ms for network jitter.
+                if (now - sizedAt > 1_000_000_000L) { sizedAt = now
+                    val hal = (aheadMs - client).coerceIn(0, 300)
+                    val want = (Wire.RATE * (budgetMs() + extraMs().toInt() - hal - 40).coerceIn(20, bufMs) / 1000).coerceAtMost(track.bufferCapacityInFrames)
+                    if (abs(want - fill) > Wire.RATE / 200) { fill = want; track.bufferSizeInFrames = fill }
+                }
                 val c = take()
                 if (c == null) {
                     // Nothing in time: conceal with the last frame, fading, before the track runs dry.
@@ -150,8 +169,8 @@ class StreamReceiver : Service() {
                     if (last != null && client < 15) {
                         val l = last; val n = l.size / 2
                         write(lim.process(FloatArray(l.size) { if (fades > 0) 0f else l[2 * (n - 1 - it / 2) + it % 2] * (1 - (it / 2) / n.toFloat()) }))
-                        if (fades == 0 && !muted) { muted = true; mutes++; healthySince = 0 }
-                        fades++; concealed++; skip()
+                        if (fades == 0 && !muted) { muted = true; mutes++; healthySince = 0; glitch() }
+                        fades++; concealed++; skip(); healthySince = 0
                     } else Thread.sleep(2)
                     continue
                 }
@@ -159,33 +178,49 @@ class StreamReceiver : Service() {
                 val e = (playNow - deadline) / 1e6
                 // Far off (start, stall, big clock step): jump once, then micro resampling keeps it there.
                 // The JBL latency is the whole budget: playing late to grow the buffer only trades sync for drops later.
-                if (e > 50 && depthMs > 40) { dropped++; errMs = 0.0; continue }
-                if (e < -50) { write(ShortArray(((-e).coerceAtMost(500.0) * Wire.RATE / 1000).toInt() * 2)); putBack(c); errMs = 0.0; continue }
                 errMs = errMs * 0.98 + e * 0.02
+                // Off by more than drift can fix (start, stall, clock step): one re-align. This chunk fades out over
+                // 5 ms, we skip (late) or pad silence (early) by the error, the next chunk fades in over 5 ms.
+                if (abs(e) > 50 || (abs(errMs) > 8 && abs(e) > 8)) {
+                    val y = rs.process(c.pcm, 1.0); val yn = y.size / 2
+                    for (i in 0 until yn) { val g = 1 - i / yn.toFloat(); y[2 * i] *= g; y[2 * i + 1] *= g }
+                    if (muted || fades > 0) y.fill(0f)
+                    write(lim.process(y)); last = c.pcm; realigns++
+                    if (e > 0) { var k = ((e - Wire.CHUNK_MS) / Wire.CHUNK_MS).toInt(); while (k-- > 0 && depthMs - Wire.CHUNK_MS > 30) { skip(); depthMs -= Wire.CHUNK_MS; dropped++ } }
+                    else write(ShortArray(((-e - Wire.CHUNK_MS).coerceIn(0.0, 600.0) * Wire.RATE / 1000).toInt() * 2))
+                    errMs = 0.0; fadeIn = maxOf(fadeIn, Wire.RATE / 200); fadeLen = Wire.RATE / 200
+                    continue
+                }
                 // Drift only: at most 500 ppm. Big errors take the jump above instead of pinning the resampler.
                 // Drift only, inaudible: at most 100 ppm (0.1 ms per second), 20 ppm per ms of error.
                 val r = if (abs(errMs) < 1) 1.0 else 1 + (errMs / 50000).coerceIn(-0.0001, if (depthMs < 30) 0.0 else 0.0001)
                 ppm = ((r - 1) * 1e6).toInt()
                 val x = rs.process(c.pcm, r)
                 val fr = x.size / 2
-                if (!muted && depthMs < 20) { for (i in x.indices) x[i] *= 1 - (i / 2) / fr.toFloat(); muted = true; mutes++; healthySince = 0 }
+                if (!muted && (depthMs < 20 || protect)) { for (i in x.indices) x[i] *= 1 - (i / 2) / fr.toFloat(); muted = true; mutes++; healthySince = 0; glitch() }
                 else if (muted) {
                     val t = SystemClock.elapsedRealtime()
                     if (depthMs < 60) healthySince = 0 else if (healthySince == 0L) healthySince = t
-                    if (healthySince != 0L && t - healthySince >= 1000) { muted = false; fadeIn = Wire.RATE / 20 }
+                    if (healthySince != 0L && t - healthySince >= (if (protect) 5000 else 1000)) { fadeIn = if (protect) Wire.RATE else Wire.RATE / 20; fadeLen = fadeIn; muted = false; protect = false }
                     else x.fill(0f)
                 }
-                if (!muted && fadeIn > 0) for (i in 0 until fr) { val g = 1 - (fadeIn - i).coerceAtLeast(0) / (Wire.RATE / 20f); x[2 * i] *= g; x[2 * i + 1] *= g }
+                if (!muted && fadeIn > 0) for (i in 0 until fr) { val g = 1 - (fadeIn - i).coerceAtLeast(0) / fadeLen.toFloat(); x[2 * i] *= g; x[2 * i + 1] *= g }
                 if (fadeIn > 0) fadeIn = (fadeIn - fr).coerceAtLeast(0)
+                val dt = if (duck) 0.25f else 1f
+                if (duckG != dt || dt != 1f) for (i in 0 until fr) {
+                    duckG = if (duckG > dt) maxOf(dt, duckG - 0.75f / (Wire.RATE / 10)) else minOf(dt, duckG + 0.75f / (Wire.RATE * 0.3f))
+                    x[2 * i] *= duckG; x[2 * i + 1] *= duckG
+                }
                 write(lim.process(x))
                 last = c.pcm; fades = 0
             }
             track.stop(); track.release()
         }
-        private fun putBack(c: Chunk) = synchronized(jb) { jb[c.seq] = c; nextSeq = c.seq }
     }
 
     @Volatile private var alive = false
+    @Volatile private var navDuck = false
+    private var playback: AudioManager.AudioPlaybackCallback? = null
     private var socket: DatagramSocket? = null
     private var wifi: WifiManager.WifiLock? = null
     private var wifiLow: WifiManager.WifiLock? = null
@@ -222,17 +257,26 @@ class StreamReceiver : Service() {
         acousticMs = TabletSpeaker.acoustic(ctx).toDouble().let { if (abs(it) > Acoustic.MAX_MS) { TabletSpeaker.saveAcoustic(ctx, 0); 0.0 } else it }
         synchronized(outputs) {
             outputs.clear()
-            outputs += Output("speaker", AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, ctx) { acousticMs + TabletSpeaker.delayMs(ctx) }
+            outputs += Output("speaker", AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, ctx, budgetMs = { phoneOutMs - lagMs }) { acousticMs + TabletSpeaker.delayMs(ctx) }
             if (TabletSpeaker.btToo(ctx)) outputs += Output("bluetooth", AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, ctx) { 0.0 }
             outputs.forEach { it.run { alive } }
         }
         Acoustic(ctx, outputs[0]) { alive }.start()
+        // Maps (or anything) speaking directions here: duck our output and tell the phone so the JBL dips too.
+        val am = getSystemService(AudioManager::class.java)
+        fun nav() { val on = com.lazyneil.lazycar.Ui.duckNav(ctx) && am.activePlaybackConfigurations.any {
+                it.audioAttributes.usage == AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE && "state:started" in it.toString() }
+            if (on != navDuck) Log.e("LazyCar", "speaker duck $on")
+            navDuck = on; outputs.forEach { it.duck = on } }
+        playback = object : AudioManager.AudioPlaybackCallback() {
+            override fun onPlaybackConfigChanged(c: MutableList<android.media.AudioPlaybackConfiguration>) = nav()
+        }.also { am.registerAudioPlaybackCallback(it, null) }
         thread(name = "speaker-beacon") {
-            val hello = ByteArray(14).also { Wire.MAGIC.toByteArray().copyInto(it) }
+            val hello = ByteArray(15).also { Wire.MAGIC.toByteArray().copyInto(it) }
             while (alive) {
-                ByteBuffer.wrap(hello).putLong(6, System.nanoTime())
+                ByteBuffer.wrap(hello).putLong(6, System.nanoTime()); hello[14] = if (navDuck) 1 else 0
                 for (a in broadcastTargets()) try { s.send(DatagramPacket(hello, hello.size, a, Wire.PHONE_PORT)) } catch (_: Exception) {}
-                Thread.sleep(500)
+                Thread.sleep(100)   // also carries the duck flag, so it reaches the phone within 100 ms
             }
         }
         thread(name = "speaker-net") {
@@ -252,7 +296,6 @@ class StreamReceiver : Service() {
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastAt > 2000 || seq < last - 1000) {                      // fresh stream (phone restarted)
                     last = seq - 1; clock.reset(); outputs.forEach { it.reset() }
-                    com.lazyneil.lazycar.media.Volumes.applyTablet(ctx, com.lazyneil.lazycar.media.Volumes.tabletSaved(ctx))
                 }
                 clock.add(t3, bb.getLong(4), bb.getLong(12), bb.getLong(20), bb.getLong(28))
                 phoneOutMs = bb.getInt(36)
@@ -267,7 +310,7 @@ class StreamReceiver : Service() {
                     kbps = (bytes * 8 / (now - secAt)).toInt(); bytes = 0; secAt = now
                     rms = kotlin.math.sqrt(sq / maxOf(n, 1)).toInt(); sq = 0.0; n = 0; val g = gapMax; gapMax = 0
                     Log.e("LazyCar", "speaker recv kbps=$kbps gap=$g rms=$rms rtt=${"%.1f".format(rttMs)} jitter=${"%.1f".format(jitterMs)} target=$targetMs phoneOut=$phoneOutMs acoustic=${"%.0f".format(acousticMs)} lost=$lost " +
-                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} clip=${it.lim.clipped} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
+                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} realign=${it.realigns} clip=${it.lim.clipped} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
                 }
             } catch (_: Exception) {}
         }
@@ -296,7 +339,7 @@ class StreamReceiver : Service() {
             offsetNs = best[2]; rttMs = best[1] / 1e6; offsetMs = offsetNs / 1e6
             val lag = t3 - (mix - offsetNs)
             if (lag < cur[3]) cur[3] = lag
-            minLagNs = win.minOf { it[3] }
+            minLagNs = win.minOf { it[3] }; lagMs = (minLagNs / 1_000_000).toInt()
             // Peak hold that halves in about 5 s (200 packets a second).
             peak = maxOf((lag - minLagNs) / 1e6, peak * 0.9993)
             jitterMs = peak
@@ -313,6 +356,7 @@ class StreamReceiver : Service() {
 
     override fun onDestroy() {
         alive = false; running = false; phone = ""; kbps = 0
+        playback?.let { getSystemService(AudioManager::class.java).unregisterAudioPlaybackCallback(it) }; playback = null
         socket?.close(); socket = null
         wifi?.release(); wifi = null
         wifiLow?.release(); wifiLow = null

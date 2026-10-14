@@ -310,6 +310,16 @@ class TapService : AccessibilityService() {
     private var tileFinished = false
     private val tileDone = Collections.synchronizedSet(mutableSetOf<String>())
 
+    /** Shared audio mode: music volume is held at 0, so the volume keys move CarApp's JBL level instead. */
+    override fun onKeyEvent(e: android.view.KeyEvent): Boolean {
+        if (!com.lazyneil.lazycar.audio.StreamSender.shared) return false
+        val dir = when (e.keyCode) { android.view.KeyEvent.KEYCODE_VOLUME_UP -> android.media.AudioManager.ADJUST_RAISE
+            android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> android.media.AudioManager.ADJUST_LOWER; else -> return false }
+        if (e.action == android.view.KeyEvent.ACTION_DOWN) getSystemService(android.media.AudioManager::class.java)
+            .adjustStreamVolume(android.media.AudioManager.STREAM_ACCESSIBILITY, dir, android.media.AudioManager.FLAG_SHOW_UI)
+        return true
+    }
+
     override fun onServiceConnected() {   // the system binds us at boot, after an update and after a process restart
         instance = this; startJoin()
         // Tablet start: we bind after unlock, give the launcher a moment, then open Maps + CarApp.

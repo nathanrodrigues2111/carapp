@@ -26,8 +26,15 @@ object Volumes {
     fun saveTablet(ctx: Context, pct: Int) = ctx.getSharedPreferences("speaker", Context.MODE_PRIVATE).edit().putInt("tvol", pct).apply()
     fun applyTablet(ctx: Context, pct: Int) { saveTablet(ctx, pct); setLocal(ctx, pct) }
 
+    /** Phone JBL level lives on STREAM_ACCESSIBILITY while CarApp plays the JBL itself (shared mode). */
+    fun jblStream() = if (com.lazyneil.lazycar.audio.StreamSender.shared) AudioManager.STREAM_ACCESSIBILITY else AudioManager.STREAM_MUSIC
+    fun jblPct(ctx: Context) = am(ctx).let { it.getStreamVolume(jblStream()) * 100 / maxOf(1, it.getStreamMaxVolume(jblStream())) }
+
     /** Phone: the JBL level is also the GO start volume, so GO restores it. */
-    fun setJblLocal(ctx: Context, pct: Int) { setLocal(ctx, pct); Prefs(ctx).vol = pct }
+    fun setJblLocal(ctx: Context, pct: Int) {
+        am(ctx).let { it.setStreamVolume(jblStream(), (pct * it.getStreamMaxVolume(jblStream()) / 100f).roundToInt(), 0) }
+        Prefs(ctx).vol = pct
+    }
 
     fun jblFromNp(np: JSONObject) = if (np.optInt("volMax") > 0) np.optInt("vol") * 100 / np.optInt("volMax") else -1
 
@@ -58,7 +65,7 @@ object Volumes {
             row("JBL (Bluetooth)", { if (PhoneMedia.connected) jblFromNp(PhoneMedia.np) else -1 }) { v -> PhoneMedia.cmd("volSet") { put("pct", v) } }
             row("Tablet speaker", { localPct(a) }) { v -> applyTablet(a, v) }
         } else {
-            row("JBL (Bluetooth)", { localPct(a) }) { v -> setJblLocal(a, v) }
+            row("JBL (Bluetooth)", { jblPct(a) }) { v -> setJblLocal(a, v) }
             row("Tablet speaker", { if (MediaListener.clients > 0) MediaListener.tabletPct else -1 }) { v -> MediaListener.setTablet(v) }
         }
         parent.addView(box, index)

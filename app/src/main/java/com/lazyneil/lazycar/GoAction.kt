@@ -183,6 +183,7 @@ object GoAction {
      * Each correction logs before/after. STREAM_MUSIC is the shared level in OnePlus Audio sharing.
      */
     private fun enforceStartVolume(ctx: Context, pct: Int, budgetMs: Long) {
+        if (com.lazyneil.lazycar.audio.StreamSender.shared) { com.lazyneil.lazycar.media.Volumes.setJblLocal(ctx, pct); return }   // music is held at 0
         val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val target = VolumeMath.toStreamIndex(pct, max)
