@@ -54,17 +54,22 @@ object Ui {
     }
     fun themeAccent(c: Context) = attr(c, R.attr.carAccent)
 
-    /** Vivid accent from album art: the most saturated hue bucket, pushed bright. Null for grey art. */
+    /** Accent from album art: the dominant colorful hue bin, then the real weighted average hue/sat/val of its
+     *  pixels, only nudged into a visible range (sat >= 0.45, val 0.65..1). Null for grey art. */
     fun artColor(b: Bitmap?): Int? = try {
         b?.let { src ->
             val s = Bitmap.createScaledBitmap(src, 48, 48, true)
-            val hsv = FloatArray(3); val w = FloatArray(12)
+            val hsv = FloatArray(3); val w = FloatArray(12); val acc = Array(12) { FloatArray(3) }
             for (x in 0 until 48) for (y in 0 until 48) {
                 Color.colorToHSV(s.getPixel(x, y), hsv)
-                if (hsv[1] >= 0.25f && hsv[2] >= 0.3f) w[(hsv[0] / 30).toInt() % 12] += hsv[1] * hsv[2]
+                if (hsv[1] >= 0.25f && hsv[2] >= 0.3f) {
+                    val i = (hsv[0] / 30).toInt() % 12; val k = hsv[1] * hsv[2]
+                    w[i] += k; acc[i][0] += hsv[0] * k; acc[i][1] += hsv[1] * k; acc[i][2] += hsv[2] * k
+                }
             }
             val best = w.indices.maxBy { w[it] }
-            if (w[best] < 2f) null else Color.HSVToColor(floatArrayOf(best * 30f + 15f, 0.7f, 1f))
+            if (w[best] < 2f) null
+            else Color.HSVToColor(floatArrayOf(acc[best][0] / w[best], (acc[best][1] / w[best]).coerceAtLeast(0.45f), (acc[best][2] / w[best]).coerceIn(0.65f, 1f)))
         }
     } catch (_: Exception) { null }
 
