@@ -108,6 +108,8 @@ object PhoneMedia {
         val app = ctx.applicationContext
         dir = java.io.File(app.cacheDir, "lib").apply { mkdirs() }
         com.lazyneil.lazycar.SettingsSync.init(app) { items -> if (connected) cmd("prefs") { put("items", items) } }
+        // Keepalive on its own clock: the phone drops a tablet that stays silent for 15 s.
+        main.post(object : Runnable { override fun run() { if (connected) send(JSONObject().put("c", "hb")); main.postDelayed(this, 5000) } })
         thread(name = "phone-media", isDaemon = true) {
             while (true) {
                 try {
@@ -145,7 +147,6 @@ object PhoneMedia {
     private fun handle(ctx: Context, j: JSONObject) {
         when (j.optString("t")) {
             // Only a slider moved by the user on the phone sets our volume; nothing on connect, never by itself.
-            "hb" -> cmd("hb")   // the phone drops a tablet that stays silent for 15 s
             "tvol" -> if (j.optBoolean("user")) { Volumes.applyTablet(ctx, j.optInt("pct")); sentTvol = -1 }
             "np" -> {
                 val old = np

@@ -51,10 +51,15 @@ class MediaListener : NotificationListenerService() {
         fun settingsIntent() = Intent("android.settings.NOTIFICATION_LISTENER_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
-    class Client(val s: Socket) { val w: Writer = s.getOutputStream().bufferedWriter(); var artKey: String? = null }
+    /** One writer thread per tablet: a dead or slow socket blocks only its own queue, never the heartbeat or other work. */
+    class Client(val s: Socket) {
+        val w: Writer = s.getOutputStream().bufferedWriter(); var artKey: String? = null
+        val q = Executors.newSingleThreadExecutor()
+        @Volatile var heardAt = SystemClock.elapsedRealtime()
+    }
 
     private val main = Handler(Looper.getMainLooper())
-    private val io = Executors.newSingleThreadExecutor()
+    private val io = Executors.newSingleThreadExecutor()   // heavy work only (art, library icons, files); never writes
     val out = CopyOnWriteArrayList<Client>()
     @Volatile private var alive = false
     private var server: ServerSocket? = null
@@ -81,6 +86,17 @@ class MediaListener : NotificationListenerService() {
         pick(); main.post(tick)
         thread(name = "media-server") { serve() }
         thread(name = "media-probe") { answerProbes() }
+        thread(name = "media-hb", isDaemon = true) { heartbeat() }
+    }
+
+    /** 1 Hz whatever the player, main thread or io do. The tablet answers each one, so silence for 15 s = dead socket. */
+    private fun heartbeat() {
+        val line = JSONObject().put("t", "hb").toString()
+        while (alive) {
+            val now = SystemClock.elapsedRealtime()
+            for (cl in out) if (now - cl.heardAt > 15_000) { Log.e("LazyCar", "media drop ${cl.s.inetAddress?.hostAddress} silent ${now - cl.heardAt} ms"); drop(cl) } else write(cl, line)
+            try { Thread.sleep(1000) } catch (_: InterruptedException) { return }
+        }
     }
 
     override fun onListenerDisconnected() {
@@ -90,7 +106,7 @@ class MediaListener : NotificationListenerService() {
         main.removeCallbacks(tick)
         browser?.disconnect(); browser = null
         server?.close(); probe?.close()
-        out.forEach { it.s.close() }; out.clear(); clients = 0
+        out.forEach(::drop); clients = 0
     }
 
     /** Playing session wins, else the most recent one. */
@@ -154,20 +170,19 @@ class MediaListener : NotificationListenerService() {
         if (key != accentKey) { accentKey = key; com.lazyneil.lazycar.Accent.art = bmp; trackAccent = com.lazyneil.lazycar.Accent.now(this); com.lazyneil.lazycar.Accent.publish(this) }
         j.put("accent", trackAccent)
         val line = j.toString()
-        val all = out.toList()
-        io.execute {
-            val a = if (artFor.isNotEmpty()) SystemClock.uptimeMillis().let { t0 -> (bmp?.let { jpeg(it, 1024, 92) } ?: "")
-                .also { if (bmp != null) Log.e("LazyCar", "art encode on ${Thread.currentThread().name} ${SystemClock.uptimeMillis() - t0} ms") } } else ""
-            for (cl in all) write(cl, if (cl in artFor) JSONObject(line).put("art", a).toString() else line)
+        for (cl in out) if (cl !in artFor) write(cl, line)
+        if (artFor.isNotEmpty()) io.execute {
+            val a = bmp?.let { jpeg(it, 1024, 92) } ?: ""
+            for (cl in artFor) write(cl, JSONObject(line).put("art", a).toString())
         }
     }
 
-    fun send(cl: Client, line: String) = io.execute { write(cl, line) }
-    private fun write(cl: Client, line: String) {
-        try { cl.w.write(line); cl.w.write("\n"); cl.w.flush() } catch (_: Exception) { drop(cl) }
-    }
+    fun send(cl: Client, line: String) = write(cl, line)
+    private fun write(cl: Client, line: String) = try {
+        cl.q.execute { try { cl.w.write(line); cl.w.write("\n"); cl.w.flush() } catch (_: Exception) { drop(cl) } }
+    } catch (_: java.util.concurrent.RejectedExecutionException) {}
 
-    private fun drop(cl: Client) { try { cl.s.close() } catch (_: Exception) {}; out.remove(cl); clients = out.size }
+    private fun drop(cl: Client) { try { cl.s.close() } catch (_: Exception) {}; cl.q.shutdownNow(); out.remove(cl); clients = out.size }
 
     private fun serve() { try {
         ServerSocket().apply { reuseAddress = true; bind(InetSocketAddress(Link.PORT)) }.use { ss ->
@@ -175,12 +190,12 @@ class MediaListener : NotificationListenerService() {
             while (alive) {
                 val s = ss.accept().apply { tcpNoDelay = true }
                 val cl = Client(s)
-                // A tablet that reconnects left its old socket dead (Wi-Fi drop): close it now, not after TCP gives up.
-                out.filter { it.s.inetAddress == s.inetAddress }.forEach(::drop)
+                // Dead sockets go via heartbeat silence (15 s), never by IP: a live tablet link must not be kicked.
+                Log.e("LazyCar", "media accept ${s.inetAddress?.hostAddress} clients=${out.size + 1}")
                 out += cl; clients = out.size
                 main.post { push() }
                 thread(name = "media-client") {
-                    try { s.getInputStream().bufferedReader().forEachLine { l -> main.post { handle(cl, JSONObject(l)) } } }
+                    try { s.getInputStream().bufferedReader().forEachLine { l -> cl.heardAt = SystemClock.elapsedRealtime(); main.post { handle(cl, JSONObject(l)) } } }
                     catch (_: Exception) {}
                     drop(cl)
                 }
@@ -252,7 +267,7 @@ class MediaListener : NotificationListenerService() {
 
     private fun browseNow(cl: Client, req: JSONObject, done: java.util.concurrent.atomic.AtomicBoolean) = withBrowser(cl, req) { b ->
         val q = req.optString("q")
-        val sink = { items: List<MediaBrowser.MediaItem> -> done.set(true); io.execute { reply(cl, req, JSONArray().apply {
+        val sink = { items: List<MediaBrowser.MediaItem> -> done.set(true); io.execute { if (cl in out) reply(cl, req, JSONArray().apply {
             items.take(300).forEachIndexed { i, it -> val d = it.description
                 put(JSONObject().put("id", it.mediaId).put("title", d.title ?: "").put("sub", d.subtitle ?: "")
                     .put("play", it.isPlayable).put("browse", it.isBrowsable)
