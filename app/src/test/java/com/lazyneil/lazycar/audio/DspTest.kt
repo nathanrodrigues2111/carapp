@@ -16,12 +16,12 @@ class DspTest {
 
     @Test fun limiterNeverClipsAndPassesQuiet() {
         val lim = Limiter()
-        // 1 s of a full scale 1 kHz sine (+6 dB gain puts it 7 dB over the ceiling), then quiet.
+        // 1 s of a full scale 1 kHz sine (1 dB over the ceiling), then quiet audio passes bit exact at unity.
         val loud = lim.process(FloatArray(96000) { 32767f * sin(2 * Math.PI * 1000 * (it / 2) / 48000).toFloat() })
         assertEquals(0L, lim.clipped)
         assertTrue(loud.drop(9600).maxOf { abs(it.toInt()) } <= 29200)          // about -1 dBFS
         var quiet = ShortArray(0); repeat(20) { quiet = lim.process(FloatArray(9600) { 1000f }) }   // 2 s release
-        assertEquals(2000.0, quiet.last().toDouble(), 20.0)
+        assertEquals(1000.0, quiet.last().toDouble(), 0.0)
     }
 
     @Test fun fftRoundTrip() {

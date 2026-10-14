@@ -74,6 +74,7 @@ class StreamReceiver : Service() {
         @Volatile var ppm = 0           // current resample correction
         @Volatile var concealed = 0
         @Volatile var dropped = 0
+        @Volatile var mutes = 0         // fail-safe silences
         val underruns get() = track.underrunCount
         val device: AudioDeviceInfo? = ctx.getSystemService(AudioManager::class.java)
             .getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.type == type }
@@ -123,6 +124,9 @@ class StreamReceiver : Service() {
             track.play()
             val rs = Resampler()
             var last: ShortArray? = null; var fades = 0
+            // Fail-safe: any gap or a near empty buffer fades out over 5 ms and stays silent (timeline keeps running)
+            // until the buffer has been healthy for 1 s, then fades in over 50 ms. Silence instead of crackle.
+            var muted = false; var healthySince = 0L; var fadeIn = 0
             var dec = 0f; var decN = 0; var seenUnder = 0
             fun write(s: ShortArray) {
                 written += track.write(s, 0, s.size).coerceAtLeast(0) / 2
@@ -146,6 +150,7 @@ class StreamReceiver : Service() {
                     if (last != null && client < 15) {
                         val l = last; val n = l.size / 2
                         write(lim.process(FloatArray(l.size) { if (fades > 0) 0f else l[2 * (n - 1 - it / 2) + it % 2] * (1 - (it / 2) / n.toFloat()) }))
+                        if (fades == 0 && !muted) { muted = true; mutes++; healthySince = 0 }
                         fades++; concealed++; skip()
                     } else Thread.sleep(2)
                     continue
@@ -158,10 +163,20 @@ class StreamReceiver : Service() {
                 if (e < -50) { write(ShortArray(((-e).coerceAtMost(500.0) * Wire.RATE / 1000).toInt() * 2)); putBack(c); errMs = 0.0; continue }
                 errMs = errMs * 0.98 + e * 0.02
                 // Drift only: at most 500 ppm. Big errors take the jump above instead of pinning the resampler.
-                val r = if (abs(errMs) < 1) 1.0 else 1 + (errMs / 20000).coerceIn(-0.0005, if (depthMs < 30) 0.0 else 0.0005)
+                // Drift only, inaudible: at most 100 ppm (0.1 ms per second), 20 ppm per ms of error.
+                val r = if (abs(errMs) < 1) 1.0 else 1 + (errMs / 50000).coerceIn(-0.0001, if (depthMs < 30) 0.0 else 0.0001)
                 ppm = ((r - 1) * 1e6).toInt()
                 val x = rs.process(c.pcm, r)
-                if (fades > 0) for (i in x.indices) x[i] *= (i / 2) / (x.size / 2f)   // fade back in after a gap
+                val fr = x.size / 2
+                if (!muted && depthMs < 20) { for (i in x.indices) x[i] *= 1 - (i / 2) / fr.toFloat(); muted = true; mutes++; healthySince = 0 }
+                else if (muted) {
+                    val t = SystemClock.elapsedRealtime()
+                    if (depthMs < 60) healthySince = 0 else if (healthySince == 0L) healthySince = t
+                    if (healthySince != 0L && t - healthySince >= 1000) { muted = false; fadeIn = Wire.RATE / 20 }
+                    else x.fill(0f)
+                }
+                if (!muted && fadeIn > 0) for (i in 0 until fr) { val g = 1 - (fadeIn - i).coerceAtLeast(0) / (Wire.RATE / 20f); x[2 * i] *= g; x[2 * i + 1] *= g }
+                if (fadeIn > 0) fadeIn = (fadeIn - fr).coerceAtLeast(0)
                 write(lim.process(x))
                 last = c.pcm; fades = 0
             }
@@ -225,12 +240,14 @@ class StreamReceiver : Service() {
             val buf = ByteArray(Wire.HEADER + Wire.CHUNK * 2)
             val bb = ByteBuffer.wrap(buf)
             val clock = Clock()
+            var prevArr = 0L; var gapMax = 0
             var last = -1; var bytes = 0L; var secAt = SystemClock.elapsedRealtime(); var sq = 0.0; var n = 0
             while (alive) try {
                 val p = DatagramPacket(buf, buf.size); s.receive(p)
                 val len = p.length - Wire.HEADER
                 if (len <= 0 || len % 4 != 0) continue
                 val t3 = System.nanoTime()
+                if (prevArr != 0L) gapMax = maxOf(gapMax, ((t3 - prevArr) / 1_000_000).toInt()); prevArr = t3
                 val seq = bb.getInt(0)
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastAt > 2000 || seq < last - 1000) {                      // fresh stream (phone restarted)
@@ -248,9 +265,9 @@ class StreamReceiver : Service() {
                 lastAt = now; phone = p.address.hostAddress ?: ""; bytes += p.length
                 if (now - secAt >= 1000) {
                     kbps = (bytes * 8 / (now - secAt)).toInt(); bytes = 0; secAt = now
-                    rms = kotlin.math.sqrt(sq / maxOf(n, 1)).toInt(); sq = 0.0; n = 0
-                    Log.e("LazyCar", "speaker recv kbps=$kbps rms=$rms rtt=${"%.1f".format(rttMs)} jitter=${"%.1f".format(jitterMs)} target=$targetMs phoneOut=$phoneOutMs acoustic=${"%.0f".format(acousticMs)} lost=$lost " +
-                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} clip=${it.lim.clipped} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
+                    rms = kotlin.math.sqrt(sq / maxOf(n, 1)).toInt(); sq = 0.0; n = 0; val g = gapMax; gapMax = 0
+                    Log.e("LazyCar", "speaker recv kbps=$kbps gap=$g rms=$rms rtt=${"%.1f".format(rttMs)} jitter=${"%.1f".format(jitterMs)} target=$targetMs phoneOut=$phoneOutMs acoustic=${"%.0f".format(acousticMs)} lost=$lost " +
+                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} clip=${it.lim.clipped} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
                 }
             } catch (_: Exception) {}
         }
@@ -323,10 +340,10 @@ class Resampler {
 }
 
 /**
- * +6 dB into a stereo linked peak limiter at -1 dBFS: 1 ms lookahead, ~0.2 ms attack, 10 ms hold, 150 ms release.
+ * Unity gain (bit exact while nothing goes over) into a stereo linked peak limiter at -1 dBFS: 1 ms lookahead, ~0.2 ms attack, 10 ms hold, 150 ms release.
  * Gain moves smoothly, so loud passages get quieter instead of distorted (the old per sample tanh crackled).
  */
-class Limiter(private val gain: Float = 2f) {
+class Limiter(private val gain: Float = 1f) {
     private val la = 48; private val ceil = 0.891f
     private val rel = (1 - kotlin.math.exp(-1.0 / (0.15 * Wire.RATE))).toFloat()
     private val dl = FloatArray(la * 2); private val need = FloatArray(la) { 1f }
@@ -341,7 +358,7 @@ class Limiter(private val gain: Float = 2f) {
             val pk = maxOf(abs(l), abs(r))
             need[p] = if (pk > ceil) ceil / pk else 1f
             var t = 1f; for (v in need) if (v < t) t = v                  // lowest gain needed within the lookahead
-            if (t < g) { g += (t - g) * 0.2f; hold = 480 } else if (hold > 0) hold-- else g += (1 - g) * rel
+            if (t < g) { g += (t - g) * 0.2f; hold = 480 } else if (hold > 0) hold-- else if (g < 1f) { g += (1 - g) * rel; if (g > 0.999f) g = 1f }
             if (g < minG) minG = g
             val dl0 = dl[2 * p]; val dl1 = dl[2 * p + 1]; dl[2 * p] = l; dl[2 * p + 1] = r
             p = (p + 1) % la
@@ -351,5 +368,5 @@ class Limiter(private val gain: Float = 2f) {
         reductionDb = (20 * kotlin.math.log10(minG.toDouble())).toFloat()
         return out
     }
-    private fun pcm(v: Float): Short { val s = v * 32767f; if (s > 32767f || s < -32768f) clipped++; return s.coerceIn(-32768f, 32767f).toInt().toShort() }
+    private fun pcm(v: Float): Short { val s = v * 32768f; if (s > 32767f || s < -32768f) clipped++; return s.coerceIn(-32768f, 32767f).toInt().toShort() }
 }

@@ -148,11 +148,13 @@ class StreamSender : Service() {
             rec.startRecording()
             val pkt = ByteArray(Wire.HEADER + Wire.CHUNK)
             val bb = ByteBuffer.wrap(pkt)
+            val dp = DatagramPacket(pkt, pkt.size); var prevRd = 0L; var gapMax = 0   // one packet object, reused
             var seq = 0; var bytes = 0L; var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
             var readFrames = 0L; val rts = android.media.AudioTimestamp(); var tsAt = 0L; var haveTs = false
             while (alive) {
                 val r = rec.read(pkt, Wire.HEADER, Wire.CHUNK)
                 if (r <= 0) { if (r < 0) { error = "Capture read $r"; break }; continue }
+                val tr = System.nanoTime(); if (prevRd != 0L) gapMax = maxOf(gapMax, ((tr - prevRd) / 1_000_000).toInt()); prevRd = tr
                 for (i in 0 until r / 2) { val v = java.lang.Short.reverseBytes(bb.getShort(Wire.HEADER + i * 2)).toInt(); sq += v * v.toDouble() }   // PCM is little endian
                 val now = SystemClock.elapsedRealtime()
                 if (now - tsAt > 100) { tsAt = now; haveTs = rec.getTimestamp(rts, android.media.AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS }
@@ -162,14 +164,14 @@ class StreamSender : Service() {
                 val d = dest
                 if (d != null && now - beaconAt < 5000) {
                     bb.putInt(0, seq++).putLong(4, beaconT).putLong(12, beaconNs).putLong(20, System.nanoTime()).putLong(28, mixNs).putInt(36, outMs)
-                    try { s.send(DatagramPacket(pkt, Wire.HEADER + r, d)); bytes += Wire.HEADER + r } catch (_: Exception) {}
+                    try { dp.setData(pkt, 0, Wire.HEADER + r); dp.socketAddress = d; s.send(dp); bytes += Wire.HEADER + r } catch (_: Exception) {}
                 } else tablet = ""
                 if (now - secAt >= 1000) {
                     rms = sqrt(sq / maxOf(n, 1)).toInt(); kbps = (bytes * 8 / (now - secAt)).toInt()
                     if (haveTs)
                         capMs = ((rts.framePosition - readFrames) * 1000 / Wire.RATE + (System.nanoTime() - rts.nanoTime) / 1_000_000).toInt()
-                    Log.e("LazyCar", "speaker send rms=$rms kbps=$kbps out=$outMs hal=$halMs cap=$capMs tablet=$tablet")
-                    sq = 0.0; n = 0; bytes = 0; secAt = now
+                    Log.e("LazyCar", "speaker send gap=$gapMax rms=$rms kbps=$kbps out=$outMs hal=$halMs cap=$capMs tablet=$tablet")
+                    sq = 0.0; n = 0; bytes = 0; secAt = now; gapMax = 0
                 }
             }
             rec.stop(); rec.release()
