@@ -57,6 +57,12 @@ class LibraryActivity : AppCompatActivity() {
             (text.getChildAt(0) as TextView).apply { this.text = it.optString("title"); setTextColor(if (playing) accent else Ui.attr(context, R.attr.carText)) }
             (text.getChildAt(1) as TextView).apply { this.text = it.optString("sub"); visibility = if (this.text.isEmpty()) View.GONE else View.VISIBLE }
             row.isActivated = playing
+            // Trailing bars on the playing row (list rows only).
+            (row.getChildAt(2) as? ImageView)?.apply {
+                visibility = if (playing) View.VISIBLE else View.GONE
+                if (playing) (drawable as? android.graphics.drawable.AnimatedVectorDrawable)?.let { d ->
+                    d.setTint(accent); if (PhoneMedia.playing) d.start() else d.stop() }
+            }
             return row
         }
     }
@@ -76,6 +82,10 @@ class LibraryActivity : AppCompatActivity() {
         setBackgroundResource(R.drawable.bg_lib_row)
         addView(thumb(), LinearLayout.LayoutParams(dp(64), dp(64)))
         addView(texts(false), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(16) })
+        addView(ImageView(this@LibraryActivity).apply {
+            setImageDrawable(getDrawable(R.drawable.avd_now_playing)?.mutate()); contentDescription = "Now playing"; visibility = View.GONE
+        }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(12) })
+        Ui.press(this)
     }
 
     private fun card() = LinearLayout(this).apply {
@@ -133,6 +143,13 @@ class LibraryActivity : AppCompatActivity() {
         empty.addView(retry, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
         area.addView(empty, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER).apply { marginStart = dp(32); marginEnd = dp(32) })
         root.addView(area, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(8) })
+        // Slim now playing bar pinned at the bottom; tap returns to the player.
+        val nb = layoutInflater.inflate(R.layout.view_np_bar, root, false)
+        nb.setOnClickListener { finish() }
+        nb.findViewById<View>(R.id.barPlay).setOnClickListener { PhoneMedia.cmd("toggle") }
+        Ui.press(nb.findViewById(R.id.barPlay))
+        root.addView(nb, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(8) })
+        npBar = nb
         setContentView(frame)
         tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(t: TabLayout.Tab) { files = t.position == 1; stack.clear(); search.setText(""); load() }
@@ -145,6 +162,27 @@ class LibraryActivity : AppCompatActivity() {
 
     private lateinit var list: GridView
     private lateinit var spinner: View
+    private lateinit var npBar: View
+    private var barPlaying: Boolean? = null
+
+    override fun onResume() {
+        super.onResume()
+        PhoneMedia.onChange = { adapter.notifyDataSetChanged(); renderBar() }   // playing row and bar follow the phone
+        renderBar()
+    }
+
+    override fun onPause() { super.onPause(); PhoneMedia.onChange = null }
+
+    private fun renderBar() {
+        val np = PhoneMedia.np
+        npBar.visibility = if (PhoneMedia.hasTrack) View.VISIBLE else View.GONE
+        npBar.findViewById<ImageView>(R.id.barArt).setImageBitmap(PhoneMedia.art)
+        npBar.findViewById<TextView>(R.id.barTitle).text = np.optString("title")
+        npBar.findViewById<TextView>(R.id.barArtist).text = listOf(np.optString("artist"), np.optString("album")).filter { it.isNotEmpty() }.joinToString(" \u00b7 ")
+        val play = npBar.findViewById<ImageButton>(R.id.barPlay)
+        play.backgroundTintList = android.content.res.ColorStateList.valueOf(Ui.attr(this, R.attr.carText))
+        if (barPlaying != PhoneMedia.playing) { Ui.morph(play, PhoneMedia.playing, barPlaying != null); barPlaying = PhoneMedia.playing }
+    }
     private lateinit var retry: MaterialButton
     /** Decoded thumbnails by item id, so scrolling never decodes twice. */
     private val thumbs = android.util.LruCache<String, android.graphics.Bitmap>(200)

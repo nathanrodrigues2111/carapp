@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Now playing: three bars bouncing, tinted with the accent in code. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+            <group android:name="b1" android:pivotY="20"><path android:fillColor="#FFFFFFFF" android:pathData="M5,8h3v12h-3z" /></group>
+            <group android:name="b2" android:pivotY="20"><path android:fillColor="#FFFFFFFF" android:pathData="M10.5,4h3v16h-3z" /></group>
+            <group android:name="b3" android:pivotY="20"><path android:fillColor="#FFFFFFFF" android:pathData="M16,10h3v10h-3z" /></group>
+        </vector>
+    </aapt:attr>
+    <target android:name="b1"><aapt:attr name="android:animation">
+        <objectAnimator android:propertyName="scaleY" android:valueFrom="1" android:valueTo="0.3" android:duration="420" android:repeatCount="infinite" android:repeatMode="reverse" />
+    </aapt:attr></target>
+    <target android:name="b2"><aapt:attr name="android:animation">
+        <objectAnimator android:propertyName="scaleY" android:valueFrom="0.4" android:valueTo="1" android:duration="360" android:repeatCount="infinite" android:repeatMode="reverse" />
+    </aapt:attr></target>
+    <target android:name="b3"><aapt:attr name="android:animation">
+        <objectAnimator android:propertyName="scaleY" android:valueFrom="1" android:valueTo="0.5" android:duration="500" android:repeatCount="infinite" android:repeatMode="reverse" />
+    </aapt:attr></target>
+</animated-vector>

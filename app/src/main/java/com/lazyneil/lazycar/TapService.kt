@@ -150,7 +150,7 @@ class TapService : AccessibilityService() {
         apps.firstOrNull { it.second.height() < tall * 0.8f }?.let { small ->
             if (tries < 100) {
                 android.util.Log.e("LazyCar", "split: ${small.first} still has PiP bounds ${small.second.toShortString()}, re-opening it")
-                startPkg(this, small.first, Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+                startPkg(this, small.first, 0)   // a normal launch intent, so the app leaves PiP, not a PiP restore
                 h.postDelayed({ arrangeSplit(left, ratio, swapped, 100) }, 1500); return
             }
         }
