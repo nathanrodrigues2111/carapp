@@ -19,7 +19,7 @@ import kotlin.math.sqrt
  * Acoustic auto-calibration on the music itself: the mic hears the tablet speaker and the JBL, GCC-PHAT
  * against what we played (with its true play time from the track timestamp) gives one peak per speaker.
  * The strongest peak is the tablet (its lag is the mic input bias); the next is the JBL. Their gap nudges [StreamReceiver.acousticMs].
- * Starts 3 s into a stream from the last saved correction, measures back to back for the first minute and 30 s after
+ * Starts 3 s into a stream from 0 (the timestamp math), measures back to back for the first minute and 30 s after
  * each correction, then every 30 s. Corrections need 3 of 5 runs to agree, are capped, and are undone when the peak does not move with them.
  */
 class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output, private val alive: () -> Boolean) {
@@ -47,10 +47,10 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
             Thread.sleep(500)
             val now = SystemClock.elapsedRealtime()
             if (now - StreamReceiver.lastAt > 2000) { streamAt = 0; continue }
-            // Fresh stream: start from the last measured correction (the timestamp math is off by a steady ~57 ms on
-            // this phone and tablet, so sync is right at once) and re-measure it back to back for the first minute.
+            // Fresh stream: start from the timestamp math (the speaker latency is measured on the phone, so a stored
+            // correction would be stale after a speaker or route change) and measure back to back for the first minute.
             if (streamAt == 0L) { streamAt = now; next = now + 3000; fastUntil = now + 60_000
-                StreamReceiver.acousticMs = TabletSpeaker.acoustic(ctx).toDouble().coerceIn(-MAX_MS, MAX_MS); seen.clear(); banned.clear(); lastStep = 0.0; steps = 0; residualMs = Double.NaN; note = "measuring" }
+                StreamReceiver.acousticMs = 0.0; seen.clear(); banned.clear(); lastStep = 0.0; steps = 0; residualMs = Double.NaN; note = "measuring" }
             if (now < next || StreamReceiver.rms < 200) continue
             val before = StreamReceiver.acousticMs
             try { measure() } catch (e: Exception) { note = "error ${e.message}"; Log.e("LazyCar", "acoustic", e) }
@@ -120,20 +120,22 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
                 // A single run is noisy (music repeats, reflections): 3 of the last 5 runs must agree within 6 ms.
                 seen += res; if (seen.size > 5) seen.removeAt(0)
                 val agree = seen.filter { v -> seen.count { abs(it - v) <= 6 } >= 3 }.sorted()
-                if (agree.isEmpty()) note = "JBL ${"%+.0f".format(res)} ms vs tablet?, voting, $msg"
+                // Under 20 ms the room's own echoes of the tablet (seen at +12 to +19 ms) look just like the JBL: leave it to the math.
+                if (agree.isNotEmpty() && abs(agree[agree.size / 2]) < 20) { seen.clear(); note = "JBL ${"%+.0f".format(res)} ms vs tablet, under 20 ms, left to the math, $msg" }
+                else if (agree.isEmpty()) note = "JBL ${"%+.0f".format(res)} ms vs tablet?, voting, $msg"
                 else {
                     val med = agree[agree.size / 2]; seen.clear()
                     if (lastStep != 0.0 && abs(med - lastRes) < abs(med - (lastRes - lastStep))) {
                         // Closer to where it was than to where our last correction should have moved it: it follows the tablet,
                         // so it is a reflection, not the JBL.
-                        StreamReceiver.acousticMs -= lastStep; banned += med; TabletSpeaker.saveAcoustic(ctx, StreamReceiver.acousticMs.toInt())
+                        StreamReceiver.acousticMs -= lastStep; banned += med
                         note = "peak at ${"%+.0f".format(med)} ms did not move, reflection: undid ${"%+.0f".format(lastStep)} ms, $msg"; lastStep = 0.0
                     } else {
                         // 90 % of it, total capped.
                         val cap = if (steps++ == 0) 60.0 else 15.0   // after the first, a new peak is often an echo: small trial, undone if it does not move
                         val step = (0.9 * med).coerceIn(-cap, cap)
                         StreamReceiver.acousticMs = (StreamReceiver.acousticMs + step).coerceIn(-MAX_MS, MAX_MS)
-                        lastStep = step; lastRes = med; TabletSpeaker.saveAcoustic(ctx, StreamReceiver.acousticMs.toInt())
+                        lastStep = step; lastRes = med
                         note = "JBL ${"%+.0f".format(med)} ms vs tablet, corrected ${"%+.0f".format(step)} ms, $msg"
                     }
                 }

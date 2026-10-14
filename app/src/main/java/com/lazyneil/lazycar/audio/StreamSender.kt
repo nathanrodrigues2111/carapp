@@ -40,6 +40,8 @@ class StreamSender : Service() {
         @Volatile var outMs = 0         // mixer to JBL latency, from the monitor track
         @Volatile var capMs = 0         // mixer to our read() latency, from the AudioRecord timestamp
         @Volatile var halMs = -1        // hidden AudioManager.getOutputLatency(STREAM_MUSIC), cross-check only
+        @Volatile var afMs = -1         // hidden AudioTrack.getLatency() minus the client buffer, includes the A2DP delay
+        @Volatile var tsMs = -1         // monitor timestamp latency minus the client buffer, stops at the phone on BT
         /** Shared timeline: CarApp plays the JBL itself, [Wire.SHARED_MS] after capture, on the accessibility stream
          *  (own volume via TapService), with STREAM_MUSIC at 0 so the apps' direct path is silent. */
         @Volatile var shared = false
@@ -189,7 +191,7 @@ class StreamSender : Service() {
                     rms = sqrt(sq / maxOf(n, 1)).toInt(); kbps = (bytes * 8 / (now - secAt)).toInt()
                     if (haveTs)
                         capMs = ((rts.framePosition - readFrames) * 1000 / Wire.RATE + (System.nanoTime() - rts.nanoTime) / 1_000_000).toInt()
-                    Log.e("LazyCar", "speaker send gap=$gapMax rms=$rms kbps=$kbps out=$outMs hal=$halMs cap=$capMs tablet=$tablet")
+                    Log.e("LazyCar", "speaker send gap=$gapMax rms=$rms kbps=$kbps out=$outMs ts=$tsMs af=$afMs hal=$halMs cap=$capMs tablet=$tablet")
                     sq = 0.0; n = 0; bytes = 0; secAt = now; gapMax = 0
                 }
             }
@@ -213,8 +215,14 @@ class StreamSender : Service() {
                         .invoke(getSystemService(android.media.AudioManager::class.java), android.media.AudioManager.STREAM_MUSIC) as Int } catch (_: Exception) { -1 }
                     val bt = t.routedDevice?.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
                     // Blocking writes keep the client buffer full; the music is captured after it, so drop it.
-                    latencyMs(t, written)?.let { val mix = it - t.bufferSizeInFrames * 1000 / Wire.RATE
-                        outMs = if (bt && mix < 100) mix + 150 else mix }
+                    val buf = t.bufferSizeInFrames * 1000 / Wire.RATE
+                    // Hidden AudioTrack.getLatency(): mixer + HAL latency + client buffer. The A2DP HAL latency includes the
+                    // speaker's reported delay (or the stack's codec default), so this is the real figure for any speaker.
+                    afMs = try { (android.media.AudioTrack::class.java.getMethod("getLatency").invoke(t) as Int) - buf } catch (_: Exception) { -1 }
+                    latencyMs(t, written)?.let { val mix = it - buf; tsMs = mix
+                        // The timestamp stops at the phone on BT (OxygenOS: ~117 ms vs 341 ms HAL): trust the HAL figure then.
+                        // ponytail: fixed 150 ms only when the hidden API is gone; the tablet mic trims the rest.
+                        outMs = if (!bt) mix else if (afMs > mix + 50) afMs else if (mix < 100) mix + 150 else mix }
                 }
             }
             t.stop(); t.release()
