@@ -10,9 +10,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.TriggerEvent
+import android.hardware.TriggerEventListener
 import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
@@ -157,21 +157,36 @@ class GpsService : Service(), LocationListener {
             val now = SystemClock.elapsedRealtime()
             if (mode == "send") active(com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this@GpsService)) == com.lazyneil.lazycar.GoAction.ON
                 || com.lazyneil.lazycar.media.MediaListener.clients > 0)
-            val moving = now - movedAt < STILL_MS
-            val holding = !moving && lastLoc?.let { it.accuracy <= PRECISE_M } == true
-            if (now - sentAt > 900) {
-                // Still with a precise fix: same position, speed 0, fresh stamp, held as long as the phone does not move.
-                if (holding) lastLoc?.let { send(packet(it, held = true)); lastAt = now }
-                else last?.let { if (now - lastFixAt < HOLD_MS) send(it) }
+            val onSats = now - gpsAt <= 10000
+            // Zero drops: every fused HIGH_ACCURACY fix is a Wi-Fi scan that stalls the stream, so never while streaming.
+            val streaming = com.lazyneil.lazycar.audio.StreamSender.running && com.lazyneil.lazycar.audio.StreamSender.tablet.isNotEmpty()
+                && getSystemService(android.media.AudioManager::class.java).isMusicActive
+            val precise = lastLoc?.let { it.accuracy <= PRECISE_M } == true
+            val holding = precise && (streaming || !needFix && now - preciseAt < REFRESH_MS)
+            // Tunnel: the last satellite fix was moving, dead-reckon along it for up to 30 s, then stand there.
+            val reckon = !onSats && lastLoc != null && lastLoc === gpsLoc && gpsLoc!!.speed > 1f
+            if (now - sentAt > 900) when {
+                onSats -> last?.let { send(it) }
+                reckon -> { send(packet(ahead(gpsLoc!!, now - gpsAt), held = now - gpsAt > 30000)); lastAt = now }
+                // Same position, speed 0, fresh stamp, as long as the hold lasts.
+                holding -> { send(packet(lastLoc!!, held = true)); lastAt = now }
+                else -> last?.let { if (now - lastFixAt < HOLD_MS) send(it) }
             }
             if (mode == "send" && !paused) {
                 // A registration made while the service had no location capability stays unpermitted ("{na}") and never
                 // delivers: re-register when nothing arrived for 60 s.
                 if (fusedOn && now - maxOf(fixAt, fusedAt) > 60000) fused(false)
-                // Each HIGH_ACCURACY fix costs a Wi-Fi scan that stalls the audio stream: only while moving or not yet precise.
-                val want = now - gpsAt > 10000 && !holding
-                if (want != fusedOn) Log.e("LazyCar", if (want) "gps: moving, high accuracy"
-                    else "gps: still, holding precise fix age=${(now - lastFixAt) / 1000}s acc=${lastLoc?.accuracy?.toInt()}m")
+                // Not streaming: one fused fix at Start, on significant motion or after 10 min, then 30 s off.
+                val want = !onSats && !streaming && !holding && now - fusedFixAt > 30000
+                val why = when {
+                    onSats -> "gps: satellites, fused off"
+                    reckon -> "gps: no satellites, dead reckoning, fused off"
+                    streaming -> "gps: streaming, fused off, holding fix acc=${lastLoc?.accuracy?.toInt()}m"
+                    holding -> "gps: still, holding precise fix acc=${lastLoc?.accuracy?.toInt()}m"
+                    want -> "gps: not streaming, high accuracy"
+                    else -> "gps: fused fix, off for 30 s"
+                }
+                if (why != lastWhy) { Log.e("LazyCar", "$why age=${(now - lastFixAt) / 1000}s"); lastWhy = why }
                 fused(want)
             }
             if (running) tick.postDelayed(this, 1000)
@@ -193,38 +208,42 @@ class GpsService : Service(), LocationListener {
             radio?.acquire(); wake?.acquire()
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
             lm.registerGnssStatusCallback(gnss, android.os.Handler(Looper.getMainLooper()))
-            movedAt = SystemClock.elapsedRealtime()   // unknown until the accelerometer settles: treat as moving
-            sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sm.registerListener(accel, it, SensorManager.SENSOR_DELAY_NORMAL) }
+            needFix = true; arm()
         } else {
-            lm.removeUpdates(this); fused(false); lm.unregisterGnssStatusCallback(gnss); sm.unregisterListener(accel)
-            radio?.release(); wake?.release(); last = null; lastLoc = null; lastAt = 0; sats = -1
+            lm.removeUpdates(this); fused(false); lm.unregisterGnssStatusCallback(gnss); disarm()
+            radio?.release(); wake?.release(); last = null; lastLoc = null; gpsLoc = null; lastAt = 0; sats = -1
         }
     }
 
     // Fused only after 10 s without a GNSS fix, HIGH_ACCURACY (Wi-Fi based, ~10 to 20 m indoors; BALANCED is 100 m).
     // 10 s interval: GMS Wi-Fi scans follow it (1 s interval scanned ~7 times a minute and stalled the audio up to 1 s).
     // In the car GNSS works, so no scanning at all.
-    // Motion: |accel| deviating from its slow average by more than MOVE_G (m/s^2) counts as moving.
-    // ponytail: magnitude threshold tuned by hand; lying still reads ~0.05, a hand pick-up >0.5.
-    private val MOVE_G = 0.3f
-    private val STILL_MS = 30_000L
+    // Motion: TYPE_SIGNIFICANT_MOTION (walking or driving, ignores the phone in a hand) or a precise fix older than
+    // REFRESH_MS asks fused HIGH_ACCURACY for one new fix of PRECISE_M or better, then it holds again.
     private val PRECISE_M = 30f
-    private var movedAt = 0L
-    private var gMean = 0f
-    private val sm by lazy { getSystemService(SensorManager::class.java) }
-    private val accel = object : SensorEventListener {
-        override fun onSensorChanged(e: SensorEvent) {
-            val g = Math.sqrt((e.values[0] * e.values[0] + e.values[1] * e.values[1] + e.values[2] * e.values[2]).toDouble()).toFloat()
-            if (gMean == 0f) gMean = g
-            val d = Math.abs(g - gMean)
-            if (d > MOVE_G) {
-                if (SystemClock.elapsedRealtime() - movedAt >= STILL_MS) Log.e("LazyCar", "gps: motion d=${"%.2f".format(d)} m/s2")
-                movedAt = SystemClock.elapsedRealtime()
-            }
-            gMean += (g - gMean) * 0.1f
-        }
-        override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+    private var gpsLoc: Location? = null
+    private var lastWhy = ""
+
+    /** [l] moved [ms] along its speed and bearing, capped at 30 s. */
+    private fun ahead(l: Location, ms: Long) = Location(l).apply {
+        val d = l.speed * minOf(ms, 30000L) / 1000.0; val b = Math.toRadians(l.bearing.toDouble())
+        latitude = l.latitude + d * Math.cos(b) / 111_320.0
+        longitude = l.longitude + d * Math.sin(b) / (111_320.0 * Math.cos(Math.toRadians(l.latitude)))
+        time = System.currentTimeMillis()
     }
+    private val REFRESH_MS = 600_000L
+    @Volatile private var needFix = true
+    private var preciseAt = 0L
+    private var fusedFixAt = 0L
+    private val sm by lazy { getSystemService(SensorManager::class.java) }
+    private val sig by lazy { sm.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION) }
+    private val motion = object : TriggerEventListener() {
+        override fun onTrigger(e: TriggerEvent) {
+            Log.e("LazyCar", "gps: significant motion"); needFix = true; arm()   // one-shot: re-arm
+        }
+    }
+    private fun arm() { sig?.let { sm.requestTriggerSensor(motion, it) } }
+    private fun disarm() { sig?.let { sm.cancelTriggerSensor(motion, it) } }
 
     private val fusedL = android.location.LocationListener { onLocationChanged(it) }
     private var fusedOn = false
@@ -245,13 +264,16 @@ class GpsService : Service(), LocationListener {
 
     override fun onLocationChanged(l: Location) {
         val now = SystemClock.elapsedRealtime()
-        if (l.provider == LocationManager.GPS_PROVIDER) gpsAt = now else if (now - gpsAt < 3000) return
+        if (l.provider == LocationManager.GPS_PROVIDER) { gpsAt = now; gpsLoc = l } else if (now - gpsAt < 3000) return
         fixAt = now
+        // The cached fix seeded on register is not a new fix: it neither ends the request nor counts as precise.
+        val fresh = SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos < 5_000_000_000L
+        if (fresh && l.provider != LocationManager.GPS_PROVIDER) fusedFixAt = now
         val data = packet(l, held = false)
         acc = l.accuracy; speed = l.speed; gotFix()
         source = if (l.provider == LocationManager.GPS_PROVIDER) "Phone GPS" else "Phone network"
-        // A coarser fix never replaces the held precise one while the phone is still.
-        if (lastLoc?.let { it.accuracy <= PRECISE_M && l.accuracy > PRECISE_M && now - movedAt >= STILL_MS } != true) lastLoc = l
+        if (fresh && l.accuracy <= PRECISE_M) { lastLoc = l; preciseAt = now; needFix = false }
+        else if (lastLoc?.let { it.accuracy <= PRECISE_M } != true) lastLoc = l   // coarse never replaces a precise fix
         last = data; lastFixAt = now
         send(data)
     }
@@ -359,7 +381,7 @@ class GpsService : Service(), LocationListener {
 
     private fun stopAll() {
         running = false
-        tick.removeCallbacks(repeat); last = null; lastLoc = null; if (::lm.isInitialized) sm.unregisterListener(accel); lastJ = null
+        tick.removeCallbacks(repeat); last = null; lastLoc = null; gpsLoc = null; if (::lm.isInitialized) disarm(); lastJ = null
         socket?.close(); socket = null
         wifiLock?.release(); wifiLock = null
         radio?.release(); radio = null
