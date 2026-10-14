@@ -60,21 +60,27 @@ object Ui {
         b?.let { src ->
             val s = Bitmap.createScaledBitmap(src, 48, 48, true)
             val hsv = FloatArray(3); val w = FloatArray(12); val acc = Array(12) { FloatArray(3) }
+            var px = 0; var sx = 0f; var cx = 0f; var sn = 0f
             for (x in 0 until 48) for (y in 0 until 48) {
                 Color.colorToHSV(s.getPixel(x, y), hsv)
+                if (hsv[1] >= 0.08f && hsv[2] >= 0.3f) { px++; sx += hsv[1]; cx += Math.cos(Math.toRadians(hsv[0].toDouble())).toFloat(); sn += Math.sin(Math.toRadians(hsv[0].toDouble())).toFloat() }
                 if (hsv[1] >= 0.15f && hsv[2] >= 0.2f) {
                     val i = (hsv[0] / 30).toInt() % 12; val k = hsv[1] * hsv[2]
                     w[i] += k; acc[i][0] += hsv[0] * k; acc[i][1] += hsv[1] * k; acc[i][2] += hsv[2] * k
                 }
             }
             val best = w.indices.maxBy { w[it] }
-            if (w[best] < 25f) null
+            if (w[best] < 25f) {
+                // pale/pastel art: keep its tint when the faint pixels agree, else null (grey, black, white)
+                if (px == 0 || sx / px < 0.12f || Math.hypot(cx.toDouble(), sn.toDouble()) / px < 0.5) null
+                else Color.HSVToColor(floatArrayOf(((Math.toDegrees(Math.atan2(sn.toDouble(), cx.toDouble())) + 360) % 360).toFloat(), (sx / px).coerceIn(0.35f, 0.6f), 0.9f))
+            }
             else Color.HSVToColor(floatArrayOf(acc[best][0] / w[best], acc[best][1] / w[best], (acc[best][2] / w[best]).coerceIn(0.65f, 1f)))
         }
     } catch (_: Exception) { null }
 
     /** The live accent on every accent widget under [root]: volume sliders, switches, play button, tabs,
-     *  progress, text fields. The seek bar stays neutral. Views tagged with a Runnable repaint themselves. */
+     *  progress, text fields. Views tagged with a Runnable repaint themselves. */
     fun paintAccent(root: View, c: Int) {
         val csl = ColorStateList.valueOf(c)
         val on = ColorStateList.valueOf(Accent.onColor(c))
@@ -83,7 +89,7 @@ object Ui {
         val thumb = ColorStateList(arrayOf(checked, intArrayOf()), intArrayOf(Color.WHITE, attr(root.context, R.attr.carTextDim)))
         fun walk(v: View) {
             when (v) {
-                is Slider -> if (v.id != R.id.npSeek) { v.trackActiveTintList = csl; v.thumbTintList = csl; v.haloTintList = ColorStateList.valueOf(0x1FFFFFFF) }
+                is Slider -> { v.trackActiveTintList = csl; v.thumbTintList = csl; v.haloTintList = ColorStateList.valueOf(0x1FFFFFFF) }
                 is MaterialSwitch -> { v.trackTintList = sw; v.thumbTintList = thumb; v.trackDecorationTintList = ColorStateList.valueOf(Color.TRANSPARENT) }
                 is com.google.android.material.tabs.TabLayout -> v.setSelectedTabIndicatorColor(c)
                 is com.google.android.material.progressindicator.BaseProgressIndicator<*> -> v.setIndicatorColor(c)

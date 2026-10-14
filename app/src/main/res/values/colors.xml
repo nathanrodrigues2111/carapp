@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Base palette (tokens.css). Screen colors come from the CarTheme.Midnight attrs. -->
-    <color name="accent">#FF00E5FF</color>
+    <color name="accent">#FFF2F2F2</color>
     <color name="onAccent">#FF140600</color>
     <color name="bg">#FF000000</color>
     <color name="bgAmoled">#FF000000</color>

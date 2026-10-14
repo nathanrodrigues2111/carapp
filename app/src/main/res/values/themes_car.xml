@@ -8,13 +8,13 @@
         <item name="carStroke">#14FFFFFF</item>
         <item name="carText">#FFF5F5F7</item>
         <item name="carTextDim">#8FF5F5F7</item>
-        <item name="carAccent">#FF00E5FF</item>
+        <item name="carAccent">#FFF2F2F2</item>
         <item name="carScrim">#B3000000</item>
         <item name="android:windowBackground">#FF000000</item>
         <item name="android:colorBackground">#FF000000</item>
-        <item name="colorPrimary">#FF00E5FF</item>
+        <item name="colorPrimary">#FFF2F2F2</item>
         <item name="colorOnPrimary">#FF000000</item>
-        <item name="colorSecondary">#FF00E5FF</item>
+        <item name="colorSecondary">#FFF2F2F2</item>
         <item name="colorOnSurface">#FFF5F5F7</item>
         <item name="colorOnSurfaceVariant">#8FF5F5F7</item>
     </style>
