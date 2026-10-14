@@ -248,7 +248,8 @@ class StreamReceiver : Service() {
         val wm = getSystemService(WifiManager::class.java)
         @Suppress("DEPRECATION")
         wifi = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "speaker").apply { acquire() }
-        wifiLow = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "speaker-ll").apply { acquire() }
+        // No LOW_LATENCY lock: it only applies while our activity is in front, so every app switch toggled the
+        // radio mode and stalled packets 150 to 3000 ms. HIGH_PERF alone keeps power save off all the time.
         wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "carapp:speaker").apply { acquire() }
         val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; receiveBufferSize = 1 shl 20; bind(InetSocketAddress(Wire.TABLET_PORT)) }
         socket = s
@@ -274,8 +275,8 @@ class StreamReceiver : Service() {
         thread(name = "speaker-beacon") {
             val hello = ByteArray(15).also { Wire.MAGIC.toByteArray().copyInto(it) }
             while (alive) {
-                ByteBuffer.wrap(hello).putLong(6, System.nanoTime()); hello[14] = if (navDuck) 1 else 0
-                for (a in broadcastTargets()) try { s.send(DatagramPacket(hello, hello.size, a, Wire.PHONE_PORT)) } catch (_: Exception) {}
+                ByteBuffer.wrap(hello).putLong(6, System.nanoTime()); hello[14] = if (navDuck) 1 else 0   // 14 bytes unless ducking: older phone builds only accept 14
+                for (a in broadcastTargets()) try { s.send(DatagramPacket(hello, if (navDuck) 15 else 14, a, Wire.PHONE_PORT)) } catch (_: Exception) {}
                 Thread.sleep(100)   // also carries the duck flag, so it reaches the phone within 100 ms
             }
         }
