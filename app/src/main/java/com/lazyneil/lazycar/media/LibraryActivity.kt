@@ -57,6 +57,12 @@ class LibraryActivity : AppCompatActivity() {
             (text.getChildAt(0) as TextView).apply { this.text = it.optString("title"); setTextColor(if (playing) accent else Ui.attr(context, R.attr.carText)) }
             (text.getChildAt(1) as TextView).apply { this.text = it.optString("sub"); visibility = if (this.text.isEmpty()) View.GONE else View.VISIBLE }
             row.isActivated = playing
+            // Playing row: a filled rounded row (accent 14%, or white 10% for light accents such as white) and a bold title.
+            if (playing) row.background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = resources.getDimension(R.dimen.r_m)
+                setColor(if (Accent.onColor(accent) != android.graphics.Color.WHITE) 0x1AFFFFFF else androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x24))
+            } else row.setBackgroundResource(R.drawable.bg_lib_row)
+            (text.getChildAt(0) as TextView).typeface = if (playing) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
             // Trailing bars on the playing row (list rows only).
             (row.getChildAt(2) as? ImageView)?.apply {
                 visibility = if (playing) View.VISIBLE else View.GONE
@@ -84,7 +90,7 @@ class LibraryActivity : AppCompatActivity() {
         addView(texts(false), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(16) })
         addView(ImageView(this@LibraryActivity).apply {
             setImageDrawable(getDrawable(R.drawable.avd_now_playing)?.mutate()); contentDescription = "Now playing"; visibility = View.GONE
-        }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(12) })
+        }, LinearLayout.LayoutParams(dp(20), dp(20)).apply { marginStart = dp(12) })
         Ui.press(this)
     }
 
@@ -188,6 +194,7 @@ class LibraryActivity : AppCompatActivity() {
         ?: same(item, PhoneMedia.np)
 
     private fun onNowPlaying() {
+        accent = Accent.now(this)   // the new track's art may change the accent
         val t = tapped
         if (t != null && same(t, PhoneMedia.np)) {
             android.util.Log.i("LazyCar", "library: phone confirmed the track ${SystemClock.elapsedRealtime() - tappedAt} ms after the tap")
