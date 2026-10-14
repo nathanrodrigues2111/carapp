@@ -220,19 +220,22 @@ class StreamSender : Service() {
     private var volGuard: android.content.BroadcastReceiver? = null
 
     private fun startShared() {
+        restoreMusic()   // a crash may have left music muted
         if (!Wire.SHARED_ON) return   // ponytail: off until tested on the phone (installs need a tap on the phone)
         val am = getSystemService(android.media.AudioManager::class.java)
         if (am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).none { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }) { Log.e("LazyCar", "speaker shared: no A2DP output, playing direct"); return }
         val p = getSharedPreferences("speaker", MODE_PRIVATE)
         val m = android.media.AudioManager.STREAM_MUSIC; val a = android.media.AudioManager.STREAM_ACCESSIBILITY
         val mMax = am.getStreamMaxVolume(m)
-        val saved = p.getInt("musicSaved", -1).takeIf { it >= 0 } ?: am.getStreamVolume(m)   // >= 0: a crash left music at 0
-        p.edit().putInt("musicSaved", saved).apply()
-        am.setStreamVolume(m, 0, 0)
-        am.setStreamVolume(a, Math.round(saved * am.getStreamMaxVolume(a) / mMax.toFloat()), 0)
-        // Accessibility volume follows music unless TapService asks for its own: then shared cannot work.
-        if (am.getStreamVolume(m) != 0 || (saved > 0 && am.getStreamVolume(a) == 0)) {
-            Log.e("LazyCar", "speaker shared: accessibility volume not independent, playing direct"); restoreMusic(); return
+        // OnePlus ignores setStreamVolume on music from apps (OPLUS ADJUSTVOLUME_FORBID), but mute works and the
+        // capture stays full scale while muted. Our level goes on the accessibility stream (own volume via TapService).
+        val saved = am.getStreamVolume(m)
+        p.edit().putBoolean("musicMuted", true).apply()   // a crash leaves music muted: the next start or stop unmutes
+        am.adjustStreamVolume(a, android.media.AudioManager.ADJUST_SAME, 0)
+        am.setStreamVolume(a, Math.round(saved * am.getStreamMaxVolume(a) / mMax.toFloat()).coerceAtLeast(1), 0)
+        am.adjustStreamVolume(m, android.media.AudioManager.ADJUST_MUTE, 0)
+        if (!am.isStreamMute(m) || am.isStreamMute(a)) {
+            Log.e("LazyCar", "speaker shared: music mute ${am.isStreamMute(m)}, accessibility mute ${am.isStreamMute(a)}, playing direct"); restoreMusic(); return
         }
         shared = true
         jbl = StreamReceiver.Output("jbl", android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, this,
@@ -241,14 +244,12 @@ class StreamSender : Service() {
         // a one or two step raise is the user, so it moves our level instead.
         volGuard = object : android.content.BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
-                if (!shared || i.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1) != m) return
-                val v = am.getStreamVolume(m); if (v == 0) return
-                if (v <= 2 * maxOf(1, mMax / 16)) am.adjustStreamVolume(a, android.media.AudioManager.ADJUST_RAISE, android.media.AudioManager.FLAG_SHOW_UI)
-                am.setStreamVolume(m, 0, 0)
+                if (!shared || i.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1) != m || am.isStreamMute(m)) return
+                am.adjustStreamVolume(m, android.media.AudioManager.ADJUST_MUTE, 0)   // unmuted by keys, GO or a reset
             }
         }.also { androidx.core.content.ContextCompat.registerReceiver(this, it,
             android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION"), androidx.core.content.ContextCompat.RECEIVER_EXPORTED) }
-        Log.e("LazyCar", "speaker shared: on, music $saved/$mMax -> accessibility ${am.getStreamVolume(a)}/${am.getStreamMaxVolume(a)}")
+        Log.e("LazyCar", "speaker shared: on, music $saved/$mMax muted -> accessibility ${am.getStreamVolume(a)}/${am.getStreamMaxVolume(a)}")
     }
 
     /** Music back to the level our accessibility stream was at, so the direct path continues seamlessly. */
@@ -256,9 +257,8 @@ class StreamSender : Service() {
         val am = getSystemService(android.media.AudioManager::class.java)
         val p = getSharedPreferences("speaker", MODE_PRIVATE)
         val m = android.media.AudioManager.STREAM_MUSIC; val a = android.media.AudioManager.STREAM_ACCESSIBILITY
-        val v = if (shared) Math.round(am.getStreamVolume(a) * am.getStreamMaxVolume(m) / am.getStreamMaxVolume(a).toFloat()) else p.getInt("musicSaved", -1)
-        if (v >= 0) am.setStreamVolume(m, v, 0)
-        p.edit().remove("musicSaved").apply()
+        if (p.getBoolean("musicMuted", false) || shared) am.adjustStreamVolume(m, android.media.AudioManager.ADJUST_UNMUTE, 0)
+        p.edit().remove("musicMuted").apply()
     }
 
     override fun onDestroy() {
@@ -284,7 +284,7 @@ object Wire {
     const val CHUNK = 960          // 5 ms of 48 kHz stereo 16-bit, fits one Wi-Fi frame
     const val CHUNK_MS = 5
     const val FORMAT = "lossless PCM 48 kHz 16-bit stereo"
-    const val SHARED_ON = false
+    const val SHARED_ON = false   // blocked: JBL uses absolute volume (music index = JBL hardware level), see commit
     const val SHARED_MS = 450      // capture to speaker on both outputs in shared mode; JBL A2DP ~250 + room for stalls
     const val HEADER = 40          // seq int, echoed tablet beacon ns, phone ns at beacon, phone ns at send, phone mixer ns of frame 0, phone to JBL ms int
 }
