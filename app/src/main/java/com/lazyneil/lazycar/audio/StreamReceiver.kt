@@ -70,7 +70,7 @@ class StreamReceiver : Service() {
     class Output(val name: String, type: Int, ctx: Context, usage: Int = AudioAttributes.USAGE_MEDIA, private val bufMs: Int = 200,
                  /** ms from a chunk's arrival to its deadline; the track buffer is sized to fit inside it. */
                  private val budgetMs: () -> Int = { 1000 }, val extraMs: () -> Double) {
-        @Volatile var protect = false   // too many glitches: silent until clean for 5 s
+        @Volatile var protect = false   // too many glitches: -6 dB until 10 s without one (never silence: that stuck muted for minutes)
         /** Lower music for directions: -12 dB, 100 ms down, 300 ms up. */
         @Volatile var duck = false
         private var duckG = 1f
@@ -107,6 +107,9 @@ class StreamReceiver : Service() {
         private val ts = AudioTimestamp()
         @Volatile private var nextSeq = -1
         @Volatile var written = 0L
+        @Volatile var outRms = 0        // level actually written to the track, 0 = we are silent
+        private var outSq = 0.0; private var outN = 0
+        fun outLevel(): Int { outRms = kotlin.math.sqrt(outSq / maxOf(outN, 1)).toInt(); outSq = 0.0; outN = 0; return outRms }
         val lim = Limiter()
 
         fun put(c: Chunk) = synchronized(jb) {
@@ -138,12 +141,13 @@ class StreamReceiver : Service() {
             // until the buffer has been healthy for 1 s, then fades in over 50 ms. Silence instead of crackle.
             var sizedAt = 0L
             var muted = false; var healthySince = 0L; var fadeIn = 0; var fadeLen = Wire.RATE / 20
-            // Speaker protection: any glitch fades out in 5 ms; more than 3 in 10 s keeps us silent until 5 s clean.
-            val events = LongArray(4); var ev = 0
+            // Speaker protection: more than 3 glitches in 10 s lowers the level 6 dB until 10 s pass without one.
+            val events = LongArray(4); var ev = 0; var mutedAt = 0L
             fun glitch() { val t = SystemClock.elapsedRealtime(); events[ev++ and 3] = t; healthySince = 0; if (events.all { t - it < 10_000 }) protect = true }
             var dec = 0f; var decN = 0; var seenUnder = 0
             fun write(s: ShortArray) {
                 written += track.write(s, 0, s.size).coerceAtLeast(0) / 2
+                for (i in s.indices step 8) { val v = s[i].toDouble(); outSq += v * v; outN++ }
                 for (i in 0 until s.size / 2) {
                     dec += s[2 * i] + s[2 * i + 1]; if (++decN == 6) { ref[(refEnd and 0xffff).toInt()] = dec / 393216f; refEnd++; dec = 0f; decN = 0 }
                 }
@@ -197,16 +201,20 @@ class StreamReceiver : Service() {
                 ppm = ((r - 1) * 1e6).toInt()
                 val x = rs.process(c.pcm, r)
                 val fr = x.size / 2
-                if (!muted && (depthMs < 20 || protect)) { for (i in x.indices) x[i] *= 1 - (i / 2) / fr.toFloat(); muted = true; mutes++; healthySince = 0; glitch() }
+                val t = SystemClock.elapsedRealtime()
+                if (protect && t - events[(ev - 1) and 3] > 10_000) protect = false
+                if (!muted && depthMs < 20) { for (i in x.indices) x[i] *= 1 - (i / 2) / fr.toFloat(); muted = true; mutes++; healthySince = 0; glitch() }
                 else if (muted) {
-                    val t = SystemClock.elapsedRealtime()
-                    if (depthMs < 60) healthySince = 0 else if (healthySince == 0L) healthySince = t
-                    if (healthySince != 0L && t - healthySince >= (if (protect) 5000 else 1000)) { fadeIn = if (protect) Wire.RATE else Wire.RATE / 20; fadeLen = fadeIn; muted = false; protect = false }
+                    // Back after 300 ms of a usable buffer, and never more than 2 s of silence while audio arrives:
+                    // the old 60 ms for 1 s (5 s when protecting) rule never held with 70 to 130 ms jitter and stayed silent.
+                    if (mutedAt == 0L) mutedAt = t
+                    if (depthMs < 30) healthySince = 0 else if (healthySince == 0L) healthySince = t
+                    if ((healthySince != 0L && t - healthySince >= 300) || t - mutedAt >= 2000) { fadeIn = Wire.RATE / 20; fadeLen = fadeIn; muted = false; mutedAt = 0L }
                     else x.fill(0f)
                 }
                 if (!muted && fadeIn > 0) for (i in 0 until fr) { val g = 1 - (fadeIn - i).coerceAtLeast(0) / fadeLen.toFloat(); x[2 * i] *= g; x[2 * i + 1] *= g }
                 if (fadeIn > 0) fadeIn = (fadeIn - fr).coerceAtLeast(0)
-                val dt = if (duck) 0.25f else 1f
+                val dt = (if (duck) 0.25f else 1f) * (if (protect) 0.5f else 1f)
                 if (duckG != dt || dt != 1f) for (i in 0 until fr) {
                     duckG = if (duckG > dt) maxOf(dt, duckG - 0.75f / (Wire.RATE / 10)) else minOf(dt, duckG + 0.75f / (Wire.RATE * 0.3f))
                     x[2 * i] *= duckG; x[2 * i + 1] *= duckG
@@ -311,7 +319,7 @@ class StreamReceiver : Service() {
                     kbps = (bytes * 8 / (now - secAt)).toInt(); bytes = 0; secAt = now
                     rms = kotlin.math.sqrt(sq / maxOf(n, 1)).toInt(); sq = 0.0; n = 0; val g = gapMax; gapMax = 0
                     Log.e("LazyCar", "speaker recv kbps=$kbps gap=$g rms=$rms rtt=${"%.1f".format(rttMs)} jitter=${"%.1f".format(jitterMs)} target=$targetMs phoneOut=$phoneOutMs acoustic=${"%.0f".format(acousticMs)} lost=$lost " +
-                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} realign=${it.realigns} clip=${it.lim.clipped} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
+                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} realign=${it.realigns} clip=${it.lim.clipped} out=${it.outLevel()} prot=${it.protect} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
                 }
             } catch (_: Exception) {}
         }
