@@ -43,6 +43,7 @@ class GpsService : Service(), LocationListener {
         @Volatile var error = ""
         @Volatile var packets = 0L      // sent (phone) or received (tablet) since start
         @Volatile var source = ""       // "Phone GPS", "Phone network", "Tablet (phone offline)"
+        @Volatile var paused = false    // phone: GNSS off until GO is on or the tablet is linked
 
         private fun prefs(ctx: Context) = ctx.getSharedPreferences("lazygps", Context.MODE_PRIVATE)
 
@@ -53,6 +54,10 @@ class GpsService : Service(), LocationListener {
         /** Seconds the tablet holds the last phone fix before handing back to its own location. */
         fun holdSec(ctx: Context) = prefs(ctx).getInt("holdSec", 30)
 
+        /** Off by default: this tablet's own GNSS never gets a fix, so the mock stays even when the phone goes quiet. */
+        fun handBack(ctx: Context) = prefs(ctx).getBoolean("handBack", false)
+        fun setHandBack(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("handBack", on).apply()
+
         /** Fix still being shared: the phone repeats its last fix for 60 s, the tablet needs a packet within 5 s. */
         fun live() = mode != "idle" && lastAt != 0L &&
             SystemClock.elapsedRealtime() - lastAt <= if (mode == "send") 60000 else 5000
@@ -61,6 +66,7 @@ class GpsService : Service(), LocationListener {
         fun status() = when {
             error.isNotEmpty() -> error
             mode == "idle" -> "Off"
+            paused -> "Paused, waiting for GO or the tablet"
             !live() -> if (mode == "send") "Searching for a GPS fix" else "Searching for the phone"
             else -> (if (mode == "send") "Sharing" else "Receiving") +
                 (if (source == "Phone network") ", network only" else "") + ", ${acc.toInt()} m"
@@ -109,10 +115,11 @@ class GpsService : Service(), LocationListener {
             .createNotificationChannel(NotificationChannel("gps", "GPS sharing", NotificationManager.IMPORTANCE_LOW))
         mode = m; error = ""; lastAt = 0; sats = -1; peer = ""; packets = 0; source = ""; running = true
         startForeground(NOTIF_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        // Both ends: with the screen off the CPU and Wi-Fi radio sleep, the 1 Hz repeat stalls and fixes reach the tablet 20 to 30 s apart.
-        radio = getSystemService(WifiManager::class.java).createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "lazygps").apply { setReferenceCounted(false); acquire() }
+        // With the screen off the CPU and Wi-Fi radio sleep, the 1 Hz repeat stalls and fixes reach the tablet 20 to 30 s apart.
+        radio = getSystemService(WifiManager::class.java).createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "lazygps").apply { setReferenceCounted(false) }
         wake = getSystemService(android.os.PowerManager::class.java)
-            .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "lazycar:gps").apply { setReferenceCounted(false); acquire() }
+            .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "lazycar:gps").apply { setReferenceCounted(false) }
+        if (m == "receive") { radio?.acquire(); wake?.acquire() }
         try { if (m == "send") startSend() else startReceive() } catch (e: Exception) { error = e.message ?: e.toString() }
         return START_STICKY
     }
@@ -146,6 +153,8 @@ class GpsService : Service(), LocationListener {
     private val repeat = object : Runnable {
         override fun run() {
             val now = SystemClock.elapsedRealtime()
+            if (mode == "send") active(com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this@GpsService)) == com.lazyneil.lazycar.GoAction.ON
+                || com.lazyneil.lazycar.media.MediaListener.clients > 0)
             last?.let { if (now - sentAt > 900 && now - lastFixAt < 60000) send(it) }
             if (running) tick.postDelayed(this, 1000)
         }
@@ -154,13 +163,26 @@ class GpsService : Service(), LocationListener {
     // Send mode: GPS fix every second, broadcast as JSON over UDP. Fused fills in while GPS has no fix (indoors, tunnels).
     private fun startSend() {
         socket = DatagramSocket().apply { broadcast = true }
-        lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
-        // The provider/minTime overload asks fused for BALANCED, which indoors means one 100 m fix every 30 s.
-        lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER,
-            android.location.LocationRequest.Builder(1000L).setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY).build(),
-            mainExecutor, this)
-        lm.registerGnssStatusCallback(gnss, android.os.Handler(Looper.getMainLooper()))
-        tick.postDelayed(repeat, 1000)
+        paused = true; repeat.run()
+    }
+
+    // Battery: 1 Hz GNSS and the wakelock only while GO is on or the tablet holds the media link, checked by the 1 Hz tick.
+    private fun active(on: Boolean) {
+        if (on != paused) return
+        paused = !on
+        Log.i("LazyGPS", if (on) "send active" else "send paused")
+        if (on) {
+            radio?.acquire(); wake?.acquire()
+            lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
+            // The provider/minTime overload asks fused for BALANCED, which indoors means one 100 m fix every 30 s.
+            lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER,
+                android.location.LocationRequest.Builder(1000L).setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY).build(),
+                mainExecutor, this)
+            lm.registerGnssStatusCallback(gnss, android.os.Handler(Looper.getMainLooper()))
+        } else {
+            lm.removeUpdates(this); lm.unregisterGnssStatusCallback(gnss)
+            radio?.release(); wake?.release(); last = null; lastAt = 0; sats = -1
+        }
     }
 
     override fun onLocationChanged(l: Location) {
@@ -215,11 +237,14 @@ class GpsService : Service(), LocationListener {
             } else lm.removeTestProvider(p)
         } catch (e: Exception) { error = e.message ?: e.toString() }
         if (!on) source = "Tablet (phone offline)"
+        // After the 5 s bridge the last fix stays with its real, growing age, so apps can see it is stale.
     }
 
     // Receive mode: listen forever, feed every packet into the test providers.
     private fun startReceive() {
         mocking = true; setMocking(false)   // drop test providers a previous process left behind
+        val handBack = handBack(this)
+        if (!handBack) setMocking(true)     // the broken real GNSS never owns gps while receive runs
         // Some Wi-Fi drivers drop broadcast frames without this lock.
         val wm = getSystemService(WifiManager::class.java)
         wifiLock = wm.createMulticastLock("lazygps").apply { setReferenceCounted(false); acquire() }
@@ -233,7 +258,7 @@ class GpsService : Service(), LocationListener {
                     val pkt = DatagramPacket(buf, buf.size)
                     try { s.receive(pkt) } catch (_: java.net.SocketTimeoutException) {
                         val age = SystemClock.elapsedRealtime() - lastAt
-                        if (mocking && age > holdMs) setMocking(false)
+                        if (handBack && mocking && age > holdMs) setMocking(false)
                         // Maps calls a fix older than ~2 s "GPS signal lost"; bridge short packet gaps with the last fix.
                         else if (mocking && age < 5000) lastJ?.let { inject(it) }
                         continue
@@ -253,7 +278,9 @@ class GpsService : Service(), LocationListener {
 
     private var lastJ: JSONObject? = null
 
-    // Fresh time and elapsedRealtimeNanos on every injection: the phone's clock and uptime mean nothing here.
+    // Stamped with tablet time (the phone's clock and uptime mean nothing here). Gaps under 5 s get a fresh stamp so
+    // Maps does not flash "signal lost"; after that the last fix stays with its real, growing age (re-injecting it with
+    // the same stamp is dropped by LocationManager, so a growing accuracy cannot be shown without faking freshness).
     private fun inject(j: JSONObject) {
         for (p in PROVIDERS) {
             lm.setTestProviderLocation(p, Location(p).apply {
@@ -280,7 +307,7 @@ class GpsService : Service(), LocationListener {
             lm.unregisterGnssStatusCallback(gnss)
             if (mode == "receive") setMocking(false)
         }
-        mode = "idle"; targetsAt = 0
+        mode = "idle"; targetsAt = 0; paused = false
     }
 
     override fun onDestroy() { Log.i("LazyGPS", "destroy"); stopAll(); super.onDestroy() }
