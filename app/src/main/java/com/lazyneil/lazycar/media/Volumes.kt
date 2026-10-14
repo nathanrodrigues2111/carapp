@@ -62,7 +62,7 @@ object Volumes {
             }
         }
         if (tablet) {
-            row("JBL (Bluetooth)", { if (PhoneMedia.connected) jblFromNp(PhoneMedia.np) else -1 }) { v -> PhoneMedia.cmd("volSet") { put("pct", v) } }
+            row("JBL (Bluetooth)", { if (PhoneMedia.alive) jblFromNp(PhoneMedia.np) else -1 }) { v -> PhoneMedia.cmd("volSet") { put("pct", v) } }
             row("Tablet speaker", { localPct(a) }) { v -> applyTablet(a, v) }
         } else {
             row("JBL (Bluetooth)", { jblPct(a) }) { v -> setJblLocal(a, v) }

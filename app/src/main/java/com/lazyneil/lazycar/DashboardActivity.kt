@@ -71,10 +71,21 @@ class DashboardActivity : AppCompatActivity() {
             for (id in intArrayOf(R.id.npTitle, R.id.npArtist)) findViewById<TextView>(id).gravity = android.view.Gravity.START
             findViewById<TextView>(R.id.npTitle).setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.t_track_wide))
         } else for (id in intArrayOf(R.id.npTitle, R.id.npArtist)) findViewById<TextView>(id).gravity = android.view.Gravity.CENTER
-        // Keep the art square: the largest square that fits its frame.
+        // Keep the art square: the largest square that fits its frame. Every size change (text lines, banner,
+        // split resize) goes through this one path and animates; only the first layout snaps.
         findViewById<View>(R.id.artFrame).addOnLayoutChangeListener { f, l, t, r, b, _, _, _, _ ->
             val side = minOf(r - l, b - t); val box = findViewById<View>(R.id.npArtBox)
-            if (box.layoutParams.width != side) f.post { box.layoutParams = box.layoutParams.apply { width = side; height = side } }
+            if (side <= 0 || side == artSide) return@addOnLayoutChangeListener
+            artSide = side
+            f.post {
+                sizeAnim?.cancel()
+                fun set(v: Int) { box.layoutParams = box.layoutParams.apply { width = v; height = v } }
+                if (box.layoutParams.width <= 0) set(side)
+                else sizeAnim = android.animation.ValueAnimator.ofInt(box.layoutParams.width, side).setDuration(300).apply {
+                    interpolator = android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f)
+                    addUpdateListener { set(it.animatedValue as Int) }; start()
+                }
+            }
         }
         val settings = { startActivity(Intent(this, SettingsActivity::class.java)) }
         click(R.id.settingsBtn, settings); click(R.id.statusRow, settings)
@@ -87,10 +98,14 @@ class DashboardActivity : AppCompatActivity() {
         click(R.id.npPlay) { PhoneMedia.cmd("toggle") }
         findViewById<Slider>(R.id.npSeek).addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
             override fun onStartTrackingTouch(s: Slider) { seeking = true }
-            override fun onStopTrackingTouch(s: Slider) { seeking = false; PhoneMedia.cmd("seek") { put("pos", s.value.toLong()) } }
+            override fun onStopTrackingTouch(s: Slider) { seeking = false; seekAt = SystemClock.elapsedRealtime(); PhoneMedia.cmd("seek") { put("pos", s.value.toLong()) } }
         })
+        // While dragging only the time label follows the finger; one seek goes out on release.
+        findViewById<Slider>(R.id.npSeek).addOnChangeListener { s, v, user -> if (user) findViewById<TextView>(R.id.npPos).text = clock(v.toLong())
+            .also { findViewById<TextView>(R.id.npDur).text = "-" + clock(maxOf(0, s.valueTo.toLong() - v.toLong())) } }
         artGestures(findViewById(R.id.npArt))
-        findViewById<TextView>(R.id.npTitle).isSelected = true   // marquee runs only while selected
+        // Marquee runs only while selected; twice per new title, then it rests (forever = redraws at the display rate).
+        findViewById<TextView>(R.id.npTitle).apply { isSelected = true; marqueeRepeatLimit = 2 }
         Ui.paintAccent(root, Accent.forArt(this, null))
         Ui.blur(findViewById(R.id.npBackdrop))
         Ui.press(*intArrayOf(R.id.npPrev, R.id.npNext, R.id.npPlay, R.id.npLibrary, R.id.settingsBtn)
@@ -127,8 +142,17 @@ class DashboardActivity : AppCompatActivity() {
     override fun onStart() { super.onStart(); PhoneMedia.listeners += npListener }
     override fun onStop() { super.onStop(); PhoneMedia.listeners -= npListener }
 
-    private var seeking = false
+    private var seeking = false; private var seekAt = 0L
     private var shownArt: android.graphics.Bitmap? = null
+    private var artSide = 0; private var sizeAnim: android.animation.Animator? = null
+
+    /** Crossfade, never a blank frame. Art is center cropped square first so both layers share one shape. */
+    private fun crossfade(iv: ImageView, b: android.graphics.Bitmap?) {
+        val to = b?.let { android.graphics.drawable.BitmapDrawable(resources, minOf(it.width, it.height).let { s -> android.media.ThumbnailUtils.extractThumbnail(it, s, s) }) }
+            ?: android.graphics.drawable.ColorDrawable(0)
+        val from = iv.drawable.let { if (it is android.graphics.drawable.TransitionDrawable) it.getDrawable(1) else it } ?: android.graphics.drawable.ColorDrawable(0)
+        iv.setImageDrawable(android.graphics.drawable.TransitionDrawable(arrayOf(from, to)).apply { isCrossFadeEnabled = true; startTransition(260) })
+    }
     private var shownPlaying: Boolean? = null
     private var shownTitle = ""; private var titleAt = 0L
 
@@ -155,34 +179,41 @@ class DashboardActivity : AppCompatActivity() {
     private fun clock(ms: Long) = (ms / 1000).let { "%d:%02d".format(it / 60, it % 60) }
 
     private fun renderNowPlaying() {
-        val np = PhoneMedia.np; val has = PhoneMedia.hasTrack
-        Ui.swapText(findViewById(R.id.npTitle), when { !PhoneMedia.connected -> "Phone not connected"; has -> np.optString("title"); else -> "Nothing playing" })
+        val np = PhoneMedia.np; val has = PhoneMedia.hasTrack; val alive = PhoneMedia.alive
+        // Any phone traffic (link, audio, GPS) = connected. No traffic: "Connecting..." for 10 s, then not connected.
+        Ui.swapText(findViewById(R.id.npTitle), when { has -> np.optString("title"); alive -> "Nothing playing"
+            PhoneMedia.reconnecting -> "Connecting..."; else -> "Phone not connected" })
         Ui.swapText(findViewById(R.id.npArtist), when {
-            !PhoneMedia.connected -> "Phone not reachable. Same Wi-Fi and notification access on?"
             has -> listOf(np.optString("artist"), np.optString("album")).filter { it.isNotEmpty() }.joinToString(" · ")
-            else -> "Start music on the phone" })
+            alive -> "Start music on the phone"
+            PhoneMedia.reconnecting -> ""
+            else -> "Phone not reachable. Same Wi-Fi and notification access on?" })
+        // Last track stays during the grace period, slightly dimmed.
+        findViewById<View>(R.id.npArtBox).let { val a = if (alive) 1f else 0.6f; if (it.alpha != a) it.animate().alpha(a).setDuration(250).start() }
         if (shownArt !== PhoneMedia.art) {
             shownArt = PhoneMedia.art
-            Ui.swapArt(findViewById(R.id.npArt), shownArt)
-            findViewById<ImageView>(R.id.npBackdrop).setImageBitmap(shownArt)
+            crossfade(findViewById(R.id.npArt), shownArt)
+            crossfade(findViewById(R.id.npBackdrop), shownArt)
             Ui.paintAccent(root, Accent.forArt(this, shownArt))
         }
         // Loader on the art while a new track's art is still coming from the phone (gives up after 5 s).
         if (np.optString("title") != shownTitle) { shownTitle = np.optString("title"); titleAt = SystemClock.elapsedRealtime() }
-        Ui.showLoader(findViewById(R.id.npLoader), PhoneMedia.connected && has && PhoneMedia.art == null && SystemClock.elapsedRealtime() - titleAt < 5000)
+        Ui.showLoader(findViewById(R.id.npLoader), alive && has && PhoneMedia.art == null && SystemClock.elapsedRealtime() - titleAt < 5000)
         val playing = PhoneMedia.playing
         if (shownPlaying != playing) {
             Ui.morph(findViewById<ImageButton>(R.id.npPlay), playing, shownPlaying != null)
             shownPlaying = playing
         }
+        for (id in intArrayOf(R.id.npPrev, R.id.npPlay, R.id.npNext, R.id.npLibrary)) findViewById<View>(id).isEnabled = alive
         val dur = np.optLong("dur"); val pos = PhoneMedia.position()
+        // Hands off while dragging and for 1.5 s after release, so a stale phone position cannot pull the thumb back.
+        if (seeking || SystemClock.elapsedRealtime() - seekAt < 1500) return
         findViewById<Slider>(R.id.npSeek).apply {
             isEnabled = has && dur > 0
-            if (!seeking) { valueTo = maxOf(dur, 1).toFloat(); value = pos.coerceIn(0, maxOf(dur, 1)).toFloat() }
+            valueTo = maxOf(dur, 1).toFloat(); value = pos.coerceIn(0, maxOf(dur, 1)).toFloat()
         }
         findViewById<TextView>(R.id.npPos).text = if (dur > 0) clock(pos) else ""
         findViewById<TextView>(R.id.npDur).text = if (dur > 0) "-" + clock(maxOf(0, dur - pos)) else ""
-        for (id in intArrayOf(R.id.npPrev, R.id.npPlay, R.id.npNext, R.id.npLibrary)) findViewById<View>(id).isEnabled = PhoneMedia.connected
     }
 
     override fun onRequestPermissionsResult(rc: Int, perms: Array<out String>, res: IntArray) {

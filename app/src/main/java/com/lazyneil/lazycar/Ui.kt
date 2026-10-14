@@ -1,7 +1,5 @@
 package com.lazyneil.lazycar
 
-import android.animation.ObjectAnimator
-import android.animation.ValueAnimator
 import android.app.Activity
 import android.content.Context
 import android.content.res.ColorStateList
@@ -215,14 +213,11 @@ object Ui {
         }
     }
 
-    /** Pulsing live dot. ponytail: animator lives as long as the view, fine for home screens. */
+    /** Status dot, steady: an infinite pulse redraws the whole window at the display rate (main + RenderThread ~15% each). */
+    @Suppress("UNUSED_PARAMETER")
     fun dot(v: View?, color: Int, live: Boolean) {
         v ?: return
-        v.backgroundTintList = ColorStateList.valueOf(color)
-        val a = v.getTag(R.id.stGpsDot) as? ObjectAnimator
-        if (live && a == null) v.setTag(R.id.stGpsDot, ObjectAnimator.ofFloat(v, View.ALPHA, 1f, 0.3f).apply {
-            duration = 900; repeatMode = ValueAnimator.REVERSE; repeatCount = ValueAnimator.INFINITE; start() })
-        if (!live && a != null) { a.cancel(); v.alpha = 1f; v.setTag(R.id.stGpsDot, null) }
+        if (v.backgroundTintList?.defaultColor != color) v.backgroundTintList = ColorStateList.valueOf(color)
     }
 
     val GREEN = 0xFF34D399.toInt()   // tokens: success
@@ -259,10 +254,10 @@ object Ui {
         val tick = object : Runnable {
             override fun run() {
                 if (a.isFinishing || !root.isAttachedToWindow) return
-                show(0, jbl, jblPct, if (tablet) (if (PhoneMedia.connected) Volumes.jblFromNp(PhoneMedia.np) else -1) else Volumes.jblPct(a))
+                show(0, jbl, jblPct, if (tablet) (if (PhoneMedia.alive) Volumes.jblFromNp(PhoneMedia.np) else -1) else Volumes.jblPct(a))
                 show(1, tab, tabPct, if (tablet) Volumes.localPct(a) else if (MediaListener.clients > 0) MediaListener.tabletPct else -1)
 
-                val bt = if (tablet) PhoneMedia.connected
+                val bt = if (tablet) PhoneMedia.alive
                     else am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
                 val dev = (jblChip?.tag as? String).orEmpty()
                 jblChip?.text = (if (bt) "Connected" else "Not connected") + if (dev.isNotEmpty()) ", $dev" else ""

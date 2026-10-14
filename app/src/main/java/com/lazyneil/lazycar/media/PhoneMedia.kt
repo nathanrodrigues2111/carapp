@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Base64
+import android.util.Log
 import com.lazyneil.lazycar.R
 import com.lazyneil.lazycar.audio.StreamReceiver
 import org.json.JSONObject
@@ -31,6 +32,12 @@ import kotlin.concurrent.thread
 /** Tablet side: keeps a TCP session to the phone's [MediaListener], holds Now Playing, sends button taps. */
 object PhoneMedia {
     @Volatile var connected = false
+    @Volatile private var lostAt = SystemClock.elapsedRealtime()   // app start counts as a reconnect
+    private val gpsAt get() = com.lazyneil.lazycar.gps.GpsService.let { if (it.mode == "receive") it.lastAt else 0L }
+    /** Same rule as the phone's tile: any traffic from the phone (media link, audio or GPS) in the last 10 s. */
+    val alive get() = connected || SystemClock.elapsedRealtime() - maxOf(StreamReceiver.lastAt, gpsAt) < 10_000
+    /** First 10 s of a reconnect with no traffic at all: "Connecting...", never "not connected". */
+    val reconnecting get() = !alive && SystemClock.elapsedRealtime() - lostAt < 10_000
     @Volatile var phone = ""
     @Volatile var np = JSONObject()
     @Volatile var art: Bitmap? = null
@@ -46,7 +53,7 @@ object PhoneMedia {
     private fun fire() = listeners.forEach { it() }
 
     val playing get() = np.optInt("state") == PlaybackState.STATE_PLAYING
-    val hasTrack get() = connected && np.optString("title").isNotEmpty()
+    val hasTrack get() = (alive || reconnecting) && np.optString("title").isNotEmpty()   // keep the last track through a blip
     /** Position now, extrapolated from the last update. */
     fun position(): Long {
         val p = np.optLong("pos")
@@ -55,7 +62,16 @@ object PhoneMedia {
     }
 
     fun send(j: JSONObject) = io.execute { try { w?.apply { write(j.toString()); write("\n"); flush() } } catch (_: Exception) {} }
-    fun cmd(c: String, extra: JSONObject.() -> Unit = {}) = send(JSONObject().put("c", c).apply(extra))
+    fun cmd(c: String, extra: JSONObject.() -> Unit = {}) {
+        if (c in acked) { ackC = c; ackAt = SystemClock.elapsedRealtime(); ackOld = np }
+        // Optimistic: the play/pause state flips at once, the phone's reply confirms or corrects it.
+        if (c == "seek" && hasTrack) { val o = JSONObject(np.toString()); extra(o); np = o; npAt = SystemClock.elapsedRealtime() }   // optimistic position
+        if (c == "toggle" && hasTrack) { val p = position(); np = JSONObject(np.toString()).put("pos", p)
+            .put("state", if (playing) PlaybackState.STATE_PAUSED else PlaybackState.STATE_PLAYING); npAt = SystemClock.elapsedRealtime(); main.post { fire() } }
+        send(JSONObject().put("c", c).apply(extra))
+    }
+    private val acked = setOf("toggle", "next", "prev", "seek")
+    @Volatile private var ackC = ""; @Volatile private var ackAt = 0L; private var ackOld = JSONObject()
 
     // Library cache: every good reply in memory and as a small JSON file, shown at once on the next open.
     private var dir: java.io.File? = null
@@ -98,27 +114,38 @@ object PhoneMedia {
                     val ip = find(app) ?: throw Exception("no phone")
                     Socket().use { s ->
                         s.connect(InetSocketAddress(ip, Link.PORT), 3000); s.tcpNoDelay = true
-                        s.soTimeout = 5000   // the phone pushes every second; silence = dead link, the timeout ends the read and we reconnect
+                        s.soTimeout = 15_000   // the phone heartbeats every second; 15 s of silence = dead link, the timeout ends the read and we reconnect
                         w = s.getOutputStream().bufferedWriter(); phone = ip; connected = true; sentTvol = -1   // the phone may have restarted: report our level again
+                        upAt = SystemClock.elapsedRealtime()
+                        Log.e("LazyCar", "media link up $ip after ${upAt - lostAt} ms down")
                         main.postDelayed({ prefetch() }, 1500)
                         cmd("prefs") { put("items", com.lazyneil.lazycar.SettingsSync.all()).put("full", true) }   // full exchange
                         s.getInputStream().bufferedReader().forEachLine { l -> handle(app, JSONObject(l)) }
                     }
-                } catch (_: Exception) {}
+                    why = "phone closed"
+                } catch (e: Exception) { why = e.toString() }
                 lastGo = null
-                if (connected) { connected = false; w = null; main.post { fire(); notifyMedia(app) } }
+                if (connected) {
+                    connected = false; w = null; lostAt = SystemClock.elapsedRealtime()
+                    Log.e("LazyCar", "media link down after ${lostAt - upAt} ms: $why")
+                    main.post { fire(); notifyMedia(app) }
+                    main.postDelayed({ fire() }, 10_500)   // grace over: let the UI say "not connected" if still down
+                }
                 synchronized(pending) { pending.keys.toList() }.forEach { fail(it, "Phone not connected") }
-                Thread.sleep(2000)
+                Thread.sleep(500)   // a phone app restart should reconnect in about a second
             }
         }
     }
 
     private var sentTvol = -1
+    private var upAt = 0L; private var why = ""
+    private var artKey = ""
     private var lastGo: Boolean? = null   // null until the first message after a connect
 
     private fun handle(ctx: Context, j: JSONObject) {
         when (j.optString("t")) {
             // Only a slider moved by the user on the phone sets our volume; nothing on connect, never by itself.
+            "hb" -> cmd("hb")   // the phone drops a tablet that stays silent for 15 s
             "tvol" -> if (j.optBoolean("user")) { Volumes.applyTablet(ctx, j.optInt("pct")); sentTvol = -1 }
             "np" -> {
                 val old = np
@@ -128,13 +155,17 @@ object PhoneMedia {
                 val go = j.optBoolean("go")
                 if (go && lastGo == false && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.TapService.launchDrive(ctx) }
                 lastGo = go
-                if (j.has("art")) { art = j.optString("art").takeIf { it.isNotEmpty() }?.let { decode(it) }; com.lazyneil.lazycar.Accent.art = art }
-                else j.put("art", "")
+                // A reconnect resends the art: same track keeps the bitmap we have, so the UI does not flicker.
+                val key = listOf("pkg", "title", "artist", "album").joinToString("|") { j.optString(it) }
+                if (j.has("art") && (key != artKey || art == null)) { artKey = key; art = j.optString("art").takeIf { it.isNotEmpty() }?.let { decode(it) }; com.lazyneil.lazycar.Accent.art = art }
+                val newArt = j.optString("art").isNotEmpty(); j.remove("art")   // np stays small: the bitmap lives in [art]
                 com.lazyneil.lazycar.Accent.fromPhone = j.optInt("accent").takeIf { it != 0 }; com.lazyneil.lazycar.Accent.publish(ctx)
+                if (ackAt > 0 && (ackC == "seek" || j.optString("title") != ackOld.optString("title") || j.optInt("state") != ackOld.optInt("state"))) {
+                    Log.e("LazyCar", "media cmd $ackC acked in ${SystemClock.elapsedRealtime() - ackAt} ms"); ackAt = 0 }
                 np = j; npAt = SystemClock.elapsedRealtime()
                 // Report our speaker level so the phone slider is live; hardware buttons included.
                 Volumes.localPct(ctx).let { if (it != sentTvol) { sentTvol = it; Volumes.saveTablet(ctx, it); cmd("tvol") { put("pct", it) } } }
-                val big = old.optString("title") != j.optString("title") || old.optInt("state") != j.optInt("state") || j.has("art") && j.optString("art").isNotEmpty()
+                val big = old.optString("title") != j.optString("title") || old.optInt("state") != j.optInt("state") || newArt
                 main.post { fire(); if (big) notifyMedia(ctx) }
             }
             "prefs" -> com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))
