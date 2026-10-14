@@ -281,8 +281,6 @@ class StreamReceiver : Service() {
         val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; receiveBufferSize = 1 shl 20; trafficClass = 0xB8; bind(InetSocketAddress(Wire.TABLET_PORT)) }   // DSCP EF: WMM voice queue
         socket = s
         val ctx = this
-        // An older build let this run away to the clamp; anything beyond the new bound restarts from 0.
-        acousticMs = TabletSpeaker.acoustic(ctx).toDouble().let { if (abs(it) > Acoustic.MAX_MS) { TabletSpeaker.saveAcoustic(ctx, 0); 0.0 } else it }
         synchronized(outputs) {
             outputs.clear()
             outputs += Output("speaker", AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, ctx, budgetMs = { phoneOutMs - lagMs }) { acousticMs + TabletSpeaker.delayMs(ctx) }
@@ -342,6 +340,7 @@ class StreamReceiver : Service() {
                     rms = kotlin.math.sqrt(sq / maxOf(n, 1)).toInt(); sq = 0.0; n = 0; val g = gapMax; gapMax = 0
                     Log.e("LazyCar", "speaker recv kbps=$kbps gap=$g rms=$rms rtt=${"%.1f".format(rttMs)} jitter=${"%.1f".format(jitterMs)} target=$targetMs phoneOut=$phoneOutMs lag=$lagMs acoustic=${"%.0f".format(acousticMs)} lost=$lost " +
                         outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} realign=${it.realigns} late=${it.lateMs} clip=${it.lim.clipped} out=${it.outLevel()} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
+                    outputs.firstOrNull()?.let { Log.e("LazyCar", "sync: off=${"%.1f".format(it.errMs)} ms (track vs mix+phoneOut+acoustic) heard=${if (Acoustic.residualMs.isNaN()) "n/a" else "%+.0f".format(Acoustic.residualMs)} ms (mic, JBL minus tablet) acoustic=${"%+.0f".format(acousticMs)} lag=$lagMs") }
                 }
             } catch (_: Exception) {}
         }
