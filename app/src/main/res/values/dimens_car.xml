@@ -7,6 +7,10 @@
     <dimen name="t_headline">28sp</dimen>
     <dimen name="t_display">44sp</dimen>
     <dimen name="t_hero">64sp</dimen>
+    <!-- Track title on the tablet player (narrow / wide) and its artist line. -->
+    <dimen name="t_track">28sp</dimen>
+    <dimen name="t_track_wide">34sp</dimen>
+    <dimen name="t_track_sub">18sp</dimen>
     <dimen name="sp1">4dp</dimen>
     <dimen name="sp2">8dp</dimen>
     <dimen name="sp3">12dp</dimen>

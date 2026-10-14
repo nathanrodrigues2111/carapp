@@ -64,10 +64,10 @@
             android:layout_height="wrap_content" android:layout_marginBottom="@dimen/sp4" android:minHeight="48dp" android:maxLines="3" android:background="@drawable/bg_glass"
             android:gravity="center_vertical" android:padding="@dimen/sp3" android:textColor="?attr/carText"
             android:visibility="gone" />
-                <TextView android:id="@+id/npTitle" style="@style/T.Display" android:layout_width="match_parent"
+                <TextView android:id="@+id/npTitle" style="@style/T.Track" android:layout_width="match_parent"
                     android:layout_height="wrap_content" android:text="Nothing playing" />
-                <TextView android:id="@+id/npArtist" style="@style/T.Headline" android:layout_width="match_parent"
-                    android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp2" />
+                <TextView android:id="@+id/npArtist" style="@style/T.TrackSub" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:layout_marginTop="6dp" />
                 <com.google.android.material.slider.Slider android:id="@+id/npSeek" style="@style/CarSeek"
                     android:layout_marginHorizontal="-16dp" android:layout_marginTop="@dimen/sp6" android:contentDescription="Seek" />
                 <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content">

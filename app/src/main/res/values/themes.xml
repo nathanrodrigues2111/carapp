@@ -18,15 +18,6 @@
         <item name="colorOnError">@color/onAccent</item>
     </style>
 
-    <!-- Accent overlays, index-matched to Accent.SWATCHES: colorPrimary drives every Material widget. -->
-    <style name="AccentOverlay.Cyan" parent=""><item name="colorPrimary">#FF00E5FF</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FF00E5FF</item><item name="carAccent">#FF00E5FF</item></style>
-    <style name="AccentOverlay.Orange" parent=""><item name="colorPrimary">#FFFF7A45</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FFFF7A45</item><item name="carAccent">#FFFF7A45</item></style>
-    <style name="AccentOverlay.Blue" parent=""><item name="colorPrimary">#FF7C9CFF</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FF7C9CFF</item><item name="carAccent">#FF7C9CFF</item></style>
-    <style name="AccentOverlay.Purple" parent=""><item name="colorPrimary">#FFB388FF</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FFB388FF</item><item name="carAccent">#FFB388FF</item></style>
-    <style name="AccentOverlay.Green" parent=""><item name="colorPrimary">#FF34D399</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FF34D399</item><item name="carAccent">#FF34D399</item></style>
-    <style name="AccentOverlay.Yellow" parent=""><item name="colorPrimary">#FFFBBF24</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FFFBBF24</item><item name="carAccent">#FFFBBF24</item></style>
-    <style name="AccentOverlay.Red" parent=""><item name="colorPrimary">#FFF87171</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FFF87171</item><item name="carAccent">#FFF87171</item></style>
-    <style name="AccentOverlay.White" parent=""><item name="colorPrimary">#FFF5F5F7</item><item name="colorOnPrimary">#FF140600</item><item name="colorSecondary">#FFF5F5F7</item><item name="carAccent">#FFF5F5F7</item></style>
 
     <!-- AMOLED: only the window/background turn pure black; cards stay @color/card. -->
     <style name="ThemeOverlay.LazyCar.Amoled" parent="">

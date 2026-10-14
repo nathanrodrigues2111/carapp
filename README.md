@@ -55,7 +55,7 @@ One tap on the phone runs the full sequence, a second tap stops and restores. ST
 | **Tablet speaker** | The phone's audio plays on the tablet over Wi-Fi, auto synced to the Bluetooth speaker using the measured Bluetooth latency and clock offset. |
 | **Bluetooth speaker** | One Bluetooth speaker on the phone. |
 | **Tablet player** | Maps on the left, the player on the right. Big art, title, seek bar, previous, play and next. Full width it shows a side rail with art left and controls right. |
-| **Accent from art** | The accent color follows the album art on every screen. A fixed color can be picked in Settings, Display. |
+| **Accent from art** | The accent color follows the album art on every screen, the same on the phone and the tablet. |
 | **Library** | Browse the phone's player library or its music files from the tablet, with the playing song highlighted. |
 | **Split screen** | The tablet opens Maps + CarApp side by side on start, on GO and when CarApp opens (Settings, Drive, Open with Maps). |
 | **Hotspot auto-join** | The tablet joins the phone's hotspot on its own. |
@@ -80,7 +80,7 @@ One tap on the phone runs the full sequence, a second tap stops and restores. ST
 6. On the tablet, save a Maps + CarApp pair once on the launcher (for split screen).
 7. Add the GO widget on the phone. Pick the speaker and the player. Settings save themselves.
 
-Settings sections: Display (accent color), Audio (speaker volumes, tablet speaker, sync trim), Drive (Open with Maps), GPS, Camera, Connection (hotspot), Advanced (device role, widget, help, debug).
+Settings sections: Audio (speaker volumes, tablet speaker, sync trim), Drive (Open with Maps), GPS, Camera, Connection (hotspot), Advanced (device role, widget, help, debug).
 
 ## Rear camera hardware
 

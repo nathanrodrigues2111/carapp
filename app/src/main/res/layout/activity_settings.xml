@@ -13,10 +13,6 @@
         android:clipToPadding="false" android:fillViewport="true" android:scrollbars="none">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="vertical" android:paddingHorizontal="@dimen/sp4" android:paddingBottom="@dimen/sp6">
-            <TextView style="@style/SectionHeader" android:text="Display" />
-            <LinearLayout style="@style/SetCard">
-                <LinearLayout style="@style/SetRow.Stack"><TextView style="@style/SetTitle" android:text="Accent color" /><TextView style="@style/SetSub" android:id="@+id/accentSub" /><LinearLayout android:id="@+id/accentRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp3" android:orientation="vertical" /></LinearLayout>
-            </LinearLayout>
             <TextView style="@style/SectionHeader" android:text="Audio" />
             <LinearLayout style="@style/SetCard">
                 <include layout="@layout/view_outputs" />
@@ -43,8 +39,8 @@
                 <LinearLayout android:id="@+id/dev3Row" style="@style/SetRow" android:clickable="true" android:focusable="true"><ImageView android:id="@+id/dev3Icon" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginEnd="@dimen/sp4" android:importantForAccessibility="no" /><TextView android:id="@+id/dev3Value" style="@style/SetTitle" android:layout_width="0dp" android:layout_weight="1" /><ImageView style="@style/ChevronIcon" app:tint="?attr/carTextDim" /></LinearLayout>
                 <FrameLayout style="@style/SetRow" android:background="@null"><com.google.android.material.textfield.TextInputLayout android:id="@+id/ipBox" style="@style/CarField" android:hint="Head unit IP (optional)"><com.google.android.material.textfield.TextInputEditText android:id="@+id/ipField" style="@style/CarFieldText" /></com.google.android.material.textfield.TextInputLayout></FrameLayout>
                 </LinearLayout>
-                <LinearLayout android:id="@+id/rowHotspot" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Wi-Fi hotspot" /><TextView style="@style/SetSub" android:id="@+id/hotspotCaption" android:text="Turns on with GO, off on STOP" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/hotspotSwitch" style="@style/SetSwitch" /></LinearLayout>
-                <LinearLayout android:id="@+id/rowMobile" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Mobile data" /><TextView style="@style/SetSub" android:text="Shares mobile data over the hotspot" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/mobileSwitch" style="@style/SetSwitch" /></LinearLayout>
+                <LinearLayout android:id="@+id/rowHotspot" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Wi-Fi hotspot" /><TextView style="@style/SetSub" android:id="@+id/hotspotCaption" android:text="Turn on with GO, off on STOP" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/hotspotSwitch" style="@style/SetSwitch" /></LinearLayout>
+                <LinearLayout android:id="@+id/rowMobile" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Mobile data" /><TextView style="@style/SetSub" android:text="Turn on with GO, shared over the hotspot" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/mobileSwitch" style="@style/SetSwitch" /></LinearLayout>
             </LinearLayout>
             <TextView style="@style/SectionHeader" android:text="Advanced" />
             <LinearLayout style="@style/SetCard">

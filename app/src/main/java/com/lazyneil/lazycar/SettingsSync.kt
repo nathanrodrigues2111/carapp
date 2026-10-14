@@ -15,7 +15,6 @@ import org.json.JSONObject
 object SettingsSync {
     private class Key(val name: String, val file: String, val key: String, val def: Any)
     private val KEYS = listOf(
-        Key("accent", "lazycar", "accent2", 0),
         Key("openWithMaps", "lazycar", "openWithMaps", true),
         Key("speakerOn", "speaker", "on", true),        // phone "send" and tablet "play" are one switch
         Key("syncTrim", "speaker", "delay", 0),

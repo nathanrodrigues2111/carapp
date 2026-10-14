@@ -67,6 +67,7 @@ class DashboardActivity : AppCompatActivity() {
                 gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START; setPadding(0, 0, 0, 0)
             }
             for (id in intArrayOf(R.id.npTitle, R.id.npArtist)) findViewById<TextView>(id).gravity = android.view.Gravity.START
+            findViewById<TextView>(R.id.npTitle).setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.t_track_wide))
         } else for (id in intArrayOf(R.id.npTitle, R.id.npArtist)) findViewById<TextView>(id).gravity = android.view.Gravity.CENTER
         // Keep the art square: the largest square that fits its frame.
         findViewById<View>(R.id.artFrame).addOnLayoutChangeListener { f, l, t, r, b, _, _, _, _ ->
@@ -87,6 +88,7 @@ class DashboardActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: Slider) { seeking = false; PhoneMedia.cmd("seek") { put("pos", s.value.toLong()) } }
         })
         artGestures(findViewById(R.id.npArt))
+        findViewById<TextView>(R.id.npTitle).isSelected = true   // marquee runs only while selected
         Ui.paintAccent(root, Accent.forArt(this, null))
         Ui.blur(findViewById(R.id.npBackdrop))
         Ui.press(*intArrayOf(R.id.npPrev, R.id.npNext, R.id.npPlay, R.id.npLibrary, R.id.settingsBtn)

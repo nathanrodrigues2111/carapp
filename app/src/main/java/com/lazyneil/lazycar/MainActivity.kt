@@ -167,8 +167,15 @@ class MainActivity : AppCompatActivity() {
         val onAccent = Accent.onColor(accent)
         val busy = ContextCompat.getColor(this, R.color.stateBusy)
         val secondary = ContextCompat.getColor(this, R.color.secondaryText)
+        // Fill and icon colors fade to the new state in 200 ms.
         fun paint(bg: Int, fg: Int) {
-            btn.backgroundTintList = android.content.res.ColorStateList.valueOf(bg); btn.setTextColor(fg)
+            val from = btn.backgroundTintList?.defaultColor ?: bg; val fromFg = btn.iconTint?.defaultColor ?: fg
+            btn.setTextColor(fg)
+            android.animation.ValueAnimator.ofFloat(0f, 1f).apply { duration = 200; addUpdateListener { a ->
+                val f = a.animatedFraction; val ev = android.animation.ArgbEvaluator()
+                btn.backgroundTintList = android.content.res.ColorStateList.valueOf(ev.evaluate(f, from, bg) as Int)
+                if (btn.icon != null && btn.text.isEmpty()) btn.iconTint = android.content.res.ColorStateList.valueOf(ev.evaluate(f, fromFg, fg) as Int)
+            } }.start()
         }
         btn.isEnabled = true; btn.icon = null
         fun busySpinner() {
@@ -197,7 +204,9 @@ class MainActivity : AppCompatActivity() {
         btn.strokeWidth = 0; btn.elevation = dp(8).toFloat()
         // OFF: the same button at 40% (no glow); ON: full opacity with the soft glow. 200 ms fade.
         val off = state == GoAction.IDLE
-        btn.animate().alpha(if (off) 0.4f else 1f).setDuration(200).start()
+        // OFF: neutral grey button with a thin ring and a grey icon, no glow. ON: solid accent with the soft glow.
+        btn.strokeWidth = if (off) dp(2) else 0; btn.strokeColor = android.content.res.ColorStateList.valueOf(0x1FFFFFFF)
+        if (off) btn.elevation = 0f
         findViewById<View>(R.id.goGlow).animate().alpha(if (off) 0f else 1f).setDuration(200).start()
         btn.outlineSpotShadowColor = accent; btn.outlineAmbientShadowColor = accent
         when (state) {
@@ -205,7 +214,7 @@ class MainActivity : AppCompatActivity() {
                 hint.text = "Running"; sub.text = "Tap to stop" }
             GoAction.STARTING -> { btn.text = if (big) "" else "STARTING"; busySpinner(); hint.text = "Starting"; sub.text = "Connecting the speaker and the tablet" }
             GoAction.STOPPING -> { btn.text = if (big) "" else "STOPPING"; busySpinner(); hint.text = "Stopping"; sub.text = "Restoring your settings" }
-            else -> { power(btn, onAccent, "Start CarApp"); paint(accent, onAccent); hint.text = "Ready"; sub.text = "Tap to start the car setup" }
+            else -> { power(btn, 0x99FFFFFF.toInt(), "Start CarApp"); paint(ContextCompat.getColor(this, R.color.card), 0x99FFFFFF.toInt()); hint.text = "Ready"; sub.text = "Tap to start the car setup" }
         }
         if (big && (state == GoAction.STARTING || state == GoAction.STOPPING)) { btn.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; btn.iconPadding = 0; btn.iconSize = dp(48) }
     }

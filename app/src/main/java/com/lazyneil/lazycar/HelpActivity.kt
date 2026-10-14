@@ -32,7 +32,7 @@ class HelpActivity : AppCompatActivity() {
         "How do I use the player?" to
             "Tap the art to play or pause, swipe it for the next or previous song. Drag the bar to seek. The library icon opens the phone's music to pick what plays.",
         "Why does the color change?" to
-            "The accent follows the album art. Pick a fixed color in Settings, Display, Accent color.",
+            "The accent follows the album art, the same color on the phone and the tablet.",
         "Why does CarApp need Accessibility?" to
             "Android hides the hotspot from apps. CarApp uses Accessibility only to tap system panels and the launcher's Maps pair for you. No data is collected.",
         "Widget tap does nothing?" to
@@ -47,7 +47,6 @@ class HelpActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Ui.apply(this)
-        Accent.apply(this)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_help)

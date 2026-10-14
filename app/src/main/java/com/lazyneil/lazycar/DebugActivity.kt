@@ -68,7 +68,6 @@ class DebugActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         p = Prefs(this)
         Ui.apply(this)
-        Accent.apply(this)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_debug)

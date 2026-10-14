@@ -53,10 +53,11 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         p = Prefs(this)
         Ui.apply(this)
-        Accent.apply(this)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+        if (keepScroll >= 0) findViewById<android.widget.ScrollView>(R.id.settingsScroll).let { sv ->
+            val y = keepScroll; keepScroll = -1; sv.post { sv.scrollTo(0, y) } }
         selMac3 = p.mac3; selName3 = p.name3
 
         Ui.edge(this, findViewById(R.id.root))
@@ -66,7 +67,6 @@ class SettingsActivity : AppCompatActivity() {
         bindJbl()
         bindDrive()
         buildNav()
-        bindAccent()
         // A tap anywhere on a switch row flips its switch.
         fun rows(v: View) { if (v is android.view.ViewGroup) for (i in 0 until v.childCount) {
             val c = v.getChildAt(i); if (c is MaterialSwitch && v.id != View.NO_ID) v.setOnClickListener { c.toggle() } else rows(c) } }
@@ -114,7 +114,8 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        SettingsSync.onRemote = { recreate() }   // a change made on the other device shows at once
+        // A change made on the other device shows at once, at the same scroll position.
+        SettingsSync.onRemote = { keepScroll = findViewById<View>(R.id.settingsScroll).scrollY; recreate() }
         refreshA11y()
         handler.post(tick)
     }
@@ -352,43 +353,6 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    /** Auto (from art) plus the 8 swatches. The tablet also sends the choice to the phone. */
-    private fun bindAccent() {
-        val grid = findViewById<android.widget.LinearLayout>(R.id.accentRow)
-        var row = android.widget.LinearLayout(this)
-        val cur = p.accent
-        val name = Accent.SWATCHES.firstOrNull { it.second == cur }?.first
-        findViewById<TextView>(R.id.accentSub).text = if (name == null) "Auto, follows the album art" else "$name, fixed"
-        val ring = Ui.attr(this, R.attr.carText)
-        // Rows of evenly spread cells, as many 60dp columns as fit; each a fixed 44dp circle.
-        val paneDp = resources.configuration.screenWidthDp - (if (findViewById<View>(R.id.navList).visibility == View.VISIBLE) 320 else 0) - 72
-        val cols = (paneDp / 60).coerceIn(3, 9)
-        val all = listOf("Auto (from art)" to Accent.AUTO) + Accent.SWATCHES
-        (all + List((cols - all.size % cols) % cols) { "" to 1 }).forEachIndexed { i, (label, c) ->
-            if (i % cols == 0) { row = android.widget.LinearLayout(this); grid.addView(row, -1, -2) }
-            val cell = android.widget.FrameLayout(this)
-            row.addView(cell, android.widget.LinearLayout.LayoutParams(0, dp(56), 1f))
-            if (label.isEmpty()) return@forEachIndexed
-            cell.addView(View(this).apply {
-                contentDescription = label
-                // Fixed 44dp circle, inset 6dp; the selected one gets a separate outer ring with a gap.
-                val fill = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    if (c == Accent.AUTO) { gradientType = GradientDrawable.SWEEP_GRADIENT
-                        colors = intArrayOf(0xFFFF7A45.toInt(), 0xFFF87171.toInt(), 0xFFB388FF.toInt(), 0xFF00E5FF.toInt(), 0xFF34D399.toInt(), 0xFFFF7A45.toInt()) }
-                    else setColor(c)
-                }
-                val on = c == cur || (c == Accent.AUTO && name == null)
-                val ringD = GradientDrawable().apply { shape = GradientDrawable.OVAL; setStroke(dp(2), if (on) ring else Color.TRANSPARENT) }
-                background = android.graphics.drawable.LayerDrawable(arrayOf(ringD, fill)).apply { setLayerInset(1, dp(6), dp(6), dp(6), dp(6)) }
-                setOnClickListener {
-                    p.accent = c
-                    recreate()
-                }
-            }, android.widget.FrameLayout.LayoutParams(resources.getDimensionPixelSize(R.dimen.swatch), resources.getDimensionPixelSize(R.dimen.swatch), android.view.Gravity.CENTER))
-        }
-    }
-
     /** Tablet, wide: section list on the left, tap scrolls the right pane to that section. */
     private fun buildNav() {
         if (!Role.isTablet(this) || resources.configuration.screenWidthDp < 840) return
@@ -436,4 +400,6 @@ class SettingsActivity : AppCompatActivity() {
             .firstOrNull { com.lazyneil.lazycar.rear.UsbDevices.isVideoDevice(it) }
         Ui.status(findViewById(R.id.camLive), if (cam != null) "Connected" else "Ready, opens in reverse", if (cam != null) Ui.GREEN else Ui.attr(this, R.attr.carTextDim))
     }
+
+    private companion object { var keepScroll = -1 }   // survives the recreate after a remote change
 }
