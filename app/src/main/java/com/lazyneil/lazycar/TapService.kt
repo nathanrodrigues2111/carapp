@@ -192,7 +192,12 @@ class TapService : AccessibilityService() {
         val ws = (windows ?: emptyList()).filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
         fun bounds(w: android.view.accessibility.AccessibilityWindowInfo) = android.graphics.Rect().also { w.getBoundsInScreen(it) }
         val me = ws.firstOrNull { it.root?.packageName == packageName } ?: return
-        val maps = ws.firstOrNull { it.root?.packageName == MAPS } ?: return
+        val maps = ws.firstOrNull { it.root?.packageName == MAPS }
+        val screenW = resources.displayMetrics.widthPixels
+        if (maps == null) {   // the PiP-sized task is not even listed: the other pane is empty
+            if (bounds(me).width() < screenW * 0.7f) repairMaps("pane empty")
+            return
+        }
         var clickable = 0
         fun count(n: AccessibilityNodeInfo?, depth: Int) { n ?: return; if (n.isClickable) clickable++
             if (depth < 25) for (i in 0 until n.childCount) count(n.getChild(i), depth + 1) }
@@ -203,9 +208,13 @@ class TapService : AccessibilityService() {
             clickable < 3 -> "PiP layout ($clickable buttons)"
             else -> return
         }
+        repairMaps(why)
+    }
+
+    private fun repairMaps(why: String) {
         if (SystemClock.elapsedRealtime() - repairAt < 10_000) return
         repairAt = SystemClock.elapsedRealtime()
-        startPkg(this, MAPS, 0)   // normal launch intent; the least disruptive repair, keeps navigation
+        startPkg(this, MAPS, 0)   // normal launch intent: expands PiP Maps, keeps navigation
         lastRepair = android.text.format.DateFormat.format("HH:mm:ss", System.currentTimeMillis()).toString() + ": Maps $why, re-opened it"
         android.util.Log.e("LazyCar", "split: repaired Maps pane, $why")
     }
