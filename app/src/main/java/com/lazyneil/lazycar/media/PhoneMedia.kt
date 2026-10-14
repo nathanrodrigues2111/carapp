@@ -98,6 +98,7 @@ object PhoneMedia {
                     val ip = find(app) ?: throw Exception("no phone")
                     Socket().use { s ->
                         s.connect(InetSocketAddress(ip, Link.PORT), 3000); s.tcpNoDelay = true
+                        s.soTimeout = 5000   // the phone pushes every second; silence = dead link, the timeout ends the read and we reconnect
                         w = s.getOutputStream().bufferedWriter(); phone = ip; connected = true; sentTvol = -1   // the phone may have restarted: report our level again
                         main.postDelayed({ prefetch() }, 1500)
                         cmd("prefs") { put("items", com.lazyneil.lazycar.SettingsSync.all()).put("full", true) }   // full exchange

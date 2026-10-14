@@ -175,6 +175,8 @@ class MediaListener : NotificationListenerService() {
                 thread(name = "media-client") {
                     try { s.getInputStream().bufferedReader().forEachLine { l -> main.post { handle(cl, JSONObject(l)) } } }
                     catch (_: Exception) {}
+                // A tablet that reconnects left its old socket dead (Wi-Fi drop): close it now, not after TCP gives up.
+                out.filter { it.s.inetAddress == s.inetAddress }.forEach(::drop)
                     drop(cl)
                 }
             }
