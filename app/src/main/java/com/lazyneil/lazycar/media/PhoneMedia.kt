@@ -41,7 +41,9 @@ object PhoneMedia {
     private var started = false
     private var reqSeq = 0
     private val pending = mutableMapOf<Int, (JSONObject) -> Unit>()
-    var onChange: (() -> Unit)? = null   // dashboard card, main thread
+    /** Now Playing listeners, main thread. A list, so the player and the library can both listen. */
+    val listeners = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()
+    private fun fire() = listeners.forEach { it() }
 
     val playing get() = np.optInt("state") == PlaybackState.STATE_PLAYING
     val hasTrack get() = connected && np.optString("title").isNotEmpty()
@@ -102,7 +104,7 @@ object PhoneMedia {
                         s.getInputStream().bufferedReader().forEachLine { l -> handle(app, JSONObject(l)) }
                     }
                 } catch (_: Exception) {}
-                if (connected) { connected = false; w = null; main.post { onChange?.invoke(); notifyMedia(app) } }
+                if (connected) { connected = false; w = null; main.post { fire(); notifyMedia(app) } }
                 synchronized(pending) { pending.keys.toList() }.forEach { fail(it, "Phone not connected") }
                 Thread.sleep(2000)
             }
@@ -128,7 +130,7 @@ object PhoneMedia {
                 // Report our speaker level so the phone slider is live; hardware buttons included.
                 Volumes.localPct(ctx).let { if (it != sentTvol) { sentTvol = it; Volumes.saveTablet(ctx, it); cmd("tvol") { put("pct", it) } } }
                 val big = old.optString("title") != j.optString("title") || old.optInt("state") != j.optInt("state") || j.has("art") && j.optString("art").isNotEmpty()
-                main.post { onChange?.invoke(); if (big) notifyMedia(ctx) }
+                main.post { fire(); if (big) notifyMedia(ctx) }
             }
             "prefs" -> com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))
             "list" -> synchronized(pending) { pending.remove(j.optInt("req")) }?.let { main.post { it(j) } }

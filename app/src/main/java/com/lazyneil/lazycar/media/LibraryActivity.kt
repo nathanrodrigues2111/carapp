@@ -53,7 +53,7 @@ class LibraryActivity : AppCompatActivity() {
                 else { setImageResource(if (it.optBoolean("browse")) R.drawable.ic_library else R.drawable.ic_play); setColorFilter(accent); setPadding(dp(18), dp(18), dp(18), dp(18)) }
             }
             val text = row.getChildAt(1) as LinearLayout
-            val playing = it.optString("title").isNotEmpty() && it.optString("title") == PhoneMedia.np.optString("title")
+            val playing = isPlaying(it)
             (text.getChildAt(0) as TextView).apply { this.text = it.optString("title"); setTextColor(if (playing) accent else Ui.attr(context, R.attr.carText)) }
             (text.getChildAt(1) as TextView).apply { this.text = it.optString("sub"); visibility = if (this.text.isEmpty()) View.GONE else View.VISIBLE }
             row.isActivated = playing
@@ -165,13 +165,44 @@ class LibraryActivity : AppCompatActivity() {
     private lateinit var npBar: View
     private var barPlaying: Boolean? = null
 
-    override fun onResume() {
-        super.onResume()
-        PhoneMedia.onChange = { adapter.notifyDataSetChanged(); renderBar() }   // playing row and bar follow the phone
-        renderBar()
+    // Live while visible: the playing row and the bar follow the phone. onStart / onStop, not pause,
+    // because a focus change in the split pauses us and must not drop the listener.
+    private val npListener: () -> Unit = { onNowPlaying() }
+    override fun onStart() { super.onStart(); PhoneMedia.listeners += npListener; renderBar() }
+    override fun onStop() { super.onStop(); PhoneMedia.listeners -= npListener }
+
+    private fun norm(s: String) = s.trim().lowercase()
+    /** Same track: media id first, else title plus artist, trimmed and case-insensitive. */
+    private fun same(item: JSONObject, np: JSONObject): Boolean {
+        val id = item.optString("id"); val npId = np.optString("mediaId")
+        if (id.isNotEmpty() && npId.isNotEmpty()) return id == npId
+        val t = norm(item.optString("title")); if (t.isEmpty() || t != norm(np.optString("title"))) return false
+        val sub = norm(item.optString("sub")); val artist = norm(np.optString("artist"))
+        return sub.isEmpty() || artist.isEmpty() || sub.contains(artist) || artist.contains(sub)
     }
 
-    override fun onPause() { super.onPause(); PhoneMedia.onChange = null }
+    // Optimistic: the tapped row shows as playing at once; Now Playing from the phone reconciles it.
+    private var tapped: JSONObject? = null
+    private var tappedAt = 0L
+    private fun isPlaying(item: JSONObject) = tapped?.let { it === item || it.optString("id") == item.optString("id") && item.optString("id").isNotEmpty() }
+        ?: same(item, PhoneMedia.np)
+
+    private fun onNowPlaying() {
+        val t = tapped
+        if (t != null && same(t, PhoneMedia.np)) {
+            android.util.Log.i("LazyCar", "library: phone confirmed the track ${SystemClock.elapsedRealtime() - tappedAt} ms after the tap")
+            tapped = null
+        } else if (t != null && SystemClock.elapsedRealtime() - tappedAt > 5000) tapped = null   // phone played something else
+        refreshRows(); renderBar()
+    }
+
+    /** Rebind only the visible rows (the old and new playing row are among them). */
+    private fun refreshRows() {
+        for (i in 0 until list.childCount) {
+            val pos = list.firstVisiblePosition + i
+            if (pos < adapter.count) adapter.getView(pos, list.getChildAt(i), list)
+        }
+    }
 
     private fun renderBar() {
         val np = PhoneMedia.np
@@ -207,6 +238,10 @@ class LibraryActivity : AppCompatActivity() {
         if (it.optBoolean("play")) {
             if (files) PhoneMedia.cmd("playFile") { put("song", it.optLong("song")) }
             else PhoneMedia.cmd("playId") { put("id", it.optString("id")) }
+            if (!it.optBoolean("browse")) {
+                tapped = it; tappedAt = SystemClock.elapsedRealtime(); refreshRows()
+                list.post { android.util.Log.i("LazyCar", "library: indicator shown ${SystemClock.elapsedRealtime() - tappedAt} ms after the tap") }
+            }
             if (!it.optBoolean("browse")) return
         }
         if (it.optBoolean("browse")) { stack += it.optString("id") to it.optString("title"); search.setText(""); load() }

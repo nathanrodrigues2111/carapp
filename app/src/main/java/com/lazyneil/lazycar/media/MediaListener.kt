@@ -135,6 +135,7 @@ class MediaListener : NotificationListenerService() {
         val m = c?.metadata; val st = c?.playbackState
         val j = JSONObject().put("t", "np").put("pkg", c?.packageName ?: "").put("app", c?.packageName?.let(::label) ?: "")
         if (m != null) j.put("title", m.getString(MediaMetadata.METADATA_KEY_TITLE) ?: m.description?.title?.toString() ?: "")
+        if (m != null) j.put("mediaId", m.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) ?: "")
             .put("artist", m.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: m.description?.subtitle?.toString() ?: "")
             .put("album", m.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: "")
             .put("dur", m.getLong(MediaMetadata.METADATA_KEY_DURATION))

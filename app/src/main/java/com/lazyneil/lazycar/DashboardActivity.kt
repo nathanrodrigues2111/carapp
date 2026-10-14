@@ -106,7 +106,6 @@ class DashboardActivity : AppCompatActivity() {
         GpsService.startIfIdle(this)
         TapService.joinHotspot()
         PhoneMedia.start(this)
-        PhoneMedia.onChange = { renderNowPlaying() }
         handler.post(tick)
         // Full screen: go to the Maps + CarApp split. In the split isInMultiWindowMode is true and
         // launchDrive skips when already split, and the 15 s gap stops retries, so it cannot loop.
@@ -116,7 +115,12 @@ class DashboardActivity : AppCompatActivity() {
     }
     private companion object { var splitAt = -15_000L }
 
-    override fun onPause() { super.onPause(); handler.removeCallbacks(tick); PhoneMedia.onChange = null }
+    override fun onPause() { super.onPause(); handler.removeCallbacks(tick) }
+
+    // Listen while visible (onStart / onStop), so a split focus change cannot drop the listener.
+    private val npListener: () -> Unit = { renderNowPlaying() }
+    override fun onStart() { super.onStart(); PhoneMedia.listeners += npListener }
+    override fun onStop() { super.onStop(); PhoneMedia.listeners -= npListener }
 
     private var seeking = false
     private var shownArt: android.graphics.Bitmap? = null
