@@ -231,6 +231,7 @@ object Ui {
         val jblChip = root.findViewById<TextView>(R.id.outJblChip); val tabChip = root.findViewById<TextView>(R.id.outTabChip)
         val jblDot = root.findViewById<View>(R.id.outJblDot); val tabDot = root.findViewById<View>(R.id.outTabDot)
         val tablet = Role.isTablet(a)
+        fun remote() = Volumes.jblRemote(a)   // the JBL plays from the other device; follows a mode change
         val off = attr(a, R.attr.carTextDim)
         val am = a.getSystemService(AudioManager::class.java)
 
@@ -242,7 +243,7 @@ object Ui {
             })
             s.addOnChangeListener { _, v, user -> if (user) pct.text = "${v.toInt()}%" }
         }
-        wire(0, jbl, jblPct) { v -> if (tablet) PhoneMedia.cmd("volSet") { put("pct", v) } else Volumes.setJblLocal(a, v) }
+        wire(0, jbl, jblPct) { v -> if (remote()) PhoneMedia.cmd("volSet") { put("pct", v) } else Volumes.setJblLocal(a, v) }
         wire(1, tab, tabPct) { v -> if (tablet) Volumes.applyTablet(a, v) else MediaListener.setTablet(v) }
 
         fun show(i: Int, s: Slider, pct: TextView, v: Int) {
@@ -254,10 +255,10 @@ object Ui {
         val tick = object : Runnable {
             override fun run() {
                 if (a.isFinishing || !root.isAttachedToWindow) return
-                show(0, jbl, jblPct, if (tablet) (if (PhoneMedia.alive) Volumes.jblFromNp(PhoneMedia.np) else -1) else Volumes.jblPct(a))
+                show(0, jbl, jblPct, if (remote()) (if (PhoneMedia.alive) Volumes.jblFromNp(PhoneMedia.np) else -1) else Volumes.jblPct(a))
                 show(1, tab, tabPct, if (tablet) Volumes.localPct(a) else if (MediaListener.clients > 0) MediaListener.tabletPct else -1)
 
-                val bt = if (tablet) PhoneMedia.alive
+                val bt = if (remote()) PhoneMedia.alive
                     else am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
                 val dev = (jblChip?.tag as? String).orEmpty()
                 jblChip?.text = (if (bt) "Connected" else "Not connected") + if (dev.isNotEmpty()) ", $dev" else ""

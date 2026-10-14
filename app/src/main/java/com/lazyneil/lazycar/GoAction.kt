@@ -90,7 +90,9 @@ object GoAction {
         val t0 = SystemClock.uptimeMillis()
         a2dpConnectedDevices(ctx) { connected ->
             step("probe A2DP connections", t0)
-            val need1 = p.mac1.isNotEmpty() && p.mac1 !in connected
+            // Tablet mode: the JBL belongs to the tablet; the phone only connects it if it falls back.
+            val tab = com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)
+            val need1 = !tab && p.mac1.isNotEmpty() && p.mac1 !in connected
             val need3 = p.headunit && p.mac3.isNotEmpty() && p.mac3 !in connected
             if (need1) connectA2dp(ctx, p.mac1) else if (p.mac1.isNotEmpty()) log("skipped connect ${p.mac1} (connected)")
             if (need3) main.postDelayed({ connectA2dp(ctx, p.mac3) }, 800)
@@ -117,7 +119,8 @@ object GoAction {
                 doneAt = maxOf(doneAt, netAt + 6000L); netAt += 6500L
             }
 
-            if (musicActive) log("skipped player launch (music active)")
+            if (tab) { main.postDelayed({ goTablet(ctx, p) }, netAt); doneAt = maxOf(doneAt, netAt + TABLET_ACK_MS + 2500L) }
+            else if (musicActive) log("skipped player launch (music active)")
             else { main.postDelayed({ launchPlayer(ctx, p.playerPkg) }, netAt); doneAt = maxOf(doneAt, netAt) }
 
                         // Start volume: OnePlus can reset STREAM_MUSIC (often to max) as the A2DP sink connects,
@@ -126,17 +129,39 @@ object GoAction {
             // adjust nudges if the absolute-volume path ignores it), reacting to VOLUME_CHANGED too.
             // Runs in the background; it must NOT gate the ON transition (a warm all-on GO stays <2s).
             // GoService stays alive until endAt, which covers this window.
-            if (p.volOn) main.postDelayed({ enforceStartVolume(ctx, p.vol, 12000L) }, maxOf(settle, 300L))
+            if (p.volOn && !tab) main.postDelayed({ enforceStartVolume(ctx, p.vol, 12000L) }, maxOf(settle, 300L))
 
             val playAt = netAt + (if (musicActive) 0L else 1000L)
-            if (musicActive) log("skipped MEDIA_PLAY (music active)")
+            if (tab) {}
+            else if (musicActive) log("skipped MEDIA_PLAY (music active)")
             else { main.postDelayed({ playMedia(ctx, p.playerPkg) }, playAt + 1500); doneAt = maxOf(doneAt, playAt + 1500) }
 
             if (p.headunit) { main.postDelayed({ launchHeadunit(ctx, p.headunitIp) }, playAt + 2000); doneAt = maxOf(doneAt, playAt + 2000) }
             endAt = SystemClock.uptimeMillis() + maxOf(doneAt + 300L, if (p.volOn) maxOf(settle, 300L) + 12000L else 0L)
-            main.postDelayed({ if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0); com.lazyneil.lazycar.audio.TabletSpeaker.onGo(ctx); TapService.launchApps(ctx) } }, doneAt + 300L)
+            finish = { if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0); com.lazyneil.lazycar.audio.TabletSpeaker.onGo(ctx); TapService.launchApps(ctx) } }
+            main.postDelayed({ finish() }, doneAt + 300L)
         }
     }
+
+    private var finish: () -> Unit = {}
+    @Volatile private var acked = false
+    const val TABLET_ACK_MS = 5000L
+
+    /** Tablet mode: ask the tablet to play; no ack in 5 s = today's phone flow with a note. */
+    private fun goTablet(ctx: Context, p: Prefs) {
+        acked = false; ackP = p
+        com.lazyneil.lazycar.media.MediaListener.goTablet(true)
+        main.postDelayed({
+            if (acked || p.state != STARTING) return@postDelayed
+            log("tablet no ack, playing on phone"); toast(ctx, "Tablet not reachable, playing on phone")
+            if (p.mac1.isNotEmpty() && !p.snapConn1) connectA2dp(ctx, p.mac1)
+            main.postDelayed({ launchPlayer(ctx, p.playerPkg) }, 1000)
+            main.postDelayed({ playMedia(ctx, p.playerPkg) }, 2500)
+        }, TABLET_ACK_MS)
+    }
+    /** The tablet answered "go": ON now. */
+    fun tabletAcked() = main.post { log("tablet acked"); acked = true; ackP?.snapMusicVol = -1; finish() }   // phone volume untouched: STOP leaves it
+    private var ackP: Prefs? = null
 
     /**
      * Android 16 forbids a silent adapter.enable(); we try it, then pop the system REQUEST_ENABLE
@@ -329,6 +354,7 @@ object GoAction {
         val p = Prefs(ctx)
         setState(ctx, p, STOPPING)
         com.lazyneil.lazycar.audio.TabletSpeaker.onStop(ctx)
+        if (com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)) com.lazyneil.lazycar.media.MediaListener.goTablet(false)
 
         if (!p.snapMusicWasActive) { log("restore: music playing -> paused"); pauseMedia(ctx) }
         else log("restore: music was already playing -> left")
@@ -403,18 +429,19 @@ object GoAction {
 
     private fun pauseMedia(ctx: Context) = mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PAUSE)
     /** Pause whatever holds the media keys (e.g. a video app), then PLAY straight to the chosen player's receiver. */
-    private fun playMedia(ctx: Context, pkg: String) {
+    fun playMedia(ctx: Context, pkg: String) {
         if (pkg.isEmpty()) { mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PLAY); return }
         mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PAUSE)
-        Handler(Looper.getMainLooper()).postDelayed({
-            val t = SystemClock.uptimeMillis()
-            for (a in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP))
-                ctx.sendBroadcast(Intent(Intent.ACTION_MEDIA_BUTTON).setPackage(pkg)
-                    .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(t, t, a, KeyEvent.KEYCODE_MEDIA_PLAY, 0)))
-            log("sent MEDIA_PLAY to $pkg")
-        }, 400)
+        Handler(Looper.getMainLooper()).postDelayed({ mediaTo(ctx, pkg, KeyEvent.KEYCODE_MEDIA_PLAY) }, 400)
     }
-    private fun mediaKey(ctx: Context, code: Int) {
+    /** One media key straight to [pkg]'s button receiver. */
+    fun mediaTo(ctx: Context, pkg: String, code: Int) {
+        val t = SystemClock.uptimeMillis()
+        for (a in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP))
+            ctx.sendBroadcast(Intent(Intent.ACTION_MEDIA_BUTTON).setPackage(pkg).putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(t, t, a, code, 0)))
+        log("sent key $code to $pkg")
+    }
+    fun mediaKey(ctx: Context, code: Int) {
         val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val t = SystemClock.uptimeMillis()
         am.dispatchMediaKeyEvent(KeyEvent(t, t, KeyEvent.ACTION_DOWN, code, 0))

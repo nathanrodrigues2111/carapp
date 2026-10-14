@@ -13,10 +13,17 @@ import com.lazyneil.lazycar.Role
 import org.json.JSONObject
 import kotlin.math.roundToInt
 
-/** Two live sliders, "JBL (Bluetooth)" = phone STREAM_MUSIC, "Tablet speaker" = tablet STREAM_MUSIC. Volume never touches sync. */
+/**
+ * Two live sliders. "JBL (Bluetooth)" = STREAM_MUSIC of the device that plays (phone, or the tablet in Tablet mode).
+ * "Tablet speaker" = tablet STREAM_MUSIC, or in Tablet mode the gain of CarApp's speaker copy. Volume never touches sync.
+ */
 object Volumes {
     private fun am(ctx: Context) = ctx.getSystemService(AudioManager::class.java)
-    fun localPct(ctx: Context) = am(ctx).let { it.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / maxOf(1, it.getStreamMaxVolume(AudioManager.STREAM_MUSIC)) }
+    /** Tablet, Tablet mode: STREAM_MUSIC is the JBL, so the speaker copy has its own gain. */
+    private fun copy(ctx: Context) = Role.isTablet(ctx) && com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)
+    /** The other device holds the JBL: tablet in Phone mode, phone in Tablet mode. */
+    fun jblRemote(ctx: Context) = Role.isTablet(ctx) != com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)
+    fun localPct(ctx: Context) = if (copy(ctx)) tabletSaved(ctx) else am(ctx).let { it.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / maxOf(1, it.getStreamMaxVolume(AudioManager.STREAM_MUSIC)) }
     private fun setLocal(ctx: Context, pct: Int) = am(ctx).let {
         it.setStreamVolume(AudioManager.STREAM_MUSIC, (pct * it.getStreamMaxVolume(AudioManager.STREAM_MUSIC) / 100f).roundToInt(), 0)
     }
@@ -24,7 +31,7 @@ object Volumes {
     /** Tablet: last level, restored when a stream starts. Default full. */
     fun tabletSaved(ctx: Context) = ctx.getSharedPreferences("speaker", Context.MODE_PRIVATE).getInt("tvol", 100)
     fun saveTablet(ctx: Context, pct: Int) = ctx.getSharedPreferences("speaker", Context.MODE_PRIVATE).edit().putInt("tvol", pct).apply()
-    fun applyTablet(ctx: Context, pct: Int) { saveTablet(ctx, pct); setLocal(ctx, pct) }
+    fun applyTablet(ctx: Context, pct: Int) { saveTablet(ctx, pct); if (copy(ctx)) com.lazyneil.lazycar.audio.StreamSender.speakerGain(pct) else setLocal(ctx, pct) }
 
     /** Phone JBL level lives on STREAM_ACCESSIBILITY while CarApp plays the JBL itself (shared mode). */
     fun jblStream() = if (com.lazyneil.lazycar.audio.StreamSender.shared) AudioManager.STREAM_ACCESSIBILITY else AudioManager.STREAM_MUSIC
@@ -61,11 +68,10 @@ object Volumes {
                 if (!touching) { if (v >= 0) s.value = v.coerceIn(0, 100).toFloat(); label.text = if (v >= 0) "$name $v%" else "$name, not connected" }
             }
         }
-        if (tablet) {
-            row("JBL (Bluetooth)", { if (PhoneMedia.alive) jblFromNp(PhoneMedia.np) else -1 }) { v -> PhoneMedia.cmd("volSet") { put("pct", v) } }
-            row("Tablet speaker", { localPct(a) }) { v -> applyTablet(a, v) }
-        } else {
-            row("JBL (Bluetooth)", { jblPct(a) }) { v -> setJblLocal(a, v) }
+        if (jblRemote(a)) row("JBL (Bluetooth)", { if (PhoneMedia.alive) jblFromNp(PhoneMedia.np) else -1 }) { v -> PhoneMedia.cmd("volSet") { put("pct", v) } }
+        else row("JBL (Bluetooth)", { jblPct(a) }) { v -> setJblLocal(a, v) }
+        if (tablet) row("Tablet speaker", { localPct(a) }) { v -> applyTablet(a, v) }
+        else {
             row("Tablet speaker", { if (MediaListener.clients > 0) MediaListener.tabletPct else -1 }) { v -> MediaListener.setTablet(v) }
         }
         parent.addView(box, index)

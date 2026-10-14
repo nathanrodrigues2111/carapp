@@ -168,7 +168,48 @@ class SettingsActivity : AppCompatActivity() {
             isChecked = m != "stop"
             setOnCheckedChangeListener { _, on -> gps.launch(this@SettingsActivity, if (on) target else "stop") }
         }
-        com.lazyneil.lazycar.audio.TabletSpeaker.addSettings(this, findViewById(R.id.audioAnchor))
+        val anchor = findViewById<View>(R.id.audioAnchor)
+        com.lazyneil.lazycar.audio.TabletSpeaker.addSettings(this, anchor)
+        buildPlayFrom(anchor)
+    }
+
+    // ---- Audio: where the music plays from. Tablet mode swaps the speaker switch for the player choice; stored values stay. ----
+    private fun buildPlayFrom(anchor: View) {
+        val parent = anchor.parent as android.view.ViewGroup
+        val sp = getSharedPreferences("lazycar", MODE_PRIVATE)
+        val fromTablet = com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this)
+        val modes = listOf("phone", "tablet")
+        fun row() = android.widget.LinearLayout(this, null, 0, R.style.SetRow_Stack)
+        fun text(style: Int, t: String) = TextView(this, null, 0, style).apply { text = t }
+        val mode = row()
+        mode.addView(text(R.style.SetTitle, "Play audio from")); mode.addView(text(R.style.SetSub, "Which device plays the music"))
+        val seg = android.widget.LinearLayout(this)
+        mode.addView(seg, android.widget.LinearLayout.LayoutParams(-1, resources.getDimensionPixelSize(R.dimen.seg_h)).apply { topMargin = dp(12) })
+        Ui.segmented(seg, listOf("Phone", "Tablet"), if (fromTablet) 1 else 0) {
+            if (modes[it] == (if (com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this)) "tablet" else "phone")) return@segmented
+            sp.edit().putString("play_from", modes[it]).apply()
+            keepScroll = findViewById<View>(R.id.settingsScroll).scrollY; recreate()
+        }
+        var at = parent.indexOfChild(anchor) + 1
+        // Added at the anchor, ahead of the sync slider TabletSpeaker put there.
+        parent.addView(mode, at++)
+        // Tablet mode: the phone stream switch is meaningless; its slider becomes the speaker copy level.
+        findViewById<View>(R.id.outTabSwitch).visibility = if (fromTablet) View.GONE else View.VISIBLE
+        if (!fromTablet) return
+        findViewById<View>(R.id.outTabSlider).visibility = View.VISIBLE
+        val players = com.lazyneil.lazycar.audio.TabletSpeaker.TABLET_PLAYERS
+        val player = row().apply { isClickable = true; isFocusable = true }
+        val label = text(R.style.SetSub, "")
+        fun show() { label.text = players.firstOrNull { it.first == com.lazyneil.lazycar.audio.TabletSpeaker.tabletPlayer(this) }?.second ?: "Poweramp" }
+        player.addView(text(R.style.SetTitle, "Tablet player")); player.addView(label); show()
+        player.setOnClickListener {
+            MaterialAlertDialogBuilder(this).setTitle("Tablet player")
+                .setSingleChoiceItems(players.map { it.second }.toTypedArray(),
+                    players.indexOfFirst { it.first == com.lazyneil.lazycar.audio.TabletSpeaker.tabletPlayer(this) }) { d, w ->
+                    sp.edit().putString("tabletPlayer", players[w].first).apply(); show(); d.dismiss() }
+                .show()
+        }
+        parent.addView(player, at)
     }
 
     // ---- launch on widget tap ----

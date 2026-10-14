@@ -62,6 +62,10 @@ class StreamSender : Service() {
             ctx.startActivity(Intent(ctx, Consent::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
 
+        /** Tablet mode speaker level. ponytail: no-op, the tablet speaker copy is blocked on ZUI (any speaker-pinned track
+         *  is rebuilt ~8/s while playback capture runs); Tablet mode plays the JBL only. */
+        @Suppress("UNUSED_PARAMETER") fun speakerGain(pct: Int) {}
+
         fun stop(ctx: Context) { ctx.stopService(Intent(ctx, StreamSender::class.java)) }
     }
 

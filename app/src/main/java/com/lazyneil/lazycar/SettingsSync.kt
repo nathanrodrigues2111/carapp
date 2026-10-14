@@ -19,7 +19,9 @@ object SettingsSync {
         Key("duckNav", "lazycar", "duckNav", true),
         Key("speakerOn", "speaker", "on", true),        // phone "send" and tablet "play" are one switch
         Key("syncTrim", "speaker", "delay", 0),
-        Key("gpsShare", "lazygps", "mode", true))        // stored as a mode; shared as on / off
+        Key("gpsShare", "lazygps", "mode", true),
+        Key("playFrom", "lazycar", "play_from", "tablet"),  // "tablet" (default) or "phone"
+        Key("tabletPlayer", "lazycar", "tabletPlayer", ""))        // stored as a mode; shared as on / off
 
     private lateinit var app: Context
     private var send: ((JSONArray) -> Unit)? = null
@@ -83,15 +85,15 @@ object SettingsSync {
                 }
                 stamps().edit().putLong(k.name, ts).commit()
             } finally { applying = false }
-            if (k.name == "speakerOn") react(j.optBoolean("v"))
+            if (k.name == "speakerOn" || k.name == "playFrom") react(com.lazyneil.lazycar.audio.TabletSpeaker.enabled(app), k.name == "playFrom")
             changed = true
         }
         if (changed) onRemote?.invoke()
     }
 
     /** Same reaction as flipping the Tablet speaker switch on this device. */
-    private fun react(on: Boolean) {
+    fun react(on: Boolean, mode: Boolean = false) {
         if (Role.isTablet(app)) com.lazyneil.lazycar.audio.StreamReceiver.sync(app)
-        else if (on) com.lazyneil.lazycar.audio.StreamSender.start(app) else com.lazyneil.lazycar.audio.StreamSender.stop(app)
+        else if (on && !mode) com.lazyneil.lazycar.audio.StreamSender.start(app) else if (!on) com.lazyneil.lazycar.audio.StreamSender.stop(app)
     }
 }

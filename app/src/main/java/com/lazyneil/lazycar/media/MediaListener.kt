@@ -47,6 +47,10 @@ class MediaListener : NotificationListenerService() {
         private var self: MediaListener? = null
         /** Phone slider: tell every tablet to set its speaker level. */
         fun setTablet(pct: Int) { tabletPct = pct; self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "tvol").put("pct", pct).put("user", true).toString()) } } }
+        /** Tablet mode GO / STOP; the tablet answers "goAck". */
+        fun goTablet(on: Boolean) { self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "go").put("on", on).toString()) } } }
+        /** Tablet mode: the phone UI's media commands to every tablet, as "cmd". */
+        fun toTablet(j: JSONObject) { self?.let { m -> val l = j.put("t", "cmd").toString(); m.out.forEach { m.send(it, l) } } }
         fun granted(ctx: Context) = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
         fun settingsIntent() = Intent("android.settings.NOTIFICATION_LISTENER_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
@@ -59,13 +63,12 @@ class MediaListener : NotificationListenerService() {
     }
 
     private val main = Handler(Looper.getMainLooper())
-    private val io = Executors.newSingleThreadExecutor()   // heavy work only (art, library icons, files); never writes
     val out = CopyOnWriteArrayList<Client>()
     @Volatile private var alive = false
     private var server: ServerSocket? = null
     private var probe: DatagramSocket? = null
-    private var ctl: MediaController? = null
-    private var browser: MediaBrowser? = null
+    private val sess = Session(this, false)
+    private val io get() = sess.io
 
     private val cb = object : MediaController.Callback() {
         override fun onPlaybackStateChanged(state: PlaybackState?) = push()
@@ -78,7 +81,7 @@ class MediaListener : NotificationListenerService() {
     }
 
     override fun onListenerConnected() {
-        bound = true; alive = true; self = this
+        bound = true; alive = true; self = this; PhoneMedia.app = applicationContext
         com.lazyneil.lazycar.SettingsSync.init(this) { items ->
             val line = JSONObject().put("t", "prefs").put("items", items).toString(); out.forEach { send(it, line) } }
         val msm = getSystemService(MediaSessionManager::class.java)
@@ -102,9 +105,9 @@ class MediaListener : NotificationListenerService() {
     override fun onListenerDisconnected() {
         bound = false; alive = false; self = null
         getSystemService(MediaSessionManager::class.java).removeOnActiveSessionsChangedListener(sessions)
-        ctl?.unregisterCallback(cb); ctl = null
+        sess.ctl?.unregisterCallback(cb); sess.ctl = null
         main.removeCallbacks(tick)
-        browser?.disconnect(); browser = null
+        sess.browser?.disconnect(); sess.browser = null
         server?.close(); probe?.close()
         out.forEach(::drop); clients = 0
     }
@@ -115,64 +118,32 @@ class MediaListener : NotificationListenerService() {
             getSystemService(MediaSessionManager::class.java).getActiveSessions(ComponentName(this, MediaListener::class.java))
         } catch (e: SecurityException) { emptyList() }.filter { it.packageName != "com.android.server.telecom" }
         val next = list.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING } ?: list.firstOrNull()
-        if (next?.sessionToken != ctl?.sessionToken) {
-            ctl?.unregisterCallback(cb); ctl = next; next?.registerCallback(cb, main)
-            if (next?.packageName != browser?.serviceComponent?.packageName) { browser?.disconnect(); browser = null }
+        if (next?.sessionToken != sess.ctl?.sessionToken) {
+            sess.ctl?.unregisterCallback(cb); sess.ctl = next; next?.registerCallback(cb, main)
+            if (next?.packageName != sess.browser?.serviceComponent?.packageName) { sess.browser?.disconnect(); sess.browser = null }
         }
-        player = next?.packageName ?: ""
+        player = next?.packageName ?: ""; sess.player = player
         push()
     }
 
-    private fun label(pkg: String) = try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
-
-    private fun jpeg(b: Bitmap?, px: Int, q: Int = 80): String? {
-        b ?: return null
-        val s = px.toFloat() / maxOf(b.width, b.height)
-        val small = if (s < 1) Bitmap.createScaledBitmap(b, (b.width * s).toInt().coerceAtLeast(1), (b.height * s).toInt().coerceAtLeast(1), true) else b
-        val o = ByteArrayOutputStream(); small.compress(Bitmap.CompressFormat.JPEG, q, o)
-        return Base64.encodeToString(o.toByteArray(), Base64.NO_WRAP)
-    }
-
-    private fun bitmapFrom(uri: String?): Bitmap? = try {
-        uri?.let { contentResolver.openInputStream(Uri.parse(it))?.use(BitmapFactory::decodeStream) }
-    } catch (_: Exception) { null }
-
-    // The session's bitmaps are downscaled by the framework, so the art URI (full resolution) goes first.
     private var accentKey = ""; private var trackAccent = 0
-    private fun art(m: MediaMetadata): Bitmap? =
-        bitmapFrom(m.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI) ?: m.getString(MediaMetadata.METADATA_KEY_ART_URI))
-        ?: m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m.getBitmap(MediaMetadata.METADATA_KEY_ART)
-        ?: m.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
 
     /** Now Playing to every tablet; art only when the track changed for that client. */
     private fun push() {
         if (out.isEmpty()) return
-        val c = ctl
-        val m = c?.metadata; val st = c?.playbackState
-        val j = JSONObject().put("t", "np").put("pkg", c?.packageName ?: "").put("app", c?.packageName?.let(::label) ?: "")
-        if (m != null) j.put("title", m.getString(MediaMetadata.METADATA_KEY_TITLE) ?: m.description?.title?.toString() ?: "")
-        if (m != null) j.put("mediaId", m.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) ?: "")
-            .put("artist", m.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: m.description?.subtitle?.toString() ?: "")
-            .put("album", m.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: "")
-            .put("dur", m.getLong(MediaMetadata.METADATA_KEY_DURATION))
-        if (st != null) {
-            val pos = if (st.state == PlaybackState.STATE_PLAYING && st.lastPositionUpdateTime > 0)
-                st.position + ((SystemClock.elapsedRealtime() - st.lastPositionUpdateTime) * st.playbackSpeed).toLong() else st.position
-            j.put("state", st.state).put("pos", pos).put("speed", st.playbackSpeed.toDouble())
-        }
-        val am = getSystemService(AudioManager::class.java)
-        Volumes.jblStream().let { st -> j.put("vol", am.getStreamVolume(st)).put("volMax", am.getStreamMaxVolume(st)) }
+        val m = sess.ctl?.metadata
+        val j = sess.np()
         j.put("go", com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this)) == com.lazyneil.lazycar.GoAction.ON)
-        val key = listOf(c?.packageName, j.optString("title"), j.optString("artist"), j.optString("album")).joinToString("|")
+        val key = sess.key(j)
         val artFor = out.filter { it.artKey != key }.onEach { it.artKey = key }
         // Decoded once per track; the JPEG and Base64 encode run on io, never the main thread.
-        val bmp = if (m != null && (artFor.isNotEmpty() || key != accentKey)) art(m) else null
+        val bmp = if (m != null && (artFor.isNotEmpty() || key != accentKey)) sess.art(m) else null
         if (key != accentKey) { accentKey = key; com.lazyneil.lazycar.Accent.art = bmp; trackAccent = com.lazyneil.lazycar.Accent.now(this); com.lazyneil.lazycar.Accent.publish(this) }
         j.put("accent", trackAccent)
         val line = j.toString()
         for (cl in out) if (cl !in artFor) write(cl, line)
         if (artFor.isNotEmpty()) io.execute {
-            val a = bmp?.let { jpeg(it, 1024, 92) } ?: ""
+            val a = bmp?.let { sess.jpeg(it, 1024, 92) } ?: ""
             for (cl in artFor) write(cl, JSONObject(line).put("art", a).toString())
         }
     }
@@ -182,7 +153,7 @@ class MediaListener : NotificationListenerService() {
         cl.q.execute { try { cl.w.write(line); cl.w.write("\n"); cl.w.flush() } catch (_: Exception) { drop(cl) } }
     } catch (_: java.util.concurrent.RejectedExecutionException) {}
 
-    private fun drop(cl: Client) { try { cl.s.close() } catch (_: Exception) {}; cl.q.shutdownNow(); out.remove(cl); clients = out.size }
+    private fun drop(cl: Client) { try { cl.s.close() } catch (_: Exception) {}; cl.q.shutdownNow(); out.remove(cl); clients = out.size; if (out.isEmpty()) PhoneMedia.tabletGone() }
 
     private fun serve() { try {
         ServerSocket().apply { reuseAddress = true; bind(InetSocketAddress(Link.PORT)) }.use { ss ->
@@ -216,42 +187,125 @@ class MediaListener : NotificationListenerService() {
     } catch (e: Exception) { if (alive) Log.e("LazyCar", "media probe", e) } }
 
     private fun handle(cl: Client, j: JSONObject) {
-        val t = ctl?.transportControls
         when (j.optString("c")) {
-            "toggle" -> if (t == null) com.lazyneil.lazycar.GoAction.launchPlayer(this, com.lazyneil.lazycar.Prefs(this).playerPkg)
-                else if (ctl?.playbackState?.state == PlaybackState.STATE_PLAYING) t.pause() else t.play()
-            "next" -> t?.skipToNext()
-            "prev" -> t?.skipToPrevious()
-            "seek" -> t?.seekTo(j.optLong("pos"))
             "vol" -> getSystemService(AudioManager::class.java).adjustStreamVolume(Volumes.jblStream(),
                 if (j.optInt("d") > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER, 0).also { main.postDelayed({ push() }, 150) }
             "volSet" -> com.lazyneil.lazycar.media.Volumes.setJblLocal(this, j.optInt("pct")).also { main.postDelayed({ push() }, 150) }
             "tvol" -> tabletPct = j.optInt("pct")
+            "goAck" -> com.lazyneil.lazycar.GoAction.tabletAcked()
             "prefs" -> { com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))
                 if (j.optBoolean("full")) send(cl, JSONObject().put("t", "prefs").put("items", com.lazyneil.lazycar.SettingsSync.all()).toString()) }
-            "browse" -> browse(cl, j)
-            "playId" -> withBrowser(cl, j) { b -> MediaController(this, b.sessionToken).transportControls.playFromMediaId(j.optString("id"), null) }
-            "files" -> io.execute { reply(cl, j, Files.list(this, j.optString("id"), j.optString("q"))) }
-            "playFile" -> main.post { Files.play(this, j.optLong("song"), player) }
+            "np", "list" -> PhoneMedia.fromTablet(this, j)   // Tablet mode: the tablet player's Now Playing and library answers
+            else -> sess.handle(j) { r -> send(cl, r.toString()) }
         }
         if (j.optString("c") in setOf("toggle", "next", "prev", "seek")) main.postDelayed({ push() }, 300)
     }
+}
 
-    private fun reply(cl: Client, req: JSONObject, items: JSONArray, err: String = "") =
-        send(cl, JSONObject().put("t", "list").put("req", req.optInt("req")).put("items", items).put("err", err).toString())
+/**
+ * One player's media session: Now Playing as JSON, library browsing and the media commands. The phone listener
+ * serves the phone's player with it; in Tablet mode the tablet serves its own player ([local]) the same way.
+ */
+class Session(val ctx: Context, private val local: Boolean) {
+    private val main = Handler(Looper.getMainLooper())
+    val io = Executors.newSingleThreadExecutor()   // heavy work only (art, library icons, files); never writes
+    var ctl: MediaController? = null
+    var browser: MediaBrowser? = null
+    var player = ""
+
+    fun label(pkg: String) = try { ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
+
+    fun jpeg(b: Bitmap?, px: Int, q: Int = 80): String? {
+        b ?: return null
+        val s = px.toFloat() / maxOf(b.width, b.height)
+        val small = if (s < 1) Bitmap.createScaledBitmap(b, (b.width * s).toInt().coerceAtLeast(1), (b.height * s).toInt().coerceAtLeast(1), true) else b
+        val o = ByteArrayOutputStream(); small.compress(Bitmap.CompressFormat.JPEG, q, o)
+        return Base64.encodeToString(o.toByteArray(), Base64.NO_WRAP)
+    }
+
+    fun bitmapFrom(uri: String?): Bitmap? = try {
+        uri?.let { ctx.contentResolver.openInputStream(Uri.parse(it))?.use(BitmapFactory::decodeStream) }
+    } catch (_: Exception) { null }
+
+    // The session's bitmaps are downscaled by the framework, so the art URI (full resolution) goes first.
+    fun art(m: MediaMetadata): Bitmap? =
+        bitmapFrom(m.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI) ?: m.getString(MediaMetadata.METADATA_KEY_ART_URI))
+        ?: m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m.getBitmap(MediaMetadata.METADATA_KEY_ART)
+        ?: m.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+
+    /** Now Playing without art. */
+    fun np(): JSONObject {
+        val c = ctl
+        val m = c?.metadata; val st = c?.playbackState
+        val j = JSONObject().put("t", "np").put("pkg", c?.packageName ?: player).put("app", (c?.packageName ?: player).let(::label))
+        if (m != null) j.put("title", m.getString(MediaMetadata.METADATA_KEY_TITLE) ?: m.description?.title?.toString() ?: "")
+        if (m != null) j.put("mediaId", m.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) ?: "")
+            .put("artist", m.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: m.description?.subtitle?.toString() ?: "")
+            .put("album", m.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: "")
+            .put("dur", m.getLong(MediaMetadata.METADATA_KEY_DURATION))
+        if (st != null) {
+            val pos = if (st.state == PlaybackState.STATE_PLAYING && st.lastPositionUpdateTime > 0)
+                st.position + ((SystemClock.elapsedRealtime() - st.lastPositionUpdateTime) * st.playbackSpeed).toLong() else st.position
+            j.put("state", st.state).put("pos", pos).put("speed", st.playbackSpeed.toDouble())
+        }
+        val am = ctx.getSystemService(AudioManager::class.java)
+        Volumes.jblStream().let { st -> j.put("vol", am.getStreamVolume(st)).put("volMax", am.getStreamMaxVolume(st)) }
+        return j
+    }
+    fun key(j: JSONObject) = listOf(j.optString("pkg"), j.optString("title"), j.optString("artist"), j.optString("album")).joinToString("|")
+
+    /** Tablet: [pkg]'s session from its browser service (no notification access needed), else its active session. */
+    fun follow(pkg: String, cb: MediaController.Callback) {
+        if (pkg != player) { ctl?.unregisterCallback(cb); ctl = null; browser?.disconnect(); browser = null; player = pkg }
+        if (ctl != null) return
+        val active = try { ctx.getSystemService(MediaSessionManager::class.java).getActiveSessions(ComponentName(ctx, MediaListener::class.java))
+            .firstOrNull { it.packageName == pkg } } catch (_: SecurityException) { null }
+        if (active != null) { ctl = active; active.registerCallback(cb, main) }
+        else if (browser?.isConnected != false) withBrowser({}) { b -> if (ctl == null) ctl = MediaController(ctx, b.sessionToken).also { it.registerCallback(cb, main) } }
+    }
+
+    /** Media commands and library requests; [reply] gets the "list" answers. */
+    fun handle(j: JSONObject, reply: (JSONObject) -> Unit) {
+        val t = ctl?.transportControls
+        // Tablet without a session yet: media keys straight to the player, headless.
+        fun key(code: Int) = com.lazyneil.lazycar.GoAction.mediaTo(ctx, player, code)
+        when (j.optString("c")) {
+            "toggle" -> if (t == null) { if (local) com.lazyneil.lazycar.GoAction.playMedia(ctx, player) else com.lazyneil.lazycar.GoAction.launchPlayer(ctx, com.lazyneil.lazycar.Prefs(ctx).playerPkg) }
+                else if (ctl?.playbackState?.state == PlaybackState.STATE_PLAYING) t.pause() else t.play()
+            "next" -> t?.skipToNext() ?: if (local) key(android.view.KeyEvent.KEYCODE_MEDIA_NEXT) else Unit
+            "prev" -> t?.skipToPrevious() ?: if (local) key(android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS) else Unit
+            "seek" -> t?.seekTo(j.optLong("pos"))
+            "browse" -> browse(j, reply)
+            "playId" -> j.optString("id").let { id -> if (local && id.startsWith("song:")) playFile(id.substringAfter(':').toLong())
+                else withBrowser({ reply(list(j, JSONArray(), it)) }) { b -> MediaController(ctx, b.sessionToken).transportControls.playFromMediaId(id, null) } }
+            "files" -> io.execute { reply(list(j, Files.list(ctx, j.optString("id"), j.optString("q")))) }
+            "playFile" -> main.post { playFile(j.optLong("song")) }
+        }
+    }
+
+    /** Tablet: straight into the session when the player takes URIs (headless), else the player's open-file activity. */
+    private fun playFile(song: Long) {
+        val t = ctl?.transportControls
+        if (local && t != null && (ctl?.playbackState?.actions ?: 0L) and PlaybackState.ACTION_PLAY_FROM_URI != 0L)
+            t.playFromUri(ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, song), null)
+        else Files.play(ctx, song, player)
+    }
+
+    private fun list(req: JSONObject, items: JSONArray, err: String = "") =
+        JSONObject().put("t", "list").put("req", req.optInt("req")).put("items", items).put("err", err)
 
     /** Connects to the current player's MediaBrowserService, the same one Android Auto uses. */
-    private fun withBrowser(cl: Client, req: JSONObject, then: (MediaBrowser) -> Unit) {
+    private fun withBrowser(fail: (String) -> Unit, then: (MediaBrowser) -> Unit) {
         val pkg = player
         browser?.takeIf { it.isConnected && it.serviceComponent.packageName == pkg }?.let { then(it); return }
-        val svc = packageManager.queryIntentServices(Intent("android.media.browse.MediaBrowserService").setPackage(pkg), 0)
+        val svc = ctx.packageManager.queryIntentServices(Intent("android.media.browse.MediaBrowserService").setPackage(pkg), 0)
             .firstOrNull()?.serviceInfo
-        if (svc == null) { reply(cl, req, JSONArray(), "${label(pkg).ifEmpty { "No player" }} has no library to browse; controls still work"); return }
+        if (svc == null) { fail("${label(pkg).ifEmpty { "No player" }} has no library to browse; controls still work"); return }
         browser?.disconnect()
         var b: MediaBrowser? = null
-        b = MediaBrowser(this, ComponentName(svc.packageName, svc.name), object : MediaBrowser.ConnectionCallback() {
+        b = MediaBrowser(ctx, ComponentName(svc.packageName, svc.name), object : MediaBrowser.ConnectionCallback() {
             override fun onConnected() { then(b!!) }
-            override fun onConnectionFailed() { browser = null; reply(cl, req, JSONArray(), "Browsing not allowed by ${label(pkg)}; controls still work") }
+            override fun onConnectionFailed() { browser = null; fail("Browsing not allowed by ${label(pkg)}; controls still work") }
             override fun onConnectionSuspended() { browser = null }
         }, Bundle().apply { putBoolean("android.service.media.extra.RECENT", false) })
         browser = b
@@ -259,20 +313,23 @@ class MediaListener : NotificationListenerService() {
     }
 
     // A frozen or busy player can leave connect/subscribe hanging: answer within 6 s and reconnect next time.
-    private fun browse(cl: Client, req: JSONObject) {
+    private fun browse(req: JSONObject, reply: (JSONObject) -> Unit) {
         val done = java.util.concurrent.atomic.AtomicBoolean(false)
-        main.postDelayed({ if (!done.get()) { browser?.disconnect(); browser = null; reply(cl, req, JSONArray(), "${label(player)} did not answer") } }, 6000)
-        browseNow(cl, req, done)
+        main.postDelayed({ if (!done.get()) { browser?.disconnect(); browser = null; reply(list(req, JSONArray(), "${label(player)} did not answer")) } }, 6000)
+        browseNow(req, reply, done)
     }
 
-    private fun browseNow(cl: Client, req: JSONObject, done: java.util.concurrent.atomic.AtomicBoolean) = withBrowser(cl, req) { b ->
+    // Tablet: a player that cannot be browsed lists the tablet's audio files instead (ids "song:<n>" play them).
+    private fun browseNow(req: JSONObject, reply: (JSONObject) -> Unit, done: java.util.concurrent.atomic.AtomicBoolean) = withBrowser({ err ->
+        done.set(true); if (local) io.execute { reply(list(req, Files.list(ctx, req.optString("id"), req.optString("q")))) } else reply(list(req, JSONArray(), err))
+    }) { b ->
         val q = req.optString("q")
-        val sink = { items: List<MediaBrowser.MediaItem> -> done.set(true); io.execute { if (cl in out) reply(cl, req, JSONArray().apply {
+        val sink = { items: List<MediaBrowser.MediaItem> -> done.set(true); io.execute { reply(list(req, JSONArray().apply {
             items.take(300).forEachIndexed { i, it -> val d = it.description
                 put(JSONObject().put("id", it.mediaId).put("title", d.title ?: "").put("sub", d.subtitle ?: "")
                     .put("play", it.isPlayable).put("browse", it.isBrowsable)
                     .apply { if (i < 80) jpeg(d.iconBitmap ?: bitmapFrom(d.iconUri?.toString()), 96)?.let { a -> put("icon", a) } })
-            } }) } }
+            } })) } }
         // ponytail: framework MediaBrowser has no search, so search filters the current level only.
         run {
             val id = req.optString("id").ifEmpty { b.root }
@@ -281,7 +338,7 @@ class MediaListener : NotificationListenerService() {
                     b.unsubscribe(id)
                     sink(if (q.isEmpty()) children else children.filter { "${it.description.title} ${it.description.subtitle}".contains(q, true) })
                 }
-                override fun onError(parentId: String) { done.set(true); reply(cl, req, JSONArray(), "${label(player)} would not list this") }
+                override fun onError(parentId: String) { done.set(true); reply(list(req, JSONArray(), "${label(player)} would not list this")) }
             })
         }
     }

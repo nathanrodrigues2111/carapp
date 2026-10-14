@@ -3,6 +3,7 @@ package com.lazyneil.lazycar.audio
 import android.app.Activity
 import android.content.Context
 import android.os.SystemClock
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -15,7 +16,32 @@ import com.lazyneil.lazycar.Role
 /** "Tablet speaker over Wi-Fi": prefs, GO/STOP hooks and the Settings rows. */
 object TabletSpeaker {
     private fun sp(ctx: Context) = ctx.getSharedPreferences("speaker", Context.MODE_PRIVATE)
-    fun enabled(ctx: Context) = sp(ctx).getBoolean("on", true)
+    /** Phone stream switch; off while the tablet plays itself, the saved value comes back with Phone mode. */
+    fun enabled(ctx: Context) = sp(ctx).getBoolean("on", true) && !fromTablet(ctx)
+    /** "Play audio from: Tablet": the tablet player plays the JBL itself; CarApp controls it, the phone plays nothing. */
+    fun fromTablet(ctx: Context) = ctx.getSharedPreferences("lazycar", Context.MODE_PRIVATE).getString("play_from", "tablet") == "tablet"
+    val TABLET_PLAYERS = listOf("com.maxmpz.audioplayer" to "Poweramp", "com.google.android.apps.youtube.music" to "YouTube Music",
+        "revanced.youtube.music" to "YouTube Music (ReVanced)", "org.videolan.vlc" to "VLC")
+    /** Tablet mode player; on the tablet an uninstalled choice falls back to the first installed one. */
+    fun tabletPlayer(ctx: Context): String {
+        val set = ctx.getSharedPreferences("lazycar", Context.MODE_PRIVATE).getString("tabletPlayer", "").orEmpty().ifEmpty { TABLET_PLAYERS[0].first }
+        if (!Role.isTablet(ctx)) return set
+        val ok = { p: String -> ctx.packageManager.getLaunchIntentForPackage(p) != null }
+        return if (ok(set)) set else TABLET_PLAYERS.map { it.first }.firstOrNull(ok) ?: set
+    }
+
+    /** Tablet, Tablet mode: GO/STOP from the phone (or here). Headless: media keys to the player, no player UI. */
+    fun playHere(ctx: Context, on: Boolean) {
+        Log.e("LazyCar", "tablet play $on ${tabletPlayer(ctx)}")
+        // System media key (reaches the player's session, as the last one playing) plus the same key to its button receiver.
+        val k = if (on) android.view.KeyEvent.KEYCODE_MEDIA_PLAY else android.view.KeyEvent.KEYCODE_MEDIA_PAUSE
+        // STOP leaves music that was already playing before GO, like the phone flow.
+        val e = sp(ctx); val active = e.getBoolean("goOn", false)
+        if (on && !active) e.edit().putBoolean("wasPlaying", players(ctx).isNotEmpty()).apply()   // a repeated GO keeps the first snapshot
+        e.edit().putBoolean("goOn", on).apply()
+        if (!on && e.getBoolean("wasPlaying", false)) return
+        com.lazyneil.lazycar.GoAction.mediaKey(ctx, k); com.lazyneil.lazycar.GoAction.mediaTo(ctx, tabletPlayer(ctx), k)
+    }
     /** Fine trim on top of the automatic sync, positive = later. */
     fun delayMs(ctx: Context) = sp(ctx).getInt("delay", 0)
     fun btToo(ctx: Context) = sp(ctx).getBoolean("bt", false)

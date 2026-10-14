@@ -17,6 +17,8 @@ import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import com.lazyneil.lazycar.R
+import com.lazyneil.lazycar.Role
+import com.lazyneil.lazycar.audio.TabletSpeaker
 import com.lazyneil.lazycar.audio.StreamReceiver
 import org.json.JSONObject
 import java.io.Writer
@@ -29,13 +31,22 @@ import java.net.Socket
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
-/** Tablet side: keeps a TCP session to the phone's [MediaListener], holds Now Playing, sends button taps. */
+/**
+ * Now Playing and library for CarApp's player UI. Tablet: from the phone's [MediaListener] over TCP, or in Tablet mode
+ * from the tablet's own player ([local]). Phone in Tablet mode: from the tablet, relayed by [MediaListener].
+ */
 object PhoneMedia {
+    @Volatile var app: Context? = null
+    /** Tablet, Tablet mode: the music plays here, so Now Playing and the controls are this tablet's player. */
+    val local get() = app?.let { Role.isTablet(it) && TabletSpeaker.fromTablet(it) } == true
+    private val onPhone get() = app?.let { !Role.isTablet(it) } == true
+    /** Whose music the UI shows. */
+    val source get() = if (onPhone || local) "Tablet" else "Phone"
     @Volatile var connected = false
     @Volatile private var lostAt = SystemClock.elapsedRealtime()   // app start counts as a reconnect
     private val gpsAt get() = com.lazyneil.lazycar.gps.GpsService.let { if (it.mode == "receive") it.lastAt else 0L }
     /** Same rule as the phone's tile: any traffic from the phone (media link, audio or GPS) in the last 10 s. */
-    val alive get() = connected || SystemClock.elapsedRealtime() - maxOf(StreamReceiver.lastAt, gpsAt) < 10_000
+    val alive get() = local || connected || SystemClock.elapsedRealtime() - maxOf(StreamReceiver.lastAt, gpsAt) < 10_000
     /** First 10 s of a reconnect with no traffic at all: "Connecting...", never "not connected". */
     val reconnecting get() = !alive && SystemClock.elapsedRealtime() - lostAt < 10_000
     @Volatile var phone = ""
@@ -68,8 +79,14 @@ object PhoneMedia {
         if (c == "seek" && hasTrack) { val o = JSONObject(np.toString()); extra(o); np = o; npAt = SystemClock.elapsedRealtime() }   // optimistic position
         if (c == "toggle" && hasTrack) { val p = position(); np = JSONObject(np.toString()).put("pos", p)
             .put("state", if (playing) PlaybackState.STATE_PAUSED else PlaybackState.STATE_PLAYING); npAt = SystemClock.elapsedRealtime(); main.post { fire() } }
-        send(JSONObject().put("c", c).apply(extra))
+        val j = JSONObject().put("c", c).apply(extra)
+        when {
+            local && c in media -> main.post { here(j) { r -> handle(app!!, r) } }
+            onPhone -> MediaListener.toTablet(j)
+            else -> send(j)
+        }
     }
+    private val media = setOf("toggle", "next", "prev", "seek", "browse", "playId", "files", "playFile", "volSet")
     private val acked = setOf("toggle", "next", "prev", "seek")
     @Volatile private var ackC = ""; @Volatile private var ackAt = 0L; private var ackOld = JSONObject()
 
@@ -88,9 +105,9 @@ object PhoneMedia {
     fun request(c: String, id: String, q: String = "", done: (JSONObject) -> Unit) {
         val k = key(c, id, q)
         val r = synchronized(pending) { (++reqSeq).also { pending[it] = { j -> if (j.optString("err").isEmpty()) store(k, j); done(j) } } }
-        if (!connected) { fail(r, "Phone not connected"); return }
+        if (!connected && !local) { fail(r, "$source not connected"); return }
         cmd(c) { put("id", id).put("q", q).put("req", r) }
-        main.postDelayed({ fail(r, "The phone did not answer. Unlock it and try again") }, 8000)
+        main.postDelayed({ fail(r, "The ${source.lowercase()} did not answer. Unlock it and try again") }, 8000)
     }
     private fun fail(r: Int, err: String) {
         synchronized(pending) { pending.remove(r) }?.let { main.post { it(JSONObject().put("err", err)) } }
@@ -105,7 +122,8 @@ object PhoneMedia {
     @Synchronized fun start(ctx: Context) {
         if (started) return
         started = true
-        val app = ctx.applicationContext
+        val app = ctx.applicationContext; this.app = app
+        main.post(object : Runnable { override fun run() { follow(app); main.postDelayed(this, 1000) } })
         dir = java.io.File(app.cacheDir, "lib").apply { mkdirs() }
         com.lazyneil.lazycar.SettingsSync.init(app) { items -> if (connected) cmd("prefs") { put("items", items) } }
         // Keepalive on its own clock: the phone drops a tablet that stays silent for 15 s.
@@ -117,7 +135,7 @@ object PhoneMedia {
                     Socket().use { s ->
                         s.connect(InetSocketAddress(ip, Link.PORT), 3000); s.tcpNoDelay = true
                         s.soTimeout = 15_000   // the phone heartbeats every second; 15 s of silence = dead link, the timeout ends the read and we reconnect
-                        w = s.getOutputStream().bufferedWriter(); phone = ip; connected = true; sentTvol = -1   // the phone may have restarted: report our level again
+                        w = s.getOutputStream().bufferedWriter(); phone = ip; connected = true; sentTvol = -1; localKey = ""   // the phone may have restarted: report our level (and art) again
                         upAt = SystemClock.elapsedRealtime()
                         Log.e("LazyCar", "media link up $ip after ${upAt - lostAt} ms down")
                         main.postDelayed({ prefetch() }, 1500)
@@ -156,6 +174,19 @@ object PhoneMedia {
                 val go = j.optBoolean("go")
                 if (go && lastGo == false && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.TapService.launchDrive(ctx) }
                 lastGo = go
+                // Report our speaker level so the phone slider is live; hardware buttons included.
+                Volumes.localPct(ctx).let { if (it != sentTvol) { sentTvol = it; Volumes.saveTablet(ctx, it); cmd("tvol") { put("pct", it) } } }
+                if (!local) onNp(ctx, j)   // Tablet mode: the phone's own player is not ours to show
+            }
+            "prefs" -> com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))
+            "go" -> { val on = j.optBoolean("on"); if (on) cmd("goAck"); main.post { com.lazyneil.lazycar.audio.TabletSpeaker.playHere(ctx, on) } }
+            "list" -> synchronized(pending) { pending.remove(j.optInt("req")) }?.let { main.post { it(j) } }
+            "cmd" -> main.post { if (local) here(j) { r -> send(r.put("c", "list")) } }   // the phone UI in Tablet mode
+        }
+    }
+
+    private fun onNp(ctx: Context, j: JSONObject) {
+                val old = np
                 // A reconnect resends the art: same track keeps the bitmap we have, so the UI does not flicker.
                 val key = listOf("pkg", "title", "artist", "album").joinToString("|") { j.optString(it) }
                 if (j.has("art") && (key != artKey || art == null)) { artKey = key; art = j.optString("art").takeIf { it.isNotEmpty() }?.let { decode(it) }; com.lazyneil.lazycar.Accent.art = art }
@@ -164,14 +195,50 @@ object PhoneMedia {
                 if (ackAt > 0 && (ackC == "seek" || j.optString("title") != ackOld.optString("title") || j.optInt("state") != ackOld.optInt("state"))) {
                     Log.e("LazyCar", "media cmd $ackC acked in ${SystemClock.elapsedRealtime() - ackAt} ms"); ackAt = 0 }
                 np = j; npAt = SystemClock.elapsedRealtime()
-                // Report our speaker level so the phone slider is live; hardware buttons included.
-                Volumes.localPct(ctx).let { if (it != sentTvol) { sentTvol = it; Volumes.saveTablet(ctx, it); cmd("tvol") { put("pct", it) } } }
                 val big = old.optString("title") != j.optString("title") || old.optInt("state") != j.optInt("state") || newArt
                 main.post { fire(); if (big) notifyMedia(ctx) }
-            }
-            "prefs" -> com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))
-            "list" -> synchronized(pending) { pending.remove(j.optInt("req")) }?.let { main.post { it(j) } }
+    }
+
+    /** Phone, Tablet mode: the tablet's Now Playing ("np") and library answers ("list"), relayed by [MediaListener]. */
+    fun fromTablet(ctx: Context, j: JSONObject) {
+        app = ctx.applicationContext
+        if (j.optString("t") == "np") { if (!connected) { connected = true; lostAt = SystemClock.elapsedRealtime() }; onNp(ctx, j) }
+        else synchronized(pending) { pending.remove(j.optInt("req")) }?.let { main.post { it(j) } }
+    }
+    /** Phone: the tablet link dropped. */
+    fun tabletGone() { if (connected) { connected = false; lostAt = SystemClock.elapsedRealtime(); main.post { fire() } } }
+
+    // Tablet mode on the tablet: the tablet player's session, the same Session code the phone uses for its player.
+    private var sess: Session? = null
+    private var localKey = ""
+    private val localCb = object : android.media.session.MediaController.Callback() {
+        override fun onPlaybackStateChanged(state: PlaybackState?) = pushLocal()
+        override fun onMetadataChanged(metadata: android.media.MediaMetadata?) = pushLocal()
+        override fun onSessionDestroyed() { sess?.ctl?.unregisterCallback(this); sess?.ctl = null }
+    }
+    /** 1 Hz: follow the chosen tablet player while in Tablet mode, let go of it otherwise. */
+    private fun follow(ctx: Context) {
+        if (!local) { sess?.let { it.ctl?.unregisterCallback(localCb); it.browser?.disconnect(); sess = null; localKey = "" }; return }
+        val s = sess ?: Session(ctx, true).also { sess = it }
+        s.follow(TabletSpeaker.tabletPlayer(ctx), localCb)
+        pushLocal()
+    }
+    /** Like the phone's push: art only when the track changed; the copy for the phone UI rides the existing link. */
+    private fun pushLocal() {
+        val s = sess ?: return; val ctx = app ?: return
+        val m = s.ctl?.metadata; val j = s.np(); val key = s.key(j)
+        val withArt = key != localKey; localKey = key
+        s.io.execute {
+            if (withArt) j.put("art", m?.let(s::art)?.let { s.jpeg(it, 1024, 92) } ?: "")
+            if (connected) send(JSONObject(j.toString()).put("c", "np"))
+            onNp(ctx, j)
         }
+    }
+    /** A media command for the tablet player; "volSet" is the JBL, which the tablet plays in Tablet mode. */
+    private fun here(j: JSONObject, reply: (JSONObject) -> Unit) {
+        val s = sess ?: return reply(JSONObject().put("t", "list").put("req", j.optInt("req")).put("err", "Starting the player, try again"))
+        if (j.optString("c") == "volSet") Volumes.setJblLocal(s.ctx, j.optInt("pct")) else s.handle(j, reply)
+        main.postDelayed({ pushLocal() }, 300)
     }
 
     fun decode(b64: String): Bitmap? = try { Base64.decode(b64, Base64.DEFAULT).let { BitmapFactory.decodeByteArray(it, 0, it.size) } } catch (_: Exception) { null }

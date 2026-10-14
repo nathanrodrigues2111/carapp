@@ -100,10 +100,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.debugBtn).setOnClickListener {
             startActivity(Intent(this, DebugActivity::class.java))
         }
-        findViewById<View>(R.id.stripPlay).setOnClickListener { session()?.let { c ->
+        // Tablet mode: the strip shows and controls the tablet's player; tapping it opens the tablet's library.
+        findViewById<View>(R.id.stripPlay).setOnClickListener { if (tabMode()) com.lazyneil.lazycar.media.PhoneMedia.cmd("toggle") else session()?.let { c ->
             if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause() else c.transportControls.play() } }
-        findViewById<View>(R.id.npNext).setOnClickListener { session()?.transportControls?.skipToNext() }
-        findViewById<View>(R.id.npPrev)?.setOnClickListener { session()?.transportControls?.skipToPrevious() }
+        findViewById<View>(R.id.npNext).setOnClickListener { if (tabMode()) com.lazyneil.lazycar.media.PhoneMedia.cmd("next") else session()?.transportControls?.skipToNext() }
+        findViewById<View>(R.id.npPrev)?.setOnClickListener { if (tabMode()) com.lazyneil.lazycar.media.PhoneMedia.cmd("prev") else session()?.transportControls?.skipToPrevious() }
+        findViewById<View>(R.id.npStrip).setOnClickListener { if (tabMode()) startActivity(Intent(this, com.lazyneil.lazycar.media.LibraryActivity::class.java)) }
         Ui.paintAccent(root, Accent.forArt(this, null))
         Ui.blur(findViewById(R.id.npBackdrop))
         Ui.press(go, findViewById(R.id.stripPlay), findViewById(R.id.npNext), findViewById(R.id.npPrev),
@@ -351,26 +353,29 @@ class MainActivity : AppCompatActivity() {
             .let { l -> l.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING } ?: l.firstOrNull() }
     } catch (e: SecurityException) { null }
 
+    private fun tabMode() = com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this)
+
     private fun renderStrip() {
-        val c = session(); val m = c?.metadata
-        val title = m?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        val pm = com.lazyneil.lazycar.media.PhoneMedia
+        val tm = tabMode(); val c = if (tm) null else session(); val m = c?.metadata
+        val title = if (tm) (if (pm.hasTrack) pm.np.optString("title") else "") else m?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         Ui.swapText(findViewById(R.id.npTitle), title.ifEmpty { playerLabel })
         Ui.swapText(findViewById(R.id.npArtist), if (title.isEmpty()) "Nothing playing"
-            else listOf(m?.getString(MediaMetadata.METADATA_KEY_ARTIST), m?.getString(MediaMetadata.METADATA_KEY_ALBUM))
+            else (if (tm) listOf(pm.np.optString("artist"), pm.np.optString("album")) else listOf(m?.getString(MediaMetadata.METADATA_KEY_ARTIST), m?.getString(MediaMetadata.METADATA_KEY_ALBUM)))
                 .filter { !it.isNullOrEmpty() }.joinToString(" · "))
-        val art = m?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+        val art = if (tm) pm.art else m?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m?.getBitmap(MediaMetadata.METADATA_KEY_ART)
         if (art?.sameAs(shownArt) != true && !(art == null && shownArt == null)) {
             shownArt = art; Accent.art = art; Accent.publish(this)
             Ui.swapArt(findViewById(R.id.npArt), art)
             findViewById<ImageView>(R.id.npBackdrop).setImageBitmap(art)
             refreshGoButton()   // GO, its glow and the progress follow the art accent
         }
-        val playing = c?.playbackState?.state == PlaybackState.STATE_PLAYING
+        val playing = if (tm) pm.playing else c?.playbackState?.state == PlaybackState.STATE_PLAYING
         if (shownPlaying != playing) {
             Ui.morph(findViewById(R.id.stripPlay), playing, shownPlaying != null)
             shownPlaying = playing
         }
-        for (id in intArrayOf(R.id.stripPlay, R.id.npNext, R.id.npPrev)) findViewById<View>(id)?.isEnabled = c != null
+        for (id in intArrayOf(R.id.stripPlay, R.id.npNext, R.id.npPrev)) findViewById<View>(id)?.isEnabled = if (tm) pm.alive else c != null
     }
 
     /** One status tile: states are Off / Waiting / Connected (or a plain on/off word). */
@@ -399,8 +404,10 @@ class MainActivity : AppCompatActivity() {
         val tab = ml.clients > 0; val waiting = ml.bound
         tile(R.id.tileTablet, R.drawable.ic_tablet, "Tablet", when { tab -> "Connected"; waiting -> "Searching"; else -> "Off" },
             when { tab -> Ui.GREEN; waiting -> Ui.AMBER; else -> off }, tab)
-        val st = session()?.playbackState; val dur = session()?.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
-        val pos = if (st == null) 0L else st.position + if (st.state == PlaybackState.STATE_PLAYING)
+        val tm = tabMode(); val pm = com.lazyneil.lazycar.media.PhoneMedia
+        val st = if (tm) null else session()?.playbackState
+        val dur = if (tm) pm.np.optLong("dur") else session()?.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+        val pos = if (tm) pm.position() else if (st == null) 0L else st.position + if (st.state == PlaybackState.STATE_PLAYING)
             ((android.os.SystemClock.elapsedRealtime() - st.lastPositionUpdateTime) * st.playbackSpeed).toLong() else 0L
         findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(R.id.npProgress).progress =
             if (dur > 0) (pos * 1000 / dur).toInt().coerceIn(0, 1000) else 0

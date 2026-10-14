@@ -28,7 +28,7 @@ import com.lazyneil.lazycar.Ui
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Tablet: browse the phone's music (the player's own library, or the phone's audio files) and pick what plays. */
+/** Browse the music of the device that plays ([PhoneMedia.source]: the player's own library, or its audio files) and pick what plays. */
 class LibraryActivity : AppCompatActivity() {
     private val stack = mutableListOf<Pair<String, String>>()   // id to title, per tab
     private var files = false
@@ -119,7 +119,7 @@ class LibraryActivity : AppCompatActivity() {
         title = bar.findViewById(R.id.topTitle)
         root.addView(bar)
         val tabs = TabLayout(this).apply {
-            addTab(newTab().setText("Player library")); addTab(newTab().setText("Phone files"))
+            addTab(newTab().setText("Player library")); addTab(newTab().setText("${PhoneMedia.source} files"))
             tabMode = TabLayout.MODE_FIXED; tabGravity = TabLayout.GRAVITY_FILL; setBackgroundColor(0)
             setSelectedTabIndicatorColor(accent); setTabTextColors(Ui.attr(context, R.attr.carTextDim), Ui.attr(context, R.attr.carText))
         }
@@ -262,7 +262,7 @@ class LibraryActivity : AppCompatActivity() {
         val id = stack.lastOrNull()?.first ?: ""
         val c = if (files) "files" else "browse"
         val app = PhoneMedia.np.optString("app").ifEmpty { "Player" }
-        title.text = stack.lastOrNull()?.second ?: if (files) "Phone files" else app
+        title.text = stack.lastOrNull()?.second ?: if (files) "${PhoneMedia.source} files" else app
         val seq = ++loadSeq; val t0 = SystemClock.elapsedRealtime()
         val hit = PhoneMedia.cached(c, id, q)
         retry.visibility = View.GONE; status.visibility = View.GONE
@@ -276,7 +276,7 @@ class LibraryActivity : AppCompatActivity() {
             val err = r.optString("err")
             if (err.isEmpty()) { retry.visibility = View.GONE; status.visibility = View.GONE }
             if (err.isEmpty()) show(r.optJSONArray("items") ?: JSONArray()) else if (hit != null) return@request
-            status.text = err.ifEmpty { if (items.length() == 0) (if (files) "No music files here. The phone may need the music library permission" else "Nothing here") else "" }
+            status.text = err.ifEmpty { if (items.length() == 0) (if (files) "No music files here. The ${PhoneMedia.source.lowercase()} may need the music library permission" else "Nothing here") else "" }
             status.visibility = if (status.text.isEmpty()) View.GONE else View.VISIBLE
             retry.visibility = if (err.isNotEmpty()) View.VISIBLE else View.GONE
         }
