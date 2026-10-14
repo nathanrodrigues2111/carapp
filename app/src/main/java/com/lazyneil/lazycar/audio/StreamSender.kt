@@ -220,9 +220,9 @@ class StreamSender : Service() {
                     // speaker's reported delay (or the stack's codec default), so this is the real figure for any speaker.
                     afMs = try { (android.media.AudioTrack::class.java.getMethod("getLatency").invoke(t) as Int) - buf } catch (_: Exception) { -1 }
                     latencyMs(t, written)?.let { val mix = it - buf; tsMs = mix
-                        // The timestamp stops at the phone on BT (OxygenOS: ~117 ms vs 341 ms HAL): trust the HAL figure then.
-                        // ponytail: fixed 150 ms only when the hidden API is gone; the tablet mic trims the rest.
-                        outMs = if (!bt) mix else if (afMs > mix + 50) afMs else if (mix < 100) mix + 150 else mix }
+                        // getLatency() was tried as phoneOut (10:48): it reads 449 ms vs ~324 ms heard, worse than the guess.
+                        // ponytail: SBC-ish 150 ms when the timestamp stops at the phone; the tablet adds the measured rest.
+                        outMs = if (bt && mix < 100) mix + 150 else mix }
                 }
             }
             t.stop(); t.release()

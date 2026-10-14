@@ -327,7 +327,9 @@ class StreamReceiver : Service() {
                     last = seq - 1; clock.reset(); outputs.forEach { it.reset() }
                 }
                 clock.add(t3, bb.getLong(4), bb.getLong(12), bb.getLong(20), bb.getLong(28))
-                phoneOutMs = bb.getInt(36)
+                // ponytail: the phone's BT figure is a guess (timestamp + 150 ms); 4 restarts heard the JBL 57 ms after the
+                // tablet with it. The 10:48 phone build sends getLatency() (449 ms, 125 ms too high). Drop once the phone measures it.
+                phoneOutMs = bb.getInt(36).let { if (it >= 400) it - 125 else it + 57 }
                 if (seq > last) { lost += (seq - last - 1).coerceAtMost(200); last = seq }
                 val pcm = ShortArray(len / 2); ByteBuffer.wrap(buf, Wire.HEADER, len).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcm)
                 for (i in pcm.indices step 4) { val v = pcm[i].toDouble(); sq += v * v; n++ }
