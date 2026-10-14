@@ -84,7 +84,7 @@ object TabletSpeaker {
     }
 
     /** App names of the active media players; uid comes from toString since getClientUid is a system API. */
-    private fun players(ctx: Context): String {
+    fun players(ctx: Context): String {
         val pm = ctx.packageManager
         return ctx.getSystemService(android.media.AudioManager::class.java).activePlaybackConfigurations
             .filter { it.audioAttributes.usage == android.media.AudioAttributes.USAGE_MEDIA && "state:started" in it.toString() }

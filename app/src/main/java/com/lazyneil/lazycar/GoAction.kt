@@ -97,13 +97,15 @@ object GoAction {
 
             val settle = if (need1) 2000L else 0L
             val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val musicActive = am.isMusicActive
+            // Not am.isMusicActive: our own StreamSender monitor track counts there.
+            val players = com.lazyneil.lazycar.audio.TabletSpeaker.players(ctx)
+            val musicActive = players.isNotEmpty()
             // Snapshot pre-GO state (connected = probe result before we connect anything) so STOP can
             // restore exactly what it found: only undo what GO turned on.
             p.snapConn1 = p.mac1.isNotEmpty() && p.mac1 in connected
             p.snapConn3 = p.mac3.isNotEmpty() && p.mac3 in connected
             p.snapMusicWasActive = musicActive
-            log("snapshot: music=$musicActive conn1=${p.snapConn1} conn3=${p.snapConn3}")
+            log("snapshot: music=$musicActive ($players) conn1=${p.snapConn1} conn3=${p.snapConn3}")
             var doneAt = 0L
             if (need3) doneAt = 800L
 
