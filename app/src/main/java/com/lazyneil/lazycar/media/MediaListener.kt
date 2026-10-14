@@ -46,7 +46,7 @@ class MediaListener : NotificationListenerService() {
         @Volatile var tabletPct = -1     // tablet speaker level, reported by the tablet
         private var self: MediaListener? = null
         /** Phone slider: tell every tablet to set its speaker level. */
-        fun setTablet(pct: Int) { tabletPct = pct; self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "tvol").put("pct", pct).toString()) } } }
+        fun setTablet(pct: Int) { tabletPct = pct; self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "tvol").put("pct", pct).put("user", true).toString()) } } }
         fun granted(ctx: Context) = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
         fun settingsIntent() = Intent("android.settings.NOTIFICATION_LISTENER_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }

@@ -117,7 +117,8 @@ object PhoneMedia {
 
     private fun handle(ctx: Context, j: JSONObject) {
         when (j.optString("t")) {
-            "tvol" -> { Volumes.applyTablet(ctx, j.optInt("pct")); sentTvol = -1 }
+            // Only a slider moved by the user on the phone sets our volume; nothing on connect, never by itself.
+            "tvol" -> if (j.optBoolean("user")) { Volumes.applyTablet(ctx, j.optInt("pct")); sentTvol = -1 }
             "np" -> {
                 val old = np
                 // Phone GO switched on while we are connected: open Maps + CarApp once. The first message after a

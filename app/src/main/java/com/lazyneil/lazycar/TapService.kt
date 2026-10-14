@@ -54,6 +54,8 @@ class TapService : AccessibilityService() {
             if (mode == "none" || p.launchA.isEmpty()) return
             val svc = instance
             if (mode == "one" || p.launchB.isEmpty() || svc == null) startPkg(ctx, p.launchA, 0)   // no accessibility: no split
+            // The tablet never opens a pair without CarApp (synced widget options can name the phone's player).
+            else if (Role.isTablet(ctx) && ctx.packageName !in setOf(p.launchA, p.launchB)) launchDrive(ctx)
             else svc.h.post { svc.launchPair(p.launchA, p.launchB, p.splitRatio) }
         }
 
