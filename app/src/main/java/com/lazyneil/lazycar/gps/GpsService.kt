@@ -58,9 +58,12 @@ class GpsService : Service(), LocationListener {
         fun handBack(ctx: Context) = prefs(ctx).getBoolean("handBack", false)
         fun setHandBack(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("handBack", on).apply()
 
-        /** Fix still being shared: the phone repeats its last fix for 60 s, the tablet needs a packet within 5 s. */
+        /** Indoors a stationary fused fix comes every 20 s to minutes; the phone repeats it at 1 Hz for this long. */
+        const val HOLD_MS = 300_000L
+
+        /** Fix still being shared: the phone repeats its last fix for [HOLD_MS], the tablet needs a packet within 5 s. */
         fun live() = mode != "idle" && lastAt != 0L &&
-            SystemClock.elapsedRealtime() - lastAt <= if (mode == "send") 60000 else 5000
+            SystemClock.elapsedRealtime() - lastAt <= if (mode == "send") HOLD_MS else 5000
 
         /** One status line for every screen. */
         fun status() = when {
@@ -163,8 +166,13 @@ class GpsService : Service(), LocationListener {
             val now = SystemClock.elapsedRealtime()
             if (mode == "send") active(com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this@GpsService)) == com.lazyneil.lazycar.GoAction.ON
                 || com.lazyneil.lazycar.media.MediaListener.clients > 0)
-            last?.let { if (now - sentAt > 900 && now - lastFixAt < 60000) send(it) }
-            if (mode == "send" && !paused) fused(now - gpsAt > 10000)
+            last?.let { if (now - sentAt > 900 && now - lastFixAt < HOLD_MS) send(it) }
+            if (mode == "send" && !paused) {
+                // A registration made while the service had no location capability stays unpermitted ("{na}") and never
+                // delivers: re-register when nothing arrived for 60 s.
+                if (fusedOn && now - maxOf(fixAt, fusedAt) > 60000) fused(false)
+                fused(now - gpsAt > 10000)
+            }
             if (running) tick.postDelayed(this, 1000)
         }
     }
@@ -194,9 +202,15 @@ class GpsService : Service(), LocationListener {
     // each scan stalled the tablet audio stream ~120 ms. In the car GNSS works, so no scanning at all.
     private val fusedL = android.location.LocationListener { onLocationChanged(it) }
     private var fusedOn = false
+    private var fusedAt = 0L    // when fused was (re)registered
+    private var fixAt = 0L      // last fix from any provider
     private fun fused(on: Boolean) {
         if (on == fusedOn) return
         fusedOn = on
+        if (on) fusedAt = SystemClock.elapsedRealtime()
+        // Indoors: share the last fused fix right away instead of waiting for the next one.
+        if (on && last == null) try { lm.getLastKnownLocation(LocationManager.FUSED_PROVIDER)
+            ?.takeIf { SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos < HOLD_MS * 1_000_000 }?.let { onLocationChanged(it) } } catch (_: SecurityException) {}
         if (on) lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER,
             android.location.LocationRequest.Builder(1000L).setQuality(android.location.LocationRequest.QUALITY_BALANCED_POWER_ACCURACY).build(),
             mainExecutor, fusedL)
@@ -206,6 +220,7 @@ class GpsService : Service(), LocationListener {
     override fun onLocationChanged(l: Location) {
         val now = SystemClock.elapsedRealtime()
         if (l.provider == LocationManager.GPS_PROVIDER) gpsAt = now else if (now - gpsAt < 3000) return
+        fixAt = now
         val data = JSONObject().put("lat", l.latitude).put("lon", l.longitude).put("alt", l.altitude)
             .put("acc", l.accuracy.toDouble()).put("speed", l.speed.toDouble())
             .put("bearing", l.bearing.toDouble()).put("time", l.time).put("sats", sats).put("src", l.provider).toString().toByteArray()
@@ -321,7 +336,7 @@ class GpsService : Service(), LocationListener {
         radio?.release(); radio = null
         wake?.release(); wake = null
         if (::lm.isInitialized) {
-            lm.removeUpdates(this)
+            lm.removeUpdates(this); fused(false)   // fusedOn surviving a restart kept a dead registration forever
             lm.unregisterGnssStatusCallback(gnss)
             if (mode == "receive") setMocking(false)
         }
