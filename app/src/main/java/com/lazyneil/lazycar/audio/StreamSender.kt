@@ -109,7 +109,14 @@ class StreamSender : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
         try {
             val mp = getSystemService(MediaProjectionManager::class.java).getMediaProjection(Activity.RESULT_OK, data)
-            mp.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, Handler(Looper.getMainLooper()))
+            mp.registerCallback(object : MediaProjection.Callback() { override fun onStop() {
+                val external = alive   // false when our own onDestroy stopped it
+                stopSelf()
+                // The system or the cast chip ended the capture mid drive: ask again (TapService taps the consent).
+                val ctx = applicationContext
+                if (external && com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(ctx)) == com.lazyneil.lazycar.GoAction.ON && TabletSpeaker.enabled(ctx))
+                    Handler(Looper.getMainLooper()).postDelayed({ start(ctx) }, 1500)
+            } }, Handler(Looper.getMainLooper()))
             projection = mp
             alive = true; running = true; error = ""; tablet = ""
             lock = getSystemService(WifiManager::class.java).createMulticastLock("speaker").apply { acquire() }
@@ -187,6 +194,7 @@ class StreamSender : Service() {
                     if (haveTs)
                         capMs = ((rts.framePosition - readFrames) * 1000 / Wire.RATE + (System.nanoTime() - rts.nanoTime) / 1_000_000).toInt()
                     Log.e("LazyCar", "speaker send gap=$gapMax rms=$rms kbps=$kbps out=$outMs hal=$halMs cap=$capMs tablet=$tablet")
+            if (alive) Handler(Looper.getMainLooper()).post { stopSelf() }   // read error: stop, so start() can run again
                     sq = 0.0; n = 0; bytes = 0; secAt = now; gapMax = 0
                 }
             }
