@@ -115,7 +115,8 @@ class StreamReceiver : Service() {
             if (nextSeq < 0 || c.seq >= nextSeq) jb[c.seq] = c
             while (jb.size > 600) jb.pollFirstEntry()
         }
-        fun reset() = synchronized(jb) { jb.clear(); nextSeq = -1 }
+        fun reset() = synchronized(jb) { jb.clear(); nextSeq = -1; lateMs = 0; resetAt = SystemClock.elapsedRealtime() }   // a start spike must not leave the tablet behind for 5 min
+        @Volatile private var resetAt = 0L
 
         private fun take(): Chunk? = synchronized(jb) {
             if (nextSeq < 0) return jb.pollFirstEntry()?.value?.also { nextSeq = it.seq + 1 }
@@ -166,7 +167,8 @@ class StreamReceiver : Service() {
                     // jitter (targetMs), play late behind the JBL instead of dropping out. 20 ms steps, so no realign every second.
                     // Grows at once (+10 ms margin), shrinks only after 5 min with 30 ms spare: each change is a realign.
                     val l = (targetMs - (budgetMs() + extraMs().toInt() - hal)).coerceIn(0, 250)
-                    if (l > lateMs) { lateMs = l + 10; spareSince = 0 }
+                    if (SystemClock.elapsedRealtime() - resetAt < 10_000) {}   // jitter settles after a (re)start
+                    else if (l > lateMs) { lateMs = l + 10; spareSince = 0 }
                     else if (l < lateMs - 30) { if (spareSince == 0L) spareSince = now else if (now - spareSince > 300_000_000_000L) { lateMs = l + 10; spareSince = 0 } }
                     else spareSince = 0
                     val want = (Wire.RATE * (budgetMs() + extraMs().toInt() + lateMs - hal - 40).coerceIn(20, bufMs) / 1000).coerceAtMost(track.bufferCapacityInFrames)
