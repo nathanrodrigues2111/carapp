@@ -9,6 +9,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
@@ -160,12 +164,22 @@ class GpsService : Service(), LocationListener {
             val now = SystemClock.elapsedRealtime()
             if (mode == "send") active(com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this@GpsService)) == com.lazyneil.lazycar.GoAction.ON
                 || com.lazyneil.lazycar.media.MediaListener.clients > 0)
-            last?.let { if (now - sentAt > 900 && now - lastFixAt < HOLD_MS) send(it) }
+            val moving = now - movedAt < STILL_MS
+            val holding = !moving && lastLoc?.let { it.accuracy <= PRECISE_M } == true
+            if (now - sentAt > 900) {
+                // Still with a precise fix: same position, speed 0, fresh stamp, held as long as the phone does not move.
+                if (holding) lastLoc?.let { send(packet(it, held = true)); lastAt = now }
+                else last?.let { if (now - lastFixAt < HOLD_MS) send(it) }
+            }
             if (mode == "send" && !paused) {
                 // A registration made while the service had no location capability stays unpermitted ("{na}") and never
                 // delivers: re-register when nothing arrived for 60 s.
                 if (fusedOn && now - maxOf(fixAt, fusedAt) > 60000) fused(false)
-                fused(now - gpsAt > 10000)
+                // Each HIGH_ACCURACY fix costs a Wi-Fi scan that stalls the audio stream: only while moving or not yet precise.
+                val want = now - gpsAt > 10000 && !holding
+                if (want != fusedOn) Log.i("LazyGPS", if (want) "gps: moving, high accuracy"
+                    else "gps: still, holding precise fix age=${(now - lastFixAt) / 1000}s acc=${lastLoc?.accuracy?.toInt()}m")
+                fused(want)
             }
             if (running) tick.postDelayed(this, 1000)
         }
@@ -186,15 +200,35 @@ class GpsService : Service(), LocationListener {
             radio?.acquire(); wake?.acquire()
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
             lm.registerGnssStatusCallback(gnss, android.os.Handler(Looper.getMainLooper()))
+            movedAt = SystemClock.elapsedRealtime()   // unknown until the accelerometer settles: treat as moving
+            sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sm.registerListener(accel, it, SensorManager.SENSOR_DELAY_NORMAL) }
         } else {
-            lm.removeUpdates(this); fused(false); lm.unregisterGnssStatusCallback(gnss)
-            radio?.release(); wake?.release(); last = null; lastAt = 0; sats = -1
+            lm.removeUpdates(this); fused(false); lm.unregisterGnssStatusCallback(gnss); sm.unregisterListener(accel)
+            radio?.release(); wake?.release(); last = null; lastLoc = null; lastAt = 0; sats = -1
         }
     }
 
     // Fused only after 10 s without a GNSS fix, HIGH_ACCURACY (Wi-Fi based, ~10 to 20 m indoors; BALANCED is 100 m).
     // 10 s interval: GMS Wi-Fi scans follow it (1 s interval scanned ~7 times a minute and stalled the audio up to 1 s).
     // In the car GNSS works, so no scanning at all.
+    // Motion: |accel| deviating from its slow average by more than MOVE_G (m/s^2) counts as moving.
+    // ponytail: magnitude threshold tuned by hand; lying still reads ~0.05, a hand pick-up >0.5.
+    private val MOVE_G = 0.3f
+    private val STILL_MS = 30_000L
+    private val PRECISE_M = 30f
+    private var movedAt = 0L
+    private var gMean = 0f
+    private val sm by lazy { getSystemService(SensorManager::class.java) }
+    private val accel = object : SensorEventListener {
+        override fun onSensorChanged(e: SensorEvent) {
+            val g = Math.sqrt((e.values[0] * e.values[0] + e.values[1] * e.values[1] + e.values[2] * e.values[2]).toDouble()).toFloat()
+            if (gMean == 0f) gMean = g
+            if (Math.abs(g - gMean) > MOVE_G) movedAt = SystemClock.elapsedRealtime()
+            gMean += (g - gMean) * 0.1f
+        }
+        override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+    }
+
     private val fusedL = android.location.LocationListener { onLocationChanged(it) }
     private var fusedOn = false
     private var fusedAt = 0L    // when fused was (re)registered
@@ -216,14 +250,21 @@ class GpsService : Service(), LocationListener {
         val now = SystemClock.elapsedRealtime()
         if (l.provider == LocationManager.GPS_PROVIDER) gpsAt = now else if (now - gpsAt < 3000) return
         fixAt = now
-        val data = JSONObject().put("lat", l.latitude).put("lon", l.longitude).put("alt", l.altitude)
-            .put("acc", l.accuracy.toDouble()).put("speed", l.speed.toDouble())
-            .put("bearing", l.bearing.toDouble()).put("time", l.time).put("sats", sats).put("src", l.provider).toString().toByteArray()
+        val data = packet(l, held = false)
         acc = l.accuracy; speed = l.speed; gotFix()
         source = if (l.provider == LocationManager.GPS_PROVIDER) "Phone GPS" else "Phone network"
+        // A coarser fix never replaces the held precise one while the phone is still.
+        if (lastLoc?.let { it.accuracy <= PRECISE_M && l.accuracy > PRECISE_M && now - movedAt >= STILL_MS } != true) lastLoc = l
         last = data; lastFixAt = now
         send(data)
     }
+
+    private var lastLoc: Location? = null
+
+    private fun packet(l: Location, held: Boolean) = JSONObject().put("lat", l.latitude).put("lon", l.longitude).put("alt", l.altitude)
+        .put("acc", l.accuracy.toDouble()).put("speed", if (held) 0.0 else l.speed.toDouble())
+        .put("bearing", l.bearing.toDouble()).put("time", if (held) System.currentTimeMillis() else l.time)
+        .put("sats", sats).put("src", l.provider).toString().toByteArray()
 
     private fun send(data: ByteArray) {
         sentAt = SystemClock.elapsedRealtime(); packets++
@@ -325,7 +366,7 @@ class GpsService : Service(), LocationListener {
 
     private fun stopAll() {
         running = false
-        tick.removeCallbacks(repeat); last = null; lastJ = null
+        tick.removeCallbacks(repeat); last = null; lastLoc = null; if (::lm.isInitialized) sm.unregisterListener(accel); lastJ = null
         socket?.close(); socket = null
         wifiLock?.release(); wifiLock = null
         radio?.release(); radio = null
