@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@drawable/widget_bg"
-        android:contentDescription="CarApp GO" />
+        android:contentDescription="Start CarApp" />
 
     <!-- Car / stop glyph -->
     <ImageView

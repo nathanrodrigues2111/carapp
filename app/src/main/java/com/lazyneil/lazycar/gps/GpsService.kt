@@ -66,7 +66,7 @@ class GpsService : Service(), LocationListener {
         fun status() = when {
             error.isNotEmpty() -> error
             mode == "idle" -> "Off"
-            paused -> "Paused, waiting for GO or the tablet"
+            paused -> "Paused, waiting for Start or the tablet"
             !live() -> if (mode == "send") "Searching for a GPS fix" else "Searching for the phone"
             else -> (if (mode == "send") "Sharing" else "Receiving") +
                 (if (source == "Phone network") ", network only" else "") + ", ${acc.toInt()} m"

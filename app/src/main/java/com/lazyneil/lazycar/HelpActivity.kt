@@ -21,14 +21,14 @@ import com.google.android.material.button.MaterialButton
 class HelpActivity : AppCompatActivity() {
 
     private val qa = listOf(
-        "What does GO do?" to
-            "GO turns on Bluetooth, connects the JBL speaker, turns on the hotspot if you use it, starts the tablet speaker and presses play. On the tablet, Maps and the player open side by side.",
-        "What does STOP do?" to
-            "STOP puts back what was on before you tapped GO. Only what GO switched on gets turned off.",
+        "What does Start do?" to
+            "Start turns on Bluetooth, connects the JBL speaker, turns on the hotspot if you use it, starts the tablet speaker and presses play. On the tablet, Maps and the player open side by side.",
+        "What does Stop do?" to
+            "Stop puts back what was on before you tapped Start. Only what Start switched on gets turned off.",
         "How do I set it up the first time?" to
-            "1. Pair the JBL speaker in Android's Bluetooth settings.\n2. Turn on CarApp in Accessibility on the phone and the tablet (button below).\n3. On the tablet, save a Maps + CarApp pair once on the launcher: long press Maps, Split screen, pick CarApp, save.\n4. Add the GO widget on the phone.",
+            "1. Pair the JBL speaker in Android's Bluetooth settings.\n2. Turn on CarApp in Accessibility on the phone and the tablet (button below).\n3. On the tablet, save a Maps + CarApp pair once on the launcher: long press Maps, Split screen, pick CarApp, save.\n4. Add the Start widget on the phone.",
         "How does the tablet open?" to
-            "Maps on the left, the player on the right. CarApp opens this split by itself on start, on GO and when you open it. Turn it off in Settings, Drive, Open with Maps. On tablets without a saved pair (not Lenovo), CarApp opens Maps next to itself the standard Android way; pick the method in Settings, Advanced, Split method.",
+            "Maps on the left, the player on the right. CarApp opens this split by itself on start, on Start and when you open it. Turn it off in Settings, Drive, Open with Maps. On tablets without a saved pair (not Lenovo), CarApp opens Maps next to itself the standard Android way; pick the method in Settings, Advanced, Split method.",
         "How do I use the player?" to
             "Tap the art to play or pause, swipe it for the next or previous song. Drag the bar to seek. The library icon opens the phone's music to pick what plays.",
         "Why does the color change?" to

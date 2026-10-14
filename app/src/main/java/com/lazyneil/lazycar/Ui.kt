@@ -277,7 +277,7 @@ object Ui {
                     live = StreamSender.running && StreamSender.tablet.isNotEmpty()
                     waiting = StreamSender.running
                 }
-                tabChip?.text = when { !on -> "Off"; live -> "Connected"; waiting -> "Searching"; else -> "Starts with GO" }
+                tabChip?.text = when { !on -> "Off"; live -> "Connected"; waiting -> "Searching"; else -> "Waits for Start" }
                 dot(tabDot, when { live -> GREEN; on && waiting -> AMBER; else -> off }, live)
                 root.postDelayed(this, 500)
             }

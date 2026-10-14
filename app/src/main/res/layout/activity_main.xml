@@ -28,7 +28,7 @@
                 <com.google.android.material.button.MaterialButton android:id="@+id/goButton"
                     style="@style/Widget.Material3.Button" android:layout_width="240dp" android:layout_height="240dp"
                     android:layout_gravity="center" android:elevation="24dp" android:insetTop="0dp" android:insetBottom="0dp"
-                    android:padding="0dp" android:text="GO" android:textSize="@dimen/t_display" android:textStyle="bold"
+                    android:padding="0dp" android:text="Start" android:textSize="@dimen/t_display" android:textStyle="bold"
                     app:cornerRadius="120dp" />
             </FrameLayout>
             <TextView android:id="@+id/goHint" style="@style/T.Display" android:layout_width="match_parent"

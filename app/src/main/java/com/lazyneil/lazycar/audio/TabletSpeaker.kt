@@ -35,7 +35,7 @@ object TabletSpeaker {
     fun summary(ctx: Context): String = when {
         !enabled(ctx) -> "off"
         Role.isTablet(ctx) -> if (StreamReceiver.running && SystemClock.elapsedRealtime() - StreamReceiver.lastAt <= 2000) "connected" else "searching"
-        !StreamSender.running -> "on, starts with GO"
+        !StreamSender.running -> "on, waits for Start"
         StreamSender.tablet.isEmpty() -> "on, searching for the tablet"
         else -> "on, connected"
     }
@@ -75,7 +75,7 @@ object TabletSpeaker {
         val s = StreamSender
         when {
             s.error.isNotEmpty() && !s.running -> s.error
-            !s.running -> "Starts with GO"
+            !s.running -> "Waits for Start"
             s.tablet.isEmpty() -> "Capturing, waiting for the tablet"
             else -> "Streaming to ${s.tablet}, ${Wire.FORMAT}, ${s.kbps} kbps, level ${s.rms}, JBL latency ${s.outMs} ms (HAL ${s.halMs} ms), capture ${s.capMs} ms" + players(ctx).let { p ->
                 if (p.isEmpty()) ", nothing playing" else if (s.rms == 0) ". Silent, blocking capture: $p" else ". Capturing: $p"
