@@ -184,8 +184,8 @@ object GoAction {
     }
 
     @Volatile private var volReceiver: BroadcastReceiver? = null
-
     private var volTick: Runnable? = null
+
     /**
      * Drive STREAM_MUSIC to [pct] and HOLD it against OnePlus' group/A2DP absolute-volume resets for
      * [budgetMs]: set it now, then re-check every 1s (max 5 corrections) and re-assert if it drifted
@@ -239,8 +239,8 @@ object GoAction {
     }
 
     private fun unregisterVol(ctx: Context) {
-        volReceiver?.let { try { ctx.applicationContext.unregisterReceiver(it) } catch (e: Exception) {} }
         volTick?.let { main.removeCallbacks(it) }; volTick = null
+        volReceiver?.let { try { ctx.applicationContext.unregisterReceiver(it) } catch (e: Exception) {} }
         volReceiver = null
     }
 
@@ -355,9 +355,6 @@ object GoAction {
         if (!p.snapBtWasOn) { log("restore: bt on -> off"); main.postDelayed({ disableBt(ctx) }, at); at += 12500L }
         else log("restore: bt was already on -> left")
 
-        // Only kill the player if GO launched it (music wasn't already playing before GO).
-        if (!p.snapMusicWasActive) try { (ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager)
-            .killBackgroundProcesses(p.playerPkg) } catch (e: Exception) {}
         main.postDelayed({ setState(ctx, p, IDLE) }, maxOf(1800L, at))
         return maxOf(2500L, at + 500L)
     }
@@ -424,7 +421,7 @@ object GoAction {
         am.dispatchMediaKeyEvent(KeyEvent(t, t, KeyEvent.ACTION_UP, code, 0))
     }
 
-    private fun launchPlayer(ctx: Context, pkg: String) {
+    fun launchPlayer(ctx: Context, pkg: String) {
         if (pkg.isEmpty()) { toast(ctx, "No player chosen"); return }
         val i = ctx.packageManager.getLaunchIntentForPackage(pkg)
         if (i == null) { toast(ctx, "Player not found: $pkg"); return }

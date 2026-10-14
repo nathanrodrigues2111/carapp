@@ -35,7 +35,8 @@ object TabletSpeaker {
     fun summary(ctx: Context): String = when {
         !enabled(ctx) -> "off"
         Role.isTablet(ctx) -> if (StreamReceiver.running && SystemClock.elapsedRealtime() - StreamReceiver.lastAt <= 2000) "connected" else "searching"
-        !StreamSender.running -> "on, waits for Start"
+        !StreamSender.running -> if (com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(ctx)) == com.lazyneil.lazycar.GoAction.ON)
+            "stopped, tap Stop then Start" else "on, waits for Start"
         StreamSender.tablet.isEmpty() -> "on, searching for the tablet"
         else -> "on, connected"
     }

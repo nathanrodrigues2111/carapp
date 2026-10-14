@@ -148,17 +148,22 @@ class MediaListener : NotificationListenerService() {
         Volumes.jblStream().let { st -> j.put("vol", am.getStreamVolume(st)).put("volMax", am.getStreamMaxVolume(st)) }
         j.put("go", com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this)) == com.lazyneil.lazycar.GoAction.ON)
         val key = listOf(c?.packageName, j.optString("title"), j.optString("artist"), j.optString("album")).joinToString("|")
-        val needArt = out.any { it.artKey != key }
-        if (key != accentKey) { accentKey = key; com.lazyneil.lazycar.Accent.art = m?.let { art(it) }; trackAccent = com.lazyneil.lazycar.Accent.now(this); com.lazyneil.lazycar.Accent.publish(this) }
+        val artFor = out.filter { it.artKey != key }.onEach { it.artKey = key }
+        // Decoded once per track; the JPEG and Base64 encode run on io, never the main thread.
+        val bmp = if (m != null && (artFor.isNotEmpty() || key != accentKey)) art(m) else null
+        if (key != accentKey) { accentKey = key; com.lazyneil.lazycar.Accent.art = bmp; trackAccent = com.lazyneil.lazycar.Accent.now(this); com.lazyneil.lazycar.Accent.publish(this) }
         j.put("accent", trackAccent)
-        val a = if (needArt && m != null) jpeg(art(m), 1024, 92) else null
-        for (cl in out) {
-            val line = if (cl.artKey != key) JSONObject(j.toString()).put("art", a ?: "").toString().also { cl.artKey = key } else j.toString()
-            send(cl, line)
+        val line = j.toString()
+        val all = out.toList()
+        io.execute {
+            val a = if (artFor.isNotEmpty()) SystemClock.uptimeMillis().let { t0 -> (bmp?.let { jpeg(it, 1024, 92) } ?: "")
+                .also { if (bmp != null) Log.e("LazyCar", "art encode on ${Thread.currentThread().name} ${SystemClock.uptimeMillis() - t0} ms") } } else ""
+            for (cl in all) write(cl, if (cl in artFor) JSONObject(line).put("art", a).toString() else line)
         }
     }
 
-    fun send(cl: Client, line: String) = io.execute {
+    fun send(cl: Client, line: String) = io.execute { write(cl, line) }
+    private fun write(cl: Client, line: String) {
         try { cl.w.write(line); cl.w.write("\n"); cl.w.flush() } catch (_: Exception) { drop(cl) }
     }
 
@@ -170,13 +175,13 @@ class MediaListener : NotificationListenerService() {
             while (alive) {
                 val s = ss.accept().apply { tcpNoDelay = true }
                 val cl = Client(s)
+                // A tablet that reconnects left its old socket dead (Wi-Fi drop): close it now, not after TCP gives up.
+                out.filter { it.s.inetAddress == s.inetAddress }.forEach(::drop)
                 out += cl; clients = out.size
                 main.post { push() }
                 thread(name = "media-client") {
                     try { s.getInputStream().bufferedReader().forEachLine { l -> main.post { handle(cl, JSONObject(l)) } } }
                     catch (_: Exception) {}
-                // A tablet that reconnects left its old socket dead (Wi-Fi drop): close it now, not after TCP gives up.
-                out.filter { it.s.inetAddress == s.inetAddress }.forEach(::drop)
                     drop(cl)
                 }
             }
@@ -198,7 +203,8 @@ class MediaListener : NotificationListenerService() {
     private fun handle(cl: Client, j: JSONObject) {
         val t = ctl?.transportControls
         when (j.optString("c")) {
-            "toggle" -> if (ctl?.playbackState?.state == PlaybackState.STATE_PLAYING) t?.pause() else t?.play()
+            "toggle" -> if (t == null) com.lazyneil.lazycar.GoAction.launchPlayer(this, com.lazyneil.lazycar.Prefs(this).playerPkg)
+                else if (ctl?.playbackState?.state == PlaybackState.STATE_PLAYING) t.pause() else t.play()
             "next" -> t?.skipToNext()
             "prev" -> t?.skipToPrevious()
             "seek" -> t?.seekTo(j.optLong("pos"))

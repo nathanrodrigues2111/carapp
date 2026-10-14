@@ -108,6 +108,7 @@ class DashboardActivity : AppCompatActivity() {
         GpsService.startIfIdle(this)
         TapService.joinHotspot()
         PhoneMedia.start(this)
+        StreamReceiver.sync(this)
         handler.post(tick)
         // Only a launcher tap opens the split (boot and GO have their own paths). A restart after an install
         // or a crash, or a return from Settings, never does: going HOME would send navigating Maps to PiP.
@@ -157,7 +158,7 @@ class DashboardActivity : AppCompatActivity() {
         val np = PhoneMedia.np; val has = PhoneMedia.hasTrack
         Ui.swapText(findViewById(R.id.npTitle), when { !PhoneMedia.connected -> "Phone not connected"; has -> np.optString("title"); else -> "Nothing playing" })
         Ui.swapText(findViewById(R.id.npArtist), when {
-            !PhoneMedia.connected -> "Open CarApp on the phone"
+            !PhoneMedia.connected -> "Phone not reachable. Same Wi-Fi and notification access on?"
             has -> listOf(np.optString("artist"), np.optString("album")).filter { it.isNotEmpty() }.joinToString(" · ")
             else -> "Start music on the phone" })
         if (shownArt !== PhoneMedia.art) {
