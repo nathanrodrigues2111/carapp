@@ -2,8 +2,6 @@ package com.lazyneil.lazycar.audio
 
 import android.app.Activity
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -102,10 +100,8 @@ class StreamSender : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val data = intent?.getParcelableExtra("data", Intent::class.java) ?: run { stopSelf(); return START_NOT_STICKY }
         if (running) return START_NOT_STICKY
-        getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(NotificationChannel("speaker", "Tablet speaker", NotificationManager.IMPORTANCE_LOW))
-        startForeground(47475, Notification.Builder(this, "speaker").setContentTitle("Tablet speaker")
-            .setContentText("Streaming media audio to the tablet").setSmallIcon(R.drawable.ic_car_glyph).setOngoing(true).build(),
+        startForeground(com.lazyneil.lazycar.GoService.NOTIF_ID, Notification.Builder(this, com.lazyneil.lazycar.GoService.channel(this)).setContentTitle("Tablet speaker")
+            .setContentText("Streaming media audio to the tablet").setSmallIcon(R.drawable.ic_car_glyph).build(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
         try {
             val mp = getSystemService(MediaProjectionManager::class.java).getMediaProjection(Activity.RESULT_OK, data)
@@ -194,11 +190,11 @@ class StreamSender : Service() {
                     if (haveTs)
                         capMs = ((rts.framePosition - readFrames) * 1000 / Wire.RATE + (System.nanoTime() - rts.nanoTime) / 1_000_000).toInt()
                     Log.e("LazyCar", "speaker send gap=$gapMax rms=$rms kbps=$kbps out=$outMs hal=$halMs cap=$capMs tablet=$tablet")
-            if (alive) Handler(Looper.getMainLooper()).post { stopSelf() }   // read error: stop, so start() can run again
                     sq = 0.0; n = 0; bytes = 0; secAt = now; gapMax = 0
                 }
             }
             rec.stop(); rec.release()
+            if (alive) Handler(Looper.getMainLooper()).post { stopSelf() }   // read error: stop, so start() can run again
         }
         // Silent media track on the same route as the music: its timestamp is the real phone to JBL latency,
         // A2DP delay reporting included. ponytail: SBC-ish 150 ms added when the HAL hides the BT part.

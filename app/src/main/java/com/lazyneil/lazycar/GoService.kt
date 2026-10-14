@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -21,7 +20,7 @@ class GoService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(1, notification())
+        startForeground(NOTIF_ID, notification())
         TapService.ensureEnabled(this)   // widget path: GO needs the taps
         com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
         // Widget tap: derive GO vs STOP here so no LazyCar activity ever has to open.
@@ -48,16 +47,20 @@ class GoService : Service() {
         return START_NOT_STICKY
     }
 
-    companion object { const val ACTION_TOGGLE = "com.lazyneil.lazycar.TOGGLE" }
+    companion object {
+        const val ACTION_TOGGLE = "com.lazyneil.lazycar.TOGGLE"
+        /** Every CarApp service shows this one notification id, so the shade holds one CarApp entry. */
+        const val NOTIF_ID = 47475
+        /** One silent channel for it: no sound, no status bar icon, swipeable (never setOngoing). */
+        fun channel(ctx: Context): String {
+            ctx.getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(NotificationChannel("carapp", "CarApp", NotificationManager.IMPORTANCE_MIN))
+            return "carapp"
+        }
+    }
 
     private fun notification(): Notification {
-        val chId = "lazycar_go"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (nm.getNotificationChannel(chId) == null)
-                nm.createNotificationChannel(NotificationChannel(chId, "Car setup", NotificationManager.IMPORTANCE_LOW))
-        }
-        return Notification.Builder(this, chId)
+        return Notification.Builder(this, channel(this))
             .setContentTitle("CarApp")
             .setContentText("Setting up for the car…")
             .setSmallIcon(R.drawable.ic_car_glyph)

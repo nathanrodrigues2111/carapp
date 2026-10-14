@@ -169,11 +169,11 @@ object PhoneMedia {
     /** Compact controls on CarApp's tablet speaker notification while it runs. */
     fun notifyMedia(ctx: Context) {
         if (!StreamReceiver.running) return
-        ctx.getSystemService(NotificationManager::class.java).notify(47475, notification(ctx))
+        ctx.getSystemService(NotificationManager::class.java).notify(com.lazyneil.lazycar.GoService.NOTIF_ID, notification(ctx))
     }
 
     fun notification(ctx: Context): Notification {
-        val b = Notification.Builder(ctx, "speaker").setSmallIcon(R.drawable.ic_car_glyph).setOngoing(true)
+        val b = Notification.Builder(ctx, com.lazyneil.lazycar.GoService.channel(ctx)).setSmallIcon(R.drawable.ic_car_glyph)
         if (!hasTrack) return b.setContentTitle("Tablet speaker").setContentText("Ready for phone audio").build()
         fun act(icon: Int, label: String, c: String) = Notification.Action.Builder(Icon.createWithResource(ctx, icon), label,
             PendingIntent.getBroadcast(ctx, c.hashCode(), Intent(ctx, Button::class.java).setAction(c), PendingIntent.FLAG_IMMUTABLE)).build()
