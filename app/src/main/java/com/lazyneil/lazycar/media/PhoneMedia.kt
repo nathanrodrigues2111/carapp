@@ -104,6 +104,7 @@ object PhoneMedia {
                         s.getInputStream().bufferedReader().forEachLine { l -> handle(app, JSONObject(l)) }
                     }
                 } catch (_: Exception) {}
+                lastGo = null
                 if (connected) { connected = false; w = null; main.post { fire(); notifyMedia(app) } }
                 synchronized(pending) { pending.keys.toList() }.forEach { fail(it, "Phone not connected") }
                 Thread.sleep(2000)
@@ -112,16 +113,18 @@ object PhoneMedia {
     }
 
     private var sentTvol = -1
-    private var lastGo = false
+    private var lastGo: Boolean? = null   // null until the first message after a connect
 
     private fun handle(ctx: Context, j: JSONObject) {
         when (j.optString("t")) {
             "tvol" -> { Volumes.applyTablet(ctx, j.optInt("pct")); sentTvol = -1 }
             "np" -> {
                 val old = np
-                // Phone GO switched on (or we just connected while it is on): open Maps + CarApp once.
+                // Phone GO switched on while we are connected: open Maps + CarApp once. The first message after a
+                // connect (an app restart, an install, a Wi-Fi drop) only records the state: a restart must never
+                // re-split, because going HOME sends navigating Maps to PiP. Boot has its own path.
                 val go = j.optBoolean("go")
-                if (go && !lastGo && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.TapService.launchDrive(ctx) }
+                if (go && lastGo == false && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.TapService.launchDrive(ctx) }
                 lastGo = go
                 if (j.has("art")) { art = j.optString("art").takeIf { it.isNotEmpty() }?.let { decode(it) }; com.lazyneil.lazycar.Accent.art = art }
                 else j.put("art", "")
