@@ -90,7 +90,7 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
             // ponytail: strongest peak = tablet (mic is centimetres from its speaker); fails if the JBL is far louder at the tablet
             val kt = k1; val kj = k2
             val sj = c[kj] / floor; val st = c[kt] / floor
-            val res = lag(kj) - lag(kt)
+            val res = lag(kj) - lag(kt) + out.lateMs   // the tablet plays lateMs behind on purpose
             val msg = "peaks tablet ${"%.1f".format(lag(kt))} ms (x${"%.0f".format(st)}), other ${"%.1f".format(lag(kj))} ms (x${"%.0f".format(sj)})"
             if (st < 6 || abs(lag(kt)) > 200) { note = "no clear tablet peak, $msg"; residualMs = Double.NaN }
             else if (sj < 6 || c[kj] < 0.2 * c[kt]) { note = "single peak, in sync within 20 ms, $msg"; residualMs = 0.0; seen.clear() }
