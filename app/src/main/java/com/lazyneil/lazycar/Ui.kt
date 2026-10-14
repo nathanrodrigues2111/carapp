@@ -86,10 +86,14 @@ object Ui {
         val on = ColorStateList.valueOf(Accent.onColor(c))
         val checked = intArrayOf(android.R.attr.state_checked)
         val sw = ColorStateList(arrayOf(checked, intArrayOf()), intArrayOf(c, attr(root.context, R.attr.carSurfaceHigh)))
-        val thumb = ColorStateList(arrayOf(checked, intArrayOf()), intArrayOf(Color.WHITE, attr(root.context, R.attr.carTextDim)))
+        // Light accents (grey or pale art): dark ON thumb and a thin dark ring on slider thumbs for contrast.
+        val light = ColorUtils.calculateLuminance(c) > 0.6
+        val thumb = ColorStateList(arrayOf(checked, intArrayOf()), intArrayOf(Accent.onColor(c), attr(root.context, R.attr.carTextDim)))
+        val d = root.resources.displayMetrics.density
         fun walk(v: View) {
             when (v) {
-                is Slider -> { v.trackActiveTintList = csl; v.thumbTintList = csl; v.haloTintList = ColorStateList.valueOf(0x1FFFFFFF) }
+                is Slider -> { v.trackActiveTintList = csl; v.thumbTintList = csl; v.haloTintList = ColorStateList.valueOf(0x1FFFFFFF)
+                    v.thumbStrokeWidth = if (light && v.id != R.id.npSeek) d else 0f; v.thumbStrokeColor = ColorStateList.valueOf(0xFF140600.toInt()) }
                 is MaterialSwitch -> { v.trackTintList = sw; v.thumbTintList = thumb; v.trackDecorationTintList = ColorStateList.valueOf(Color.TRANSPARENT) }
                 is com.google.android.material.tabs.TabLayout -> v.setSelectedTabIndicatorColor(c)
                 is com.google.android.material.progressindicator.BaseProgressIndicator<*> -> v.setIndicatorColor(c)
