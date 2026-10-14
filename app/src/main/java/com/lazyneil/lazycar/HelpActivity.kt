@@ -28,7 +28,7 @@ class HelpActivity : AppCompatActivity() {
         "How do I set it up the first time?" to
             "1. Pair the JBL speaker in Android's Bluetooth settings.\n2. Turn on CarApp in Accessibility on the phone and the tablet (button below).\n3. On the tablet, save a Maps + CarApp pair once on the launcher: long press Maps, Split screen, pick CarApp, save.\n4. Add the Start widget on the phone.",
         "How does the tablet open?" to
-            "Maps on the left, the player on the right. CarApp opens this split by itself on start, on Start and when you open it. Turn it off in Settings, Drive, Open with Maps. On tablets without a saved pair (not Lenovo), CarApp opens Maps next to itself the standard Android way; pick the method in Settings, Advanced, Split method.",
+            "Maps on the left, the player on the right. CarApp opens this split by itself at boot, when you tap Start and when you open it. Turn it off in Settings, Drive, Open with Maps. On tablets without a saved pair (not Lenovo), CarApp opens Maps next to itself the standard Android way; pick the method in Settings, Advanced, Split method.",
         "How do I use the player?" to
             "Tap the art to play or pause, swipe it for the next or previous song. Drag the bar to seek. The library icon opens the phone's music to pick what plays.",
         "Why does the color change?" to
