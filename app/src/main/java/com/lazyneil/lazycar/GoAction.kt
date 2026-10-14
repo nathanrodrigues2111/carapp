@@ -184,6 +184,7 @@ object GoAction {
 
     @Volatile private var volReceiver: BroadcastReceiver? = null
 
+    private var volTick: Runnable? = null
     /**
      * Drive STREAM_MUSIC to [pct] and HOLD it against OnePlus' group/A2DP absolute-volume resets for
      * [budgetMs]: set it now, then re-check every 1s (max 5 corrections) and re-assert if it drifted
@@ -233,11 +234,12 @@ object GoAction {
                 else { log("volume watchdog done: got=${cur()} target=$target±$tol (corrections=${total.get()})"); unregisterVol(ctx) }
             }
         }
-        main.postDelayed(tick, 800)
+        volTick = tick; main.postDelayed(tick, 800)
     }
 
     private fun unregisterVol(ctx: Context) {
         volReceiver?.let { try { ctx.applicationContext.unregisterReceiver(it) } catch (e: Exception) {} }
+        volTick?.let { main.removeCallbacks(it) }; volTick = null
         volReceiver = null
     }
 
@@ -330,7 +332,8 @@ object GoAction {
         if (!p.snapMusicWasActive) { log("restore: music playing -> paused"); pauseMedia(ctx) }
         else log("restore: music was already playing -> left")
 
-        // Restore the pre-GO STREAM_MUSIC level if GO changed it.
+        // Restore the pre-GO STREAM_MUSIC level if GO changed it; the start volume watchdog must not undo it.
+        unregisterVol(ctx)
         if (p.volOn && p.snapMusicVol >= 0) try {
             (ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager)
                 .setStreamVolume(AudioManager.STREAM_MUSIC, p.snapMusicVol, 0)
