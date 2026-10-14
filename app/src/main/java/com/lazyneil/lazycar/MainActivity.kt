@@ -124,6 +124,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         if (isFinishing) return
+        setupShown = false   // a new open may show the setup dialog once more
         stateReceiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) { refreshGoButton() }
         }
@@ -226,54 +227,35 @@ class MainActivity : AppCompatActivity() {
         b.iconSize = dp(72); b.iconPadding = 0; b.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; b.contentDescription = desc
     }
 
-    private fun refreshSetup() {
-        val a11y = accessibilityEnabled()
-        val btOk = ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
-            PackageManager.PERMISSION_GRANTED
+    // Setup: a dialog over the home screen (the layout never moves). Shown once an item has been missing for 3 s
+    // (a service rebind flickers), at most once per open; Later hides it until the next open.
+    private var setupDialog: androidx.appcompat.app.AlertDialog? = null
+    private var setupMissing = ""; private var setupSince = 0L; private var setupShown = false
 
-        val card = findViewById<View>(R.id.setupCard)
-        val title = findViewById<TextView>(R.id.setupTitle)
-        val body = findViewById<TextView>(R.id.setupBody)
-        val btn = findViewById<MaterialButton>(R.id.setupBtn)
-        when {
-            !a11y -> {
-                title.text = "Setup needed"
-                body.text = "1. Tap Open settings\n" +
-                    "2. Find CarApp under Installed apps / Downloaded services\n" +
-                    "3. Turn it on, then tap Allow"
-                btn.text = "Open settings"
-                btn.setOnClickListener { openAccessibilitySettings() }
-                card.visibility = View.VISIBLE
-            }
-            !btOk -> {
-                title.text = "Bluetooth permission needed"
-                body.text = "1. Tap Grant permission\n" +
-                    "2. Allow Nearby devices\n" +
-                    "3. Your paired speakers appear under OUTPUT"
-                btn.text = "Grant permission"
-                btn.setOnClickListener {
-                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
-                }
-                card.visibility = View.VISIBLE
-            }
-            !com.lazyneil.lazycar.media.MediaListener.granted(this) -> {
-                title.text = "Tablet controls need notification access"
-                body.text = "1. Tap Open settings\n" +
-                    "2. Turn on CarApp media control\n" +
-                    "3. The tablet can then show and control what plays here"
-                btn.text = "Open settings"
-                btn.setOnClickListener { startActivity(com.lazyneil.lazycar.media.MediaListener.settingsIntent()) }
-                card.visibility = View.VISIBLE
-            }
-            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED -> {
-                title.text = "Music library permission"
-                body.text = "Lets the tablet browse the songs stored on this phone"
-                btn.text = "Grant permission"
-                btn.setOnClickListener { ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_MEDIA_AUDIO), 2) }
-                card.visibility = View.VISIBLE
-            }
-            else -> card.visibility = View.GONE
+    private fun refreshSetup() {
+        findViewById<View>(R.id.setupCard).visibility = View.GONE
+        val a11y = TapService.ensureEnabled(this) || accessibilityEnabled()
+        fun perm(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
+        val item: Triple<String, String, () -> Unit>? = when {
+            !a11y -> Triple("Turn on CarApp", "CarApp needs Accessibility to tap through the speaker and Maps screens.") { openAccessibilitySettings() }
+            !perm(Manifest.permission.BLUETOOTH_CONNECT) -> Triple("Allow Nearby devices", "CarApp needs it to connect your speaker.") {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1) }
+            !com.lazyneil.lazycar.media.MediaListener.granted(this) -> Triple("Allow notification access", "Lets the tablet show and control what plays here.") {
+                startActivity(com.lazyneil.lazycar.media.MediaListener.settingsIntent()) }
+            !perm(Manifest.permission.READ_MEDIA_AUDIO) -> Triple("Allow music library", "Lets the tablet browse the songs on this phone.") {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_MEDIA_AUDIO), 2) }
+            else -> null
         }
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (item == null) { setupMissing = ""; setupDialog?.dismiss(); setupDialog = null; return }
+        if (item.first != setupMissing) { setupMissing = item.first; setupSince = now; setupDialog?.dismiss(); setupDialog = null }
+        if (setupShown || setupDialog != null || now - setupSince < 3000 || isFinishing) return
+        setupShown = true
+        val ok = if (item.first == "Turn on CarApp") "Open settings" else "Allow"
+        setupDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this).setTitle(item.first).setMessage(item.second)
+            .setPositiveButton(ok) { _, _ -> item.third() }.setNegativeButton("Later", null)
+            .setOnDismissListener { setupDialog = null }.show()
+            .also { d -> d.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setTextColor(Accent.now(this)) }
     }
 
     private fun openAccessibilitySettings() {
@@ -360,7 +342,7 @@ class MainActivity : AppCompatActivity() {
     private var shownPlaying: Boolean? = null
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val tick = object : Runnable {
-        override fun run() { renderStrip(); renderGps(); handler.postDelayed(this, 1000) }
+        override fun run() { renderStrip(); renderGps(); refreshSetup(); handler.postDelayed(this, 1000) }
     }
 
     private fun session(): MediaController? = try {
@@ -404,8 +386,7 @@ class MainActivity : AppCompatActivity() {
     private fun renderGps() {
         val off = Ui.attr(this, R.attr.carTextDim)
         val g = com.lazyneil.lazycar.gps.GpsService
-        val age = if (g.lastAt == 0L) -1 else (android.os.SystemClock.elapsedRealtime() - g.lastAt) / 1000
-        val live = g.mode != "idle" && age in 0..5
+        val live = g.live()   // a stationary indoor fused fix comes every 20 s or more; it is still a fix
         tile(R.id.tileGps, R.drawable.ic_pin, "GPS", when { g.mode == "idle" -> "Off"; live -> "Connected"; else -> "Searching" },
             when { live -> Ui.GREEN; g.mode != "idle" -> Ui.AMBER; else -> off }, live)
         val bt = getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)

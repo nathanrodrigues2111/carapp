@@ -27,6 +27,23 @@ class TapService : AccessibilityService() {
     companion object {
         @Volatile private var instance: TapService? = null
 
+        /**
+         * Android drops the service from enabled_accessibility_services on every force stop (install -r, OxygenOS
+         * background cleanup, swipe away + force stop). With WRITE_SECURE_SETTINGS (granted once over adb, kept
+         * across updates) we put it back on every app start, so "Setup needed" never comes back.
+         */
+        fun ensureEnabled(ctx: android.content.Context): Boolean {
+            val r = ctx.contentResolver; val me = android.content.ComponentName(ctx, TapService::class.java).flattenToString()
+            val cur = android.provider.Settings.Secure.getString(r, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+            if (cur.split(':').any { it.equals(me, true) }) return true
+            if (ctx.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return false
+            return try {
+                android.provider.Settings.Secure.putString(r, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, if (cur.isEmpty()) me else "$cur:$me")
+                android.provider.Settings.Secure.putInt(r, android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, 1)
+                android.util.Log.e("LazyCar", "accessibility re-enabled (was '$cur')"); true
+            } catch (e: Exception) { android.util.Log.e("LazyCar", "accessibility re-enable", e); false }
+        }
+
         // ---- button mode (BT enable dialog) ----
         @Volatile var buttonTexts: List<String> = emptyList()
         @Volatile var buttonArmedUntil: Long = 0L

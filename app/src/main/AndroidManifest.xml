@@ -28,6 +28,8 @@
     <!-- Reverse camera (tablet). AUSBC needs CAMERA even for UVC, the webcam mic needs RECORD_AUDIO. -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Granted once with adb pm grant: lets CarApp turn its accessibility service back on after a force stop. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <queries>

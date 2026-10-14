@@ -21,6 +21,7 @@ class GoService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(1, notification())
+        TapService.ensureEnabled(this)   // widget path: GO needs the taps
         // Widget tap: derive GO vs STOP here so no LazyCar activity ever has to open.
         val action = if (intent?.action == ACTION_TOGGLE) {
             when (GoAction.effectiveState(Prefs(applicationContext))) {
