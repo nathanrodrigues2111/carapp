@@ -403,10 +403,11 @@ class MainActivity : AppCompatActivity() {
         tile(R.id.tileBt, R.drawable.ic_speaker, "Speaker", if (bt != null) "Connected" else "Off", if (bt != null) Ui.GREEN else off, false)
         val on = GoAction.effectiveState(p) == GoAction.ON
         tile(R.id.tileHotspot, R.drawable.ic_share, "Hotspot", when { !p.hotspot -> "Off"; on -> "On"; else -> "Off" }, if (p.hotspot && on) Ui.GREEN else off, false)
-        val s = com.lazyneil.lazycar.audio.StreamSender
-        val tab = s.running && s.tablet.isNotEmpty() || com.lazyneil.lazycar.media.MediaListener.clients > 0
-        tile(R.id.tileTablet, R.drawable.ic_tablet, "Tablet", when { tab -> "Connected"; s.running -> "Searching"; else -> "Off" },
-            when { tab -> Ui.GREEN; s.running -> Ui.AMBER; else -> off }, tab)
+        // Same source as Debug's "Media control for the tablet" row: the link's client count.
+        val ml = com.lazyneil.lazycar.media.MediaListener
+        val tab = ml.clients > 0; val waiting = ml.bound
+        tile(R.id.tileTablet, R.drawable.ic_tablet, "Tablet", when { tab -> "Connected"; waiting -> "Searching"; else -> "Off" },
+            when { tab -> Ui.GREEN; waiting -> Ui.AMBER; else -> off }, tab)
         val st = session()?.playbackState; val dur = session()?.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         val pos = if (st == null) 0L else st.position + if (st.state == PlaybackState.STATE_PLAYING)
             ((android.os.SystemClock.elapsedRealtime() - st.lastPositionUpdateTime) * st.playbackSpeed).toLong() else 0L

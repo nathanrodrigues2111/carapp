@@ -89,6 +89,7 @@ object PhoneMedia {
         started = true
         val app = ctx.applicationContext
         dir = java.io.File(app.cacheDir, "lib").apply { mkdirs() }
+        com.lazyneil.lazycar.SettingsSync.init(app) { items -> if (connected) cmd("prefs") { put("items", items) } }
         thread(name = "phone-media", isDaemon = true) {
             while (true) {
                 try {
@@ -97,6 +98,7 @@ object PhoneMedia {
                         s.connect(InetSocketAddress(ip, Link.PORT), 3000); s.tcpNoDelay = true
                         w = s.getOutputStream().bufferedWriter(); phone = ip; connected = true; sentTvol = -1   // the phone may have restarted: report our level again
                         main.postDelayed({ prefetch() }, 1500)
+                        cmd("prefs") { put("items", com.lazyneil.lazycar.SettingsSync.all()).put("full", true) }   // full exchange
                         s.getInputStream().bufferedReader().forEachLine { l -> handle(app, JSONObject(l)) }
                     }
                 } catch (_: Exception) {}
@@ -127,6 +129,7 @@ object PhoneMedia {
                 val big = old.optString("title") != j.optString("title") || old.optInt("state") != j.optInt("state") || j.has("art") && j.optString("art").isNotEmpty()
                 main.post { onChange?.invoke(); if (big) notifyMedia(ctx) }
             }
+            "prefs" -> com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))
             "list" -> synchronized(pending) { pending.remove(j.optInt("req")) }?.let { main.post { it(j) } }
         }
     }

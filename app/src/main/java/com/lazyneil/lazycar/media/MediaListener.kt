@@ -74,6 +74,8 @@ class MediaListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         bound = true; alive = true; self = this
+        com.lazyneil.lazycar.SettingsSync.init(this) { items ->
+            val line = JSONObject().put("t", "prefs").put("items", items).toString(); out.forEach { send(it, line) } }
         val msm = getSystemService(MediaSessionManager::class.java)
         msm.addOnActiveSessionsChangedListener(sessions, ComponentName(this, MediaListener::class.java), main)
         pick(); main.post(tick)
@@ -200,7 +202,8 @@ class MediaListener : NotificationListenerService() {
                 if (j.optInt("d") > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER, 0).also { main.postDelayed({ push() }, 150) }
             "volSet" -> com.lazyneil.lazycar.media.Volumes.setJblLocal(this, j.optInt("pct")).also { main.postDelayed({ push() }, 150) }
             "tvol" -> tabletPct = j.optInt("pct")
-            "accent" -> com.lazyneil.lazycar.Prefs(this).accent = j.optInt("v")
+            "prefs" -> { com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))
+                if (j.optBoolean("full")) send(cl, JSONObject().put("t", "prefs").put("items", com.lazyneil.lazycar.SettingsSync.all()).toString()) }
             "browse" -> browse(cl, j)
             "playId" -> withBrowser(cl, j) { b -> MediaController(this, b.sessionToken).transportControls.playFromMediaId(j.optString("id"), null) }
             "files" -> io.execute { reply(cl, j, Files.list(this, j.optString("id"), j.optString("q"))) }

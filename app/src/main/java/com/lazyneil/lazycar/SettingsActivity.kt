@@ -114,12 +114,14 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        SettingsSync.onRemote = { recreate() }   // a change made on the other device shows at once
         refreshA11y()
         handler.post(tick)
     }
 
     override fun onPause() {
         super.onPause()
+        SettingsSync.onRemote = null
         handler.removeCallbacks(tick)
         p.headunitIp = findViewById<TextInputEditText>(R.id.ipField).text.toString().trim()
         val ssid = findViewById<TextInputEditText>(R.id.ssidField).text.toString().trim()
@@ -381,7 +383,6 @@ class SettingsActivity : AppCompatActivity() {
                 background = android.graphics.drawable.LayerDrawable(arrayOf(ringD, fill)).apply { setLayerInset(1, dp(6), dp(6), dp(6), dp(6)) }
                 setOnClickListener {
                     p.accent = c
-                    if (Role.isTablet(this@SettingsActivity)) com.lazyneil.lazycar.media.PhoneMedia.cmd("accent") { put("v", c) }
                     recreate()
                 }
             }, android.widget.FrameLayout.LayoutParams(resources.getDimensionPixelSize(R.dimen.swatch), resources.getDimensionPixelSize(R.dimen.swatch), android.view.Gravity.CENTER))
