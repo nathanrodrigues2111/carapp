@@ -125,7 +125,7 @@ object GoAction {
             // after connect through play that keeps re-asserting the target (setStreamVolume, then
             // adjust nudges if the absolute-volume path ignores it), reacting to VOLUME_CHANGED too.
             // Runs in the background; it must NOT gate the ON transition (a warm all-on GO stays <2s).
-            // The service already lives ~14s (sequenceDuration), which outlasts this window.
+            // GoService stays alive until endAt, which covers this window.
             if (p.volOn) main.postDelayed({ enforceStartVolume(ctx, p.vol, 12000L) }, maxOf(settle, 300L))
 
             val playAt = netAt + (if (musicActive) 0L else 1000L)
@@ -133,6 +133,7 @@ object GoAction {
             else { main.postDelayed({ playMedia(ctx, p.playerPkg) }, playAt + 1500); doneAt = maxOf(doneAt, playAt + 1500) }
 
             if (p.headunit) { main.postDelayed({ launchHeadunit(ctx, p.headunitIp) }, playAt + 2000); doneAt = maxOf(doneAt, playAt + 2000) }
+            endAt = SystemClock.uptimeMillis() + maxOf(doneAt + 300L, if (p.volOn) maxOf(settle, 300L) + 12000L else 0L)
             main.postDelayed({ if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0); com.lazyneil.lazycar.audio.TabletSpeaker.onGo(ctx); TapService.launchApps(ctx) } }, doneAt + 300L)
         }
     }

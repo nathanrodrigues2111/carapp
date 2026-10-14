@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 
 /**
  * Short-lived foreground service that owns the GO/STOP sequence. Running as a foreground service
@@ -22,6 +23,7 @@ class GoService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(1, notification())
         TapService.ensureEnabled(this)   // widget path: GO needs the taps
+        com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
         // Widget tap: derive GO vs STOP here so no LazyCar activity ever has to open.
         val action = if (intent?.action == ACTION_TOGGLE) {
             when (GoAction.effectiveState(Prefs(applicationContext))) {
@@ -36,9 +38,13 @@ class GoService : Service() {
             "go" -> GoAction.run(applicationContext)
             else -> 0L    // null / transitioning toggle: nothing to do, just fall through and stop
         }
-        Handler(Looper.getMainLooper()).postDelayed({
-            stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
-        }, dur + 500L)
+        // Live until the real end of the sequence: runSequence pushes endAt out once it knows its steps.
+        GoAction.endAt = maxOf(GoAction.endAt, SystemClock.uptimeMillis() + dur)
+        val h = Handler(Looper.getMainLooper())
+        h.postDelayed(object : Runnable { override fun run() {
+            val left = GoAction.endAt - SystemClock.uptimeMillis()
+            if (left > 0) h.postDelayed(this, left + 500L) else { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+        } }, dur + 500L)
         return START_NOT_STICKY
     }
 
