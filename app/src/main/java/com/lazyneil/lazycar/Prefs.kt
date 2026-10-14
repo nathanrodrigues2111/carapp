@@ -35,7 +35,7 @@ class Prefs(private val ctx: Context) {
     /** "auto", "lenovo" (launcher saved pair) or "standard" (adjacent launch, any Android 12L+ tablet). */
     var splitMethod: String get() = sp.getString("splitMethod", null) ?: "auto"; set(v) = put("splitMethod", v)
     // Tablet joins this phone hotspot on start (saved network on the tablet).
-    var hotspotSsid: String get() = sp.getString("hotspotSsid", null) ?: "Nathan's Oneplus"; set(v) = put("hotspotSsid", v)
+    var hotspotSsid: String get() = sp.getString("hotspotSsid", null)?.takeIf { it.isNotBlank() } ?: "Nathan's Oneplus"; set(v) = put("hotspotSsid", v)
     private fun b(k: String, def: Boolean) = sp.getBoolean(k, def)
     private fun putB(k: String, v: Boolean) = sp.edit().putBoolean(k, v).apply()
 
