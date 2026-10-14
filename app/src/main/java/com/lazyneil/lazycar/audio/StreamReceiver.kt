@@ -69,7 +69,6 @@ class StreamReceiver : Service() {
     class Output(val name: String, type: Int, ctx: Context, usage: Int = AudioAttributes.USAGE_MEDIA, private val bufMs: Int = 200,
                  /** ms from a chunk's arrival to its deadline; the track buffer is sized to fit inside it. */
                  private val budgetMs: () -> Int = { 1000 }, val extraMs: () -> Double) {
-        @Volatile var protect = false   // too many glitches: -6 dB until 10 s without one (never silence: that stuck muted for minutes)
         /** Lower music for directions: -12 dB, 100 ms down, 300 ms up. */
         @Volatile var duck = false
         private var duckG = 1f
@@ -116,8 +115,9 @@ class StreamReceiver : Service() {
             if (nextSeq < 0 || c.seq >= nextSeq) jb[c.seq] = c
             while (jb.size > 600) jb.pollFirstEntry()
         }
-        fun reset() = synchronized(jb) { jb.clear(); nextSeq = -1; lateMs = 0; resetAt = SystemClock.elapsedRealtime() }   // a start spike must not leave the tablet behind for 5 min
+        fun reset() = synchronized(jb) { jb.clear(); nextSeq = -1; lateMs = 0; resetAt = SystemClock.elapsedRealtime(); fresh = true }   // a start spike must not leave the tablet behind for 5 min
         @Volatile private var resetAt = 0L
+        @Volatile private var fresh = false
 
         private fun take(): Chunk? = synchronized(jb) {
             if (nextSeq < 0) return jb.pollFirstEntry()?.value?.also { nextSeq = it.seq + 1 }
@@ -142,9 +142,9 @@ class StreamReceiver : Service() {
             // until the buffer has been healthy for 1 s, then fades in over 50 ms. Silence instead of crackle.
             var sizedAt = 0L; var spareSince = 0L
             var muted = false; var healthySince = 0L; var fadeIn = 0; var fadeLen = Wire.RATE / 20
-            // Speaker protection: more than 3 glitches in 10 s lowers the level 6 dB until 10 s pass without one.
-            val events = LongArray(4); var ev = 0; var mutedAt = 0L
-            fun glitch() { val t = SystemClock.elapsedRealtime(); events[ev++ and 3] = t; healthySince = 0; if (events.all { t - it < 10_000 }) protect = true }
+            // No automatic level changes (user: volume must never move by itself); a glitch only fades around itself.
+            var mutedAt = 0L; var starting = false
+            fun glitch() { healthySince = 0 }
             var dec = 0f; var decN = 0; var seenUnder = 0
             fun write(s: ShortArray) {
                 written += track.write(s, 0, s.size).coerceAtLeast(0) / 2
@@ -154,6 +154,8 @@ class StreamReceiver : Service() {
                 }
             }
             while (alive()) {
+                // Stream (re)start: silent until the jitter buffer holds the full budget, then a slow fade in.
+                if (fresh) { fresh = false; muted = true; starting = true; mutedAt = 0L; healthySince = 0; sizedAt = 0 }
                 val now = System.nanoTime()
                 val playNow = playNs(written) ?: (now + (written - track.playbackHeadPosition) * 1_000_000_000L / Wire.RATE)
                 val aheadNs = playNow - now
@@ -183,12 +185,16 @@ class StreamReceiver : Service() {
                     val lostOne = synchronized(jb) { jb.size >= 4 }
                     if (last != null && (client < 15 || lostOne)) {
                         val l = last; val n = l.size / 2
-                        write(lim.process(FloatArray(l.size) { if (fades > 0) 0f else l[2 * (n - 1 - it / 2) + it % 2] * (1 - (it / 2) / n.toFloat()) }))
+                        // At most one 5 ms PLC frame per gap (a fade to 0), then silence: repeated PLC buzzes, and while muted
+                        // the old code still wrote this reversed frame on every gap (a 5 ms blip in the silence).
+                        val plc = fades == 0 && !muted
+                        write(lim.process(FloatArray(l.size) { if (!plc) 0f else l[2 * (n - 1 - it / 2) + it % 2] * (1 - (it / 2) / n.toFloat()) }))
+                        fades++; concealed++; skip()
                         // A lost packet (later ones already queued) is 5 ms: conceal it and fade the next one in, no mute.
                         // Only an empty queue (the link stalled) mutes.
-                        if (lostOne) { fadeIn = Wire.RATE / 200; fadeLen = fadeIn; concealed++; skip(); continue }
-                        if (fades == 0 && !muted) { muted = true; mutes++; healthySince = 0; glitch() }
-                        fades++; concealed++; skip(); healthySince = 0
+                        if (lostOne) { fadeIn = Wire.RATE / 200; fadeLen = fadeIn; continue }
+                        if (!muted) { muted = true; mutes++; glitch() }
+                        healthySince = 0
                     } else Thread.sleep(2)
                     continue
                 }
@@ -202,7 +208,7 @@ class StreamReceiver : Service() {
                 if (abs(e) > 50 || (abs(errMs) > 8 && abs(e) > 8)) {
                     val y = rs.process(c.pcm, 1.0); val yn = y.size / 2
                     for (i in 0 until yn) { val g = 1 - i / yn.toFloat(); y[2 * i] *= g; y[2 * i + 1] *= g }
-                    if (muted || fades > 0) y.fill(0f)
+                    if (muted || fades > 0 || fadeIn > 0) y.fill(0f)   // coming out of silence: a full level first sample would click
                     write(lim.process(y)); last = c.pcm; realigns++
                     if (e > 0) { var k = ((e - Wire.CHUNK_MS) / Wire.CHUNK_MS).toInt(); while (k-- > 0 && depthMs - Wire.CHUNK_MS > 30) { skip(); depthMs -= Wire.CHUNK_MS; dropped++ } }
                     else write(ShortArray(((-e - Wire.CHUNK_MS).coerceIn(0.0, 600.0) * Wire.RATE / 1000).toInt() * 2))
@@ -216,19 +222,20 @@ class StreamReceiver : Service() {
                 val x = rs.process(c.pcm, r)
                 val fr = x.size / 2
                 val t = SystemClock.elapsedRealtime()
-                if (protect && t - events[(ev - 1) and 3] > 10_000) protect = false
                 if (!muted && depthMs < 20) { for (i in x.indices) x[i] *= 1 - (i / 2) / fr.toFloat(); muted = true; mutes++; healthySince = 0; glitch() }
                 else if (muted) {
-                    // Back after 300 ms of a usable buffer, and never more than 2 s of silence while audio arrives:
-                    // the old 60 ms for 1 s (5 s when protecting) rule never held with 70 to 130 ms jitter and stayed silent.
+                    // Drop: back after 150 ms of a usable buffer (fade in 50 ms), never more than 2 s of silence while audio arrives.
+                    // Start: wait for the full track buffer for 500 ms (30 ms after 5 s, forced at 8 s), fade in 350 ms.
                     if (mutedAt == 0L) mutedAt = t
-                    if (depthMs < 30) healthySince = 0 else if (healthySince == 0L) healthySince = t
-                    if ((healthySince != 0L && t - healthySince >= 300) || t - mutedAt >= 2000) { fadeIn = Wire.RATE / 20; fadeLen = fadeIn; muted = false; mutedAt = 0L }
+                    val need = if (starting && t - mutedAt < 5000) bufferMs else 30
+                    if (depthMs < need) healthySince = 0 else if (healthySince == 0L) healthySince = t
+                    if ((healthySince != 0L && t - healthySince >= (if (starting) 500 else 150)) || t - mutedAt >= (if (starting) 8000 else 2000)) {
+                        fadeIn = if (starting) Wire.RATE * 35 / 100 else Wire.RATE / 20; fadeLen = fadeIn; muted = false; mutedAt = 0L; starting = false }
                     else x.fill(0f)
                 }
                 if (!muted && fadeIn > 0) for (i in 0 until fr) { val g = 1 - (fadeIn - i).coerceAtLeast(0) / fadeLen.toFloat(); x[2 * i] *= g; x[2 * i + 1] *= g }
                 if (fadeIn > 0) fadeIn = (fadeIn - fr).coerceAtLeast(0)
-                val dt = (if (duck) 0.25f else 1f) * (if (protect) 0.5f else 1f)
+                val dt = if (duck) 0.25f else 1f
                 if (duckG != dt || dt != 1f) for (i in 0 until fr) {
                     duckG = if (duckG > dt) maxOf(dt, duckG - 0.75f / (Wire.RATE / 10)) else minOf(dt, duckG + 0.75f / (Wire.RATE * 0.3f))
                     x[2 * i] *= duckG; x[2 * i + 1] *= duckG
@@ -334,7 +341,7 @@ class StreamReceiver : Service() {
                     kbps = (bytes * 8 / (now - secAt)).toInt(); bytes = 0; secAt = now
                     rms = kotlin.math.sqrt(sq / maxOf(n, 1)).toInt(); sq = 0.0; n = 0; val g = gapMax; gapMax = 0
                     Log.e("LazyCar", "speaker recv kbps=$kbps gap=$g rms=$rms rtt=${"%.1f".format(rttMs)} jitter=${"%.1f".format(jitterMs)} target=$targetMs phoneOut=$phoneOutMs lag=$lagMs acoustic=${"%.0f".format(acousticMs)} lost=$lost " +
-                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} realign=${it.realigns} late=${it.lateMs} clip=${it.lim.clipped} out=${it.outLevel()} prot=${it.protect} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
+                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} realign=${it.realigns} late=${it.lateMs} clip=${it.lim.clipped} out=${it.outLevel()} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
                 }
             } catch (_: Exception) {}
         }
@@ -350,7 +357,8 @@ class StreamReceiver : Service() {
         @Volatile var offsetNs = 0L
         @Volatile var minLagNs = 0L
         private var peak = 0.0
-        fun reset() { win.clear(); peak = 0.0 }
+        private var resetNs = 0L
+        fun reset() { win.clear(); peak = 0.0; resetNs = System.nanoTime() }
         fun add(t3: Long, t0: Long, p1: Long, p2: Long, mix: Long) {
             if (t0 == 0L) return
             val rtt = (t3 - t0) - (p2 - p1)
@@ -366,6 +374,7 @@ class StreamReceiver : Service() {
             minLagNs = win.minOf { it[3] }; lagMs = (minLagNs / 1_000_000).toInt()
             // Peak hold that halves in about 5 s (200 packets a second).
             peak = maxOf((lag - minLagNs) / 1e6, peak * 0.9993)
+            if (t3 - resetNs < 10_000_000_000L) peak = maxOf(peak, 180.0)   // first 10 s: assume the worst (target 300), never grow from small
             jitterMs = peak
             targetMs = (peak * 1.5 + 30).toInt().coerceIn(80, 300)
         }
