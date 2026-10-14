@@ -394,7 +394,7 @@ class SettingsActivity : AppCompatActivity() {
         Accent.now(this).let { if (it != shownAccent) { shownAccent = it; Ui.paintAccent(findViewById(R.id.root), it) } }
         val g = com.lazyneil.lazycar.gps.GpsService
         val live = g.live()
-        Ui.status(findViewById(R.id.gpsLive), g.status(), when { live -> Ui.GREEN; g.mode != "idle" -> Ui.AMBER; else -> Ui.attr(this, R.attr.carTextDim) })
+        Ui.status(findViewById(R.id.gpsLive), if (Role.isTablet(this)) g.status() else "Sends this phone's location to the tablet", when { live -> Ui.GREEN; g.mode != "idle" -> Ui.AMBER; else -> Ui.attr(this, R.attr.carTextDim) })
         if (!Role.isTablet(this)) return
         val cam = getSystemService(android.hardware.usb.UsbManager::class.java).deviceList.values
             .firstOrNull { com.lazyneil.lazycar.rear.UsbDevices.isVideoDevice(it) }

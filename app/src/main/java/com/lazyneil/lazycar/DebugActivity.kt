@@ -47,6 +47,7 @@ class DebugActivity : AppCompatActivity() {
         val eval: () -> Pair<St, String>,
         val buttons: List<Pair<String, () -> Unit>> = emptyList(),
         val fix: Intent? = null,
+        val toggle: Pair<() -> Boolean, (Boolean) -> Unit>? = null,   // a switch in the button bar
     ) {
         lateinit var status: TextView
         lateinit var detail: TextView
@@ -95,6 +96,10 @@ class DebugActivity : AppCompatActivity() {
         if (tablet) rows += Row("Tablet Bluetooth output", {
             St.WAITING to if (com.lazyneil.lazycar.audio.TabletSpeaker.btToo(this)) "On: also plays on a speaker paired with the tablet" else "Off" },
             listOf("Toggle" to { com.lazyneil.lazycar.audio.TabletSpeaker.setBtToo(this, !com.lazyneil.lazycar.audio.TabletSpeaker.btToo(this)) }))
+        if (tablet) rows += Row("Use tablet GPS when the phone is gone", {
+            St.WAITING to if (GpsService.handBack(this)) "On: the tablet's own GPS takes over without the phone" else "Off: Maps holds the last phone fix" },
+            toggle = ({ GpsService.handBack(this) } to { on: Boolean ->
+                GpsService.setHandBack(this, on); GpsService.launch(this, "receive", save = false) }))
         if (tablet) rows += Row("Rear camera", ::camera,
             listOf("Open preview" to { startActivity(Intent(this, RearActivity::class.java)) }))
         else rows += Row("Speaker and Wi-Fi stream", ::audio, listOf("Refresh" to { loadA2dp() }))
@@ -125,11 +130,15 @@ class DebugActivity : AppCompatActivity() {
             for ((label, action) in r.buttons) {
                 bar.addView(button(label) { action(); h.postDelayed({ refresh() }, 500) })
             }
+            r.toggle?.let { (get, set) -> bar.addView(com.google.android.material.materialswitch.MaterialSwitch(this).apply {
+                isChecked = get(); contentDescription = r.title
+                setOnCheckedChangeListener { _, on -> set(on); h.postDelayed({ refresh() }, 500) } }) }
             r.fixBtn = button("Fix") { open(r.fix!!) }.also { it.visibility = View.GONE }
             if (r.fix != null) bar.addView(r.fixBtn)
             if (bar.childCount == 0) bar.visibility = View.GONE
             host.addView(v)
         }
+        Ui.paintAccent(findViewById(R.id.root), Accent.now(this))   // switches in the live accent
     }
 
     override fun onStart() {
