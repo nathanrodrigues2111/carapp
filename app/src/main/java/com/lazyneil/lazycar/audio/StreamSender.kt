@@ -125,7 +125,8 @@ class StreamSender : Service() {
         val fmt = AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(Wire.RATE)
             .setChannelMask(AudioFormat.CHANNEL_IN_STEREO).build()
         val rec = AudioRecord.Builder().setAudioFormat(fmt).setAudioPlaybackCaptureConfig(cfg)
-            .setBufferSizeInBytes(Wire.CHUNK * 16).build()
+            // 40 ms, not 80: capMs showed the read side sitting a full buffer behind, and every ms here is jitter headroom the tablet loses.
+            .setBufferSizeInBytes(maxOf(Wire.CHUNK * 8, AudioRecord.getMinBufferSize(Wire.RATE, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT))).build()
         val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; bind(InetSocketAddress(Wire.PHONE_PORT)) }
         socket = s
         var dest: SocketAddress? = null
