@@ -74,6 +74,12 @@ class TapService : AccessibilityService() {
         }
         @Volatile private var lastDrive = -10_000L
         const val MAPS = "com.google.android.apps.maps"
+        /** Last Maps pane repair, for Debug ("" = none yet). */
+        @Volatile var lastRepair = ""
+        @Volatile private var repairAt = -10_000L
+
+        /** Every 2 s while the player is in the split: is the Maps pane stuck in PiP? Then re-open Maps once per 10 s. */
+        fun checkMapsPane() { val svc = instance ?: return; svc.h.post { svc.mapsPane() } }
         /** Last pair launch: true = tapped the launcher's saved pair, false = none found, null = not tried. */
         @Volatile var pairFound: Boolean? = null
 
@@ -178,6 +184,30 @@ class TapService : AccessibilityService() {
         val b = android.accessibilityservice.GestureDescription.Builder()
         strokes.forEach { b.addStroke(it) }
         dispatchGesture(b.build(), null, null)
+    }
+
+    /** Maps stuck after PiP: in PiP, much shorter than the CarApp window, or showing the PiP layout
+     *  (almost nothing to tap). ponytail: "under 3 clickable nodes" is a heuristic for the PiP layout. */
+    private fun mapsPane() {
+        val ws = (windows ?: emptyList()).filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+        fun bounds(w: android.view.accessibility.AccessibilityWindowInfo) = android.graphics.Rect().also { w.getBoundsInScreen(it) }
+        val me = ws.firstOrNull { it.root?.packageName == packageName } ?: return
+        val maps = ws.firstOrNull { it.root?.packageName == MAPS } ?: return
+        var clickable = 0
+        fun count(n: AccessibilityNodeInfo?, depth: Int) { n ?: return; if (n.isClickable) clickable++
+            if (depth < 25) for (i in 0 until n.childCount) count(n.getChild(i), depth + 1) }
+        count(maps.root, 0)
+        val why = when {
+            maps.isInPictureInPictureMode -> "in PiP"
+            bounds(maps).height() < bounds(me).height() * 0.8f -> "PiP size ${bounds(maps).toShortString()}"
+            clickable < 3 -> "PiP layout ($clickable buttons)"
+            else -> return
+        }
+        if (SystemClock.elapsedRealtime() - repairAt < 10_000) return
+        repairAt = SystemClock.elapsedRealtime()
+        startPkg(this, MAPS, 0)   // normal launch intent; the least disruptive repair, keeps navigation
+        lastRepair = android.text.format.DateFormat.format("HH:mm:ss", System.currentTimeMillis()).toString() + ": Maps $why, re-opened it"
+        android.util.Log.e("LazyCar", "split: repaired Maps pane, $why")
     }
 
     private fun inSplit() = (windows ?: emptyList())

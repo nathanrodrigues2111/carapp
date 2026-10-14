@@ -71,7 +71,8 @@ class MainActivity : AppCompatActivity() {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         if (Role.isTablet(this)) {   // tablet home is the camera + GPS dashboard
             super.onCreate(savedInstanceState)
-            startActivity(Intent(this, DashboardActivity::class.java)); finish(); return
+            startActivity(Intent(this, DashboardActivity::class.java)
+                .putExtra("launcher", intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER))); finish(); return
         }
         Role.applyComponents(this)
         p = Prefs(this)

@@ -32,8 +32,9 @@ class DashboardActivity : AppCompatActivity() {
 
     private lateinit var root: View
     private val handler = Handler(Looper.getMainLooper())
+    private var ticks = 0
     private val tick = object : Runnable {
-        override fun run() { render(); handler.postDelayed(this, 1000) }
+        override fun run() { render(); if (++ticks % 2 == 0 && isInMultiWindowMode) TapService.checkMapsPane(); handler.postDelayed(this, 1000) }
     }
 
     private val perms = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -48,6 +49,7 @@ class DashboardActivity : AppCompatActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_dashboard)
+        launcherOpen = savedInstanceState == null && intent.getBooleanExtra("launcher", false)
         root = findViewById(R.id.root)
         Ui.edge(this, findViewById(R.id.frame))   // backdrop stays full window
         if (resources.configuration.screenWidthDp >= 840) {   // full width: rail left, art left, controls right
@@ -107,12 +109,14 @@ class DashboardActivity : AppCompatActivity() {
         TapService.joinHotspot()
         PhoneMedia.start(this)
         handler.post(tick)
-        // Full screen: go to the Maps + CarApp split. In the split isInMultiWindowMode is true and
-        // launchDrive skips when already split, and the 15 s gap stops retries, so it cannot loop.
-        if (!isInMultiWindowMode && Ui.openOnLaunch(this) && SystemClock.elapsedRealtime() - splitAt > 15_000) {
+        // Only a launcher tap opens the split (boot and GO have their own paths). A restart after an install
+        // or a crash, or a return from Settings, never does: going HOME would send navigating Maps to PiP.
+        if (launcherOpen && !isInMultiWindowMode && Ui.openOnLaunch(this) && SystemClock.elapsedRealtime() - splitAt > 15_000) {
             splitAt = SystemClock.elapsedRealtime(); TapService.launchDrive(this)
         }
+        launcherOpen = false
     }
+    private var launcherOpen = false
     private companion object { var splitAt = -15_000L }
 
     override fun onPause() { super.onPause(); handler.removeCallbacks(tick) }

@@ -96,6 +96,7 @@ class DebugActivity : AppCompatActivity() {
         if (tablet) rows += Row("Tablet Bluetooth output", {
             St.WAITING to if (com.lazyneil.lazycar.audio.TabletSpeaker.btToo(this)) "On: also plays on a speaker paired with the tablet" else "Off" },
             listOf("Toggle" to { com.lazyneil.lazycar.audio.TabletSpeaker.setBtToo(this, !com.lazyneil.lazycar.audio.TabletSpeaker.btToo(this)) }))
+        if (tablet) rows += Row("Maps pane", { if (TapService.lastRepair.isEmpty()) St.PASS to "No repair needed yet" else St.WAITING to "Repaired Maps pane at ${TapService.lastRepair}" })
         if (tablet) rows += Row("Use tablet GPS when the phone is gone", {
             St.WAITING to if (GpsService.handBack(this)) "On: the tablet's own GPS takes over without the phone" else "Off: Maps holds the last phone fix" },
             toggle = ({ GpsService.handBack(this) } to { on: Boolean ->
