@@ -347,6 +347,11 @@ class SettingsActivity : AppCompatActivity() {
         Ui.segmented(findViewById(R.id.splitMethod), listOf("Auto", "Lenovo pair", "Standard"), methods.indexOf(p.splitMethod).coerceAtLeast(0)) {
             p.splitMethod = methods[it] }
         intArrayOf(R.id.driveHeader, R.id.driveCard).forEach { findViewById<View>(it).visibility = if (tablet) View.VISIBLE else View.GONE }
+        // Lower music for directions: pref "duckNav" (lazycar, default on), shared; audio reads it.
+        findViewById<MaterialSwitch>(R.id.duckSwitch).apply {
+            isChecked = Ui.duckNav(this@SettingsActivity)
+            setOnCheckedChangeListener { _, on -> Ui.setOpen(this@SettingsActivity, "duckNav", on) }
+        }
         findViewById<MaterialSwitch>(R.id.openMapsSwitch).apply {
             isChecked = Ui.openWithMaps(this@SettingsActivity)
             setOnCheckedChangeListener { _, on -> Ui.setOpen(this@SettingsActivity, "openWithMaps", on) }

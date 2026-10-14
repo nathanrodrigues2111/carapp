@@ -45,6 +45,8 @@ object Ui {
     /** One switch, "Open with Maps": the Maps + CarApp split on tablet start, on GO and when CarApp opens. */
     fun openWithMaps(c: Context) = sp(c).getBoolean("openWithMaps", true)
     fun openOnBoot(c: Context) = openWithMaps(c)
+    /** Lower the music while Maps speaks directions. Shared setting, default on. */
+    fun duckNav(c: Context) = sp(c).getBoolean("duckNav", true)
     fun openOnGo(c: Context) = openWithMaps(c)
     fun openOnLaunch(c: Context) = openWithMaps(c)
     fun setOpen(c: Context, key: String, on: Boolean) = sp(c).edit().putBoolean(key, on).apply()

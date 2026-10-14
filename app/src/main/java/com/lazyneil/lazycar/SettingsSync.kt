@@ -16,6 +16,7 @@ object SettingsSync {
     private class Key(val name: String, val file: String, val key: String, val def: Any)
     private val KEYS = listOf(
         Key("openWithMaps", "lazycar", "openWithMaps", true),
+        Key("duckNav", "lazycar", "duckNav", true),
         Key("speakerOn", "speaker", "on", true),        // phone "send" and tablet "play" are one switch
         Key("syncTrim", "speaker", "delay", 0),
         Key("gpsShare", "lazygps", "mode", true),

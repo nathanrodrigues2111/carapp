@@ -16,6 +16,7 @@
             <TextView style="@style/SectionHeader" android:text="Audio" />
             <LinearLayout style="@style/SetCard">
                 <include layout="@layout/view_outputs" />
+                <LinearLayout android:id="@+id/rowDuck" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Lower music for directions" /><TextView style="@style/SetSub" android:text="Quieter while Maps speaks a turn" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/duckSwitch" style="@style/SetSwitch" /></LinearLayout>
                 <View android:id="@+id/audioAnchor" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
             </LinearLayout>
             <TextView style="@style/SectionHeader" android:id="@+id/driveHeader" android:text="Drive" />
