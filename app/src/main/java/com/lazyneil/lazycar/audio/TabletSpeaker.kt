@@ -40,10 +40,17 @@ object TabletSpeaker {
         else -> "on, connected"
     }
 
+    /** The phone also uses this tablet as a Bluetooth speaker (A2DP sink): a second, lossy, unsynced copy on top of ours. */
+    fun btSinkPlaying(ctx: Context) = try {    // 11 = BluetoothProfile.A2DP_SINK (hidden constant); playback uids are anonymized for us
+        ctx.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter.getProfileConnectionState(11) == android.bluetooth.BluetoothProfile.STATE_CONNECTED
+    } catch (_: Exception) { false }
+    private const val BT_SINK = "The phone also plays to this tablet over Bluetooth. On the phone: Bluetooth, this tablet, turn off Media audio"
+
     /** One line for Settings; the full numbers are in Debug. */
     fun line(ctx: Context): String = if (Role.isTablet(ctx)) {
         val r = StreamReceiver
         when {
+            btSinkPlaying(ctx) -> BT_SINK
             !r.running -> "Off"
             SystemClock.elapsedRealtime() - r.lastAt > 2000 -> "Searching for the phone"
             r.outputs.all { kotlin.math.abs(it.errMs) < 20 } -> "In sync"
@@ -54,6 +61,7 @@ object TabletSpeaker {
     fun status(ctx: Context): String = if (Role.isTablet(ctx)) {
         val r = StreamReceiver
         when {
+            btSinkPlaying(ctx) -> BT_SINK
             !r.running -> "Off"
             SystemClock.elapsedRealtime() - r.lastAt > 2000 -> "Waiting for the phone"
             else -> "Connected to ${r.phone}, ${Wire.FORMAT}, ${r.kbps} kbps, level ${r.rms}. " +
