@@ -156,6 +156,7 @@ class GpsService : Service(), LocationListener {
             if (mode == "send") active(com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this@GpsService)) == com.lazyneil.lazycar.GoAction.ON
                 || com.lazyneil.lazycar.media.MediaListener.clients > 0)
             last?.let { if (now - sentAt > 900 && now - lastFixAt < 60000) send(it) }
+            if (mode == "send" && !paused) fused(now - gpsAt > 10000)
             if (running) tick.postDelayed(this, 1000)
         }
     }
@@ -174,15 +175,24 @@ class GpsService : Service(), LocationListener {
         if (on) {
             radio?.acquire(); wake?.acquire()
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
-            // The provider/minTime overload asks fused for BALANCED, which indoors means one 100 m fix every 30 s.
-            lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER,
-                android.location.LocationRequest.Builder(1000L).setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY).build(),
-                mainExecutor, this)
             lm.registerGnssStatusCallback(gnss, android.os.Handler(Looper.getMainLooper()))
         } else {
-            lm.removeUpdates(this); lm.unregisterGnssStatusCallback(gnss)
+            lm.removeUpdates(this); fused(false); lm.unregisterGnssStatusCallback(gnss)
             radio?.release(); wake?.release(); last = null; lastAt = 0; sats = -1
         }
+    }
+
+    // Fused only after 10 s without a GNSS fix, and BALANCED: HIGH_ACCURACY made GMS Wi-Fi scan every ~9.6 s,
+    // each scan stalled the tablet audio stream ~120 ms. In the car GNSS works, so no scanning at all.
+    private val fusedL = android.location.LocationListener { onLocationChanged(it) }
+    private var fusedOn = false
+    private fun fused(on: Boolean) {
+        if (on == fusedOn) return
+        fusedOn = on
+        if (on) lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER,
+            android.location.LocationRequest.Builder(1000L).setQuality(android.location.LocationRequest.QUALITY_BALANCED_POWER_ACCURACY).build(),
+            mainExecutor, fusedL)
+        else lm.removeUpdates(fusedL)
     }
 
     override fun onLocationChanged(l: Location) {
