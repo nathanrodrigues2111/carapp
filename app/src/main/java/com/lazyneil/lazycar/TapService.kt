@@ -214,7 +214,7 @@ class TapService : AccessibilityService() {
         val maps = ws.firstOrNull { it.root?.packageName == MAPS }
         val screenW = resources.displayMetrics.widthPixels
         if (maps == null) {   // the PiP-sized task is not even listed: the other pane is empty
-            if (bounds(me).width() < screenW * 0.7f) repairMaps("pane empty")
+            if (ws.size == 1 && bounds(me).width() < screenW * 0.7f) repairMaps("pane empty")   // another app beside us is not an empty pane
             return
         }
         var clickable = 0
@@ -371,7 +371,7 @@ class TapService : AccessibilityService() {
         val root = rootInActiveWindow ?: return
         if (!buttonDumped) { buttonDumped = true; android.util.Log.e("LazyCar", "BUTTON DIALOG pkg=$pkg"); dump(root, 0) }
         val btn = find(root) { n ->
-            n.isClickable && n.text?.toString()?.trim()?.let { t -> buttonTexts.any { t.equals(it, true) || t.contains(it, true) } } == true
+            n.isClickable && n.text?.toString()?.trim()?.let { t -> buttonTexts.any { t.equals(it, true) } } == true
         } ?: return
         val ok = btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         android.util.Log.e("LazyCar", "TapService clicked confirm '${btn.text}' ok=$ok")
