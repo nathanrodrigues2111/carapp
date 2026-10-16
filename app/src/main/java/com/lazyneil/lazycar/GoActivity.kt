@@ -14,6 +14,7 @@ class GoActivity : Activity() {
         val p = Prefs(applicationContext)
         val svc = Intent(this, GoService::class.java)
         val st = GoAction.effectiveState(p)
+        if (intent?.getStringExtra("action") == "btoff") { GoAction.disableBt(applicationContext); finish(); return }   // Shut down notice tap
         when {
             intent?.getBooleanExtra("volumeOnly", false) == true -> svc.putExtra("action", "volume")
             intent?.getStringExtra("action") == "stop" -> svc.putExtra("action", "stop")   // Shut down always restores, whatever the state
@@ -25,8 +26,10 @@ class GoActivity : Activity() {
         startForegroundService(svc)
         if (svc.getStringExtra("action") == "go" && !com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this)) {
             val bt = getSystemService(BluetoothManager::class.java)?.adapter
-            if (bt != null && !bt.isEnabled) Ui.openSettings(this, Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false)
-            if (com.lazyneil.lazycar.audio.TabletSpeaker.enabled(this)) com.lazyneil.lazycar.audio.StreamSender.askConsent(this)
+            val btOff = bt != null && !bt.isEnabled
+            // One system dialog at a time: a second one opened on top closed the Bluetooth one. Consent first, it opens Bluetooth after.
+            if (com.lazyneil.lazycar.audio.TabletSpeaker.needsCapture(this)) com.lazyneil.lazycar.audio.StreamSender.askConsent(this, thenBt = btOff)
+            else if (btOff) Ui.openSettings(this, Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false)
         }
         finish()
     }

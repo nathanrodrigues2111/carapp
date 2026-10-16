@@ -183,7 +183,10 @@ object PhoneMedia {
                 if (go && lastGo == false && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.Drive.hint(ctx) }
                 lastGo = go
                 // Report our speaker level so the phone slider is live; hardware buttons included.
-                Volumes.localPct(ctx).let { if (it != sentTvol) { sentTvol = it; Volumes.saveTablet(ctx, it); cmd("tvol") { put("pct", it) } } }
+                // Not while a Bluetooth sink holds the tablet's music: that level is the sink's, not the speaker's.
+                if (com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx) || ctx.getSystemService(android.media.AudioManager::class.java)
+                        .getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).none { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP })
+                    Volumes.localPct(ctx).let { if (it != sentTvol) { sentTvol = it; Volumes.saveTablet(ctx, it); cmd("tvol") { put("pct", it) } } }
                 if (!local) onNp(ctx, j)   // Tablet mode: the phone's own player is not ours to show
             }
             "prefs" -> com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))

@@ -253,6 +253,8 @@ class DashboardActivity : AppCompatActivity() {
             text = when {
                 miss.isNotEmpty() -> "Precise location is off. Tap to allow"
                 !com.lazyneil.lazycar.media.Files.has(this@DashboardActivity) -> "No music folder yet. Tap to pick one"
+                !com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this@DashboardActivity) && PhoneMedia.alive && PhoneMedia.np.optBoolean("spkOff") ->
+                    "Tablet speaker is off for the phone's player. On the phone, tap the Tablet speaker line to share its audio"
                 !mockAllowed() -> "Phone GPS for Maps: in Developer options, Select mock location app, pick CarApp. Tap to open"
                 else -> ""
             }

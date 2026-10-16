@@ -87,10 +87,11 @@ class MainActivity : AppCompatActivity() {
         val go = findViewById<MaterialButton>(R.id.goButton)
         val root = findViewById<View>(R.id.root)
         Ui.edge(this, scroll, 0, dp(16))   // backdrop stays full window
+        // Required first; notifications are optional and asked on their own, once, after these.
         val want = arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
+            Manifest.permission.ACCESS_COARSE_LOCATION)
             .filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-        if (want.isNotEmpty()) ActivityCompat.requestPermissions(this, want.toTypedArray(), 1)
+        if (want.isNotEmpty()) ActivityCompat.requestPermissions(this, want.toTypedArray(), 1) else askNotifications()
         if (savedInstanceState == null) opened()   // a recreate (accent change) is not an open
 
         findViewById<ImageButton>(R.id.settingsBtn).setOnClickListener {
@@ -241,6 +242,8 @@ class MainActivity : AppCompatActivity() {
                 com.lazyneil.lazycar.media.MediaListener.openSettings(this) }
             // The phone's folder is only the fallback library for Phone mode players; the tablet's CarApp player has its own.
             !tabMode() && !com.lazyneil.lazycar.media.Files.has(this) -> "No music folder yet. Tap to pick one" to { com.lazyneil.lazycar.media.Files.pick(this) }
+            com.lazyneil.lazycar.audio.TabletSpeaker.speakerOff(this) -> "Tablet speaker is off for this player. Tap to share its audio" to {
+                com.lazyneil.lazycar.audio.TabletSpeaker.setOtherApps(this, true); com.lazyneil.lazycar.audio.StreamSender.askConsent(this) }
             else -> null
         }
         val card = findViewById<View>(R.id.setupCard)
@@ -259,6 +262,14 @@ class MainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(rc: Int, perms: Array<out String>, res: IntArray) {
         super.onRequestPermissionsResult(rc, perms, res)
         if (GoAction.effectiveState(p) == GoAction.ON) com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
+        if (rc == 1) askNotifications()
+    }
+
+    private fun askNotifications() {
+        val sp = getSharedPreferences("lazycar", MODE_PRIVATE)
+        if (sp.getBoolean("notifAsked", false) || ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        sp.edit().putBoolean("notifAsked", true).apply()
+        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 3)
     }
 
     @Deprecated("startActivityForResult is enough for one folder pick")
@@ -281,6 +292,7 @@ class MainActivity : AppCompatActivity() {
                     try { pm.getApplicationIcon(pkg) } catch (e: Exception) { null })
             }
             .sortedBy { it.second.lowercase() }
+            .let { listOf(Triple(packageName, "CarApp player (music folder, tablet speaker without screen share)", pm.getApplicationIcon(packageName))) + it }
         renderPlayer()
         findViewById<View>(R.id.playerRow).setOnClickListener { showPlayerPicker() }
     }

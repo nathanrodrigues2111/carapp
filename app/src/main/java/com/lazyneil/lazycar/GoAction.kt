@@ -117,8 +117,7 @@ object GoAction {
             val netAt = settle
 
             if (tab) { main.postDelayed({ goTablet(ctx, p) }, netAt); doneAt = maxOf(doneAt, netAt + TABLET_ACK_MS + 2500L) }
-            else if (musicActive) log("skipped player launch (music active)")
-            else { main.postDelayed({ launchPlayer(ctx, p.playerPkg) }, netAt); doneAt = maxOf(doneAt, netAt) }
+            // GO never opens a player's screen: playback starts in the background below (session key or CarPlayer).
 
                         // Start volume: OnePlus can reset STREAM_MUSIC (often to max) as the A2DP sink connects,
             // so a single set won't hold. Run a watchdog from just
@@ -337,6 +336,10 @@ object GoAction {
 
         if (!p.snapMusicWasActive) { log("restore: music playing -> paused"); pauseMedia(ctx) }
         else log("restore: music was already playing -> left")
+        // CarApp's own player: paused above if GO started it; its service ends either way (Shut down = no services).
+        if (com.lazyneil.lazycar.audio.CarPlayer.session != null) {
+            if (!p.snapMusicWasActive) com.lazyneil.lazycar.audio.CarPlayer.send(ctx, "pause")
+            main.postDelayed({ ctx.stopService(Intent(ctx, com.lazyneil.lazycar.audio.CarPlayer::class.java)) }, 500) }
 
         // Restore the pre-GO STREAM_MUSIC level if GO changed it; the start volume watchdog must not undo it.
         unregisterVol(ctx)
@@ -351,7 +354,7 @@ object GoAction {
             else if (mac.isNotEmpty()) log("restore: $mac was already connected -> left")
 
         // BT off is the system "Turn off Bluetooth?" dialog, the user taps it.
-        if (!p.snapBtWasOn) { log("restore: bt on -> off"); disableBt(ctx) }
+        if (!p.snapBtWasOn) { log("restore: bt on -> off"); disableBt(ctx); if (fromPeer) main.postDelayed({ btOffNotice(ctx) }, 3600L) }
         else log("restore: bt was already on -> left")
 
         com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
@@ -379,9 +382,24 @@ object GoAction {
         if (Prefs(ctx).shutDown) ctx.getSystemService(android.app.NotificationManager::class.java).cancelAll()
     }, at)
 
+    /** Shut down came from the tablet with the phone in the background: Android blocks the "Turn off Bluetooth?" dialog,
+     *  so one tap-to-finish notification (posted after the Shut down clear) opens it from the user's own tap. */
+    private fun btOffNotice(ctx: Context) {
+        if (adapterOf(ctx)?.isEnabled != true) return
+        val nm = ctx.getSystemService(android.app.NotificationManager::class.java)
+        nm.createNotificationChannel(android.app.NotificationChannel("restore", "Shut down steps", android.app.NotificationManager.IMPORTANCE_HIGH).apply { setSound(null, null) })
+        val pi = android.app.PendingIntent.getActivity(ctx, 48, Intent(ctx, GoActivity::class.java).putExtra("action", "btoff"),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+        nm.notify(BT_NOTICE_ID, android.app.Notification.Builder(ctx, "restore").setSmallIcon(R.drawable.ic_car_glyph)
+            .setContentTitle("Bluetooth was off before Start").setContentText("Tap to turn it off")
+            .setContentIntent(pi).setAutoCancel(true).setTimeoutAfter(10 * 60_000L).build())
+        log("bt off notice posted")
+    }
+    const val BT_NOTICE_ID = 47476
+
     /** The system REQUEST_DISABLE dialog (no silent disable on Android 13+). Opens only while CarApp was just in front
      *  (app, widget, notification all go through [GoActivity]); from the tablet's Shut down Android blocks it and BT stays on. */
-    private fun disableBt(ctx: Context) {
+    fun disableBt(ctx: Context) {
         val adapter = adapterOf(ctx) ?: return
         val done = AtomicBoolean(false)
         val recv = object : BroadcastReceiver() {
@@ -414,6 +432,7 @@ object GoAction {
     private fun pauseMedia(ctx: Context) = mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PAUSE)
     /** Pause whatever holds the media keys (e.g. a video app), then PLAY straight to the chosen player's receiver. */
     fun playMedia(ctx: Context, pkg: String) {
+        if (pkg == ctx.packageName) { com.lazyneil.lazycar.audio.CarPlayer.send(ctx, "play"); return }
         if (pkg.isEmpty()) { mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PLAY); return }
         mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PAUSE)
         Handler(Looper.getMainLooper()).postDelayed({ mediaTo(ctx, pkg, KeyEvent.KEYCODE_MEDIA_PLAY) }, 400)

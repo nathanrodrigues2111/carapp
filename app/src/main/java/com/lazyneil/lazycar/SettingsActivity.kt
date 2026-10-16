@@ -69,7 +69,10 @@ class SettingsActivity : AppCompatActivity() {
         buildNav()
         // A tap anywhere on a switch row flips its switch.
         fun rows(v: View) { if (v is android.view.ViewGroup) for (i in 0 until v.childCount) {
-            val c = v.getChildAt(i); if (c is MaterialSwitch && v.id != View.NO_ID) v.setOnClickListener { c.toggle() } else rows(c) } }
+            val c = v.getChildAt(i)
+            // Prefs are the truth: a restored stale checked state (recreate, process restart) would fire the listener and save it.
+            if (c is MaterialSwitch) c.isSaveEnabled = false
+            if (c is MaterialSwitch && v.id != View.NO_ID) v.setOnClickListener { c.toggle() } else rows(c) } }
         rows(findViewById(R.id.root))
         findViewById<View>(R.id.camOpen).setOnClickListener {
             startActivity(Intent(this, com.lazyneil.lazycar.rear.RearActivity::class.java))

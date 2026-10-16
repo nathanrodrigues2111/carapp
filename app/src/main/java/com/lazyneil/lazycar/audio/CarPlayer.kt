@@ -37,6 +37,8 @@ class CarPlayer : MediaBrowserService() {
     companion object {
         @Volatile var speaker: StreamReceiver.Output? = null
         @Volatile var session: MediaSession? = null
+        /** Phone mode on the phone: decoded PCM goes straight to the tablet speaker (no capture). */
+        @Volatile var streaming = false
         fun send(ctx: Context, action: String) = try {
             ctx.startForegroundService(Intent(ctx, CarPlayer::class.java).setAction(action))
         } catch (e: Exception) { Log.e("LazyCar", "car player $action", e) }
@@ -154,10 +156,14 @@ class CarPlayer : MediaBrowserService() {
         jbl = t
         // The speaker Output (and Acoustic) live only while playing: a paused player holds no open track.
         var out: StreamReceiver.Output? = null; var outOn = booleanArrayOf(false)
+        // Phone: the tablet speaker copy goes over Wi-Fi (Net), stamped like the speaker Output's chunks.
+        val phone = !com.lazyneil.lazycar.Role.isTablet(this); var net: Net? = null
+        val npk = ByteArray(Wire.HEADER + Wire.CHUNK); val nsb = java.nio.ByteBuffer.wrap(npk, Wire.HEADER, Wire.CHUNK).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
         // No Bluetooth speaker on the tablet: the main track already plays on the built-in speaker, a copy would echo.
         fun hasBt() = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
         fun openOut(): StreamReceiver.Output? {
             if (!hasBt()) { Log.e("LazyCar", "car player: no Bluetooth speaker, built-in speaker only"); return null }
+            if (phone) { if (net == null && TabletSpeaker.enabled(this)) { net = Net(); streaming = true }; return null }
             val on = booleanArrayOf(true); outOn = on
             val o = StreamReceiver.Output("speaker", AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, this, bufMs = 700, budgetMs = { budget }, safe = true) {
                 StreamReceiver.acousticMs + TabletSpeaker.delayMs(this) }
@@ -167,7 +173,8 @@ class CarPlayer : MediaBrowserService() {
             o.run { alive && on[0] }; Acoustic(this, o) { alive && on[0] }.start()
             return o
         }
-        fun closeOut() { outOn[0] = false; out = null; speaker = null; synchronized(StreamReceiver.outputs) { StreamReceiver.outputs.clear() } }
+        fun closeOut() { outOn[0] = false; out = null; speaker = null; net?.close(); net = null; streaming = false
+            synchronized(StreamReceiver.outputs) { StreamReceiver.outputs.clear() } }
         val limJ = Limiter()
         var written = 0L; var seq = 0; var halAt = 0L; var hal = 200
         var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
@@ -178,7 +185,7 @@ class CarPlayer : MediaBrowserService() {
         while (alive) {
             if (!playing) { if (t.playState == AudioTrack.PLAYSTATE_PLAYING) { t.pause(); closeOut() }; Thread.sleep(50); continue }
             if (t.playState != AudioTrack.PLAYSTATE_PLAYING) t.play()
-            if (out != null && !hasBt()) closeOut()
+            if ((out != null || net != null) && !hasBt()) closeOut()
             val o = out ?: (if (now0() - outTry > 2000) { outTry = now0(); openOut().also { out = it } } else null)
             try {
                 // (Re)open on a song change or seek.
@@ -223,7 +230,9 @@ class CarPlayer : MediaBrowserService() {
                             Log.e("LazyCar", "car player: JBL lost ${lost * 1000 / Wire.RATE} ms, re-primed the speaker") }
                         val atNs = System.nanoTime() + ((chunkFrame - head) * 1_000_000_000L / Wire.RATE) + (hal + JBL_EXTRA_MS) * 1_000_000L
                         budget = ((atNs - System.nanoTime()) / 1_000_000).toInt()
-                        o?.put(StreamReceiver.Chunk(seq++, pend.copyOf(), atNs)); pn = 0; chunkFrame += pend.size / 2
+                        net?.let { nt -> nsb.clear(); nsb.put(pend); val nowNs = System.nanoTime()
+                            nt.send(npk, Wire.CHUNK, seq, nowNs, -maxOf(0, ((atNs - nowNs) / 1_000_000).toInt()) - 1) }
+                        o?.put(StreamReceiver.Chunk(seq, pend.copyOf(), atNs)); seq++; pn = 0; chunkFrame += pend.size / 2
                     }
                 }
                 written += t.write(pcm, 0, pcm.size).coerceAtLeast(0) / 2

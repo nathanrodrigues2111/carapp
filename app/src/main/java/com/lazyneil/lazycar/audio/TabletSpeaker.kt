@@ -45,13 +45,23 @@ object TabletSpeaker {
     fun acoustic(ctx: Context) = sp(ctx).getInt("acoustic", 0)
     fun saveAcoustic(ctx: Context, v: Int) = sp(ctx).edit().putInt("acoustic", v).apply()
 
-    fun onGo(ctx: Context) { if (enabled(ctx)) StreamSender.start(ctx) }
+    /** "Tablet speaker for other apps" (default on): the share audio capture for outside players, consent once per Start. */
+    fun otherApps(ctx: Context) = sp(ctx).getBoolean("otherApps", true)
+    fun setOtherApps(ctx: Context, on: Boolean) = sp(ctx).edit().putBoolean("otherApps", on).apply()
+    /** GO needs the capture (and its consent): Phone mode, an outside player, opted in. CarApp's player streams directly. */
+    fun needsCapture(ctx: Context) = enabled(ctx) && otherApps(ctx) && com.lazyneil.lazycar.Prefs(ctx).playerPkg != ctx.packageName
+    fun onGo(ctx: Context) = StreamSender.start(ctx)
+    /** Phone, ON: an outside player plays to the Bluetooth speaker but nothing goes to the tablet. Never silent without saying so. */
+    fun speakerOff(ctx: Context) = !Role.isTablet(ctx) && enabled(ctx) && !StreamSender.running && !CarPlayer.streaming &&
+        com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(ctx)) == com.lazyneil.lazycar.GoAction.ON && players(ctx).isNotEmpty() &&
+        ctx.getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).any { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
     fun onStop(ctx: Context) = StreamSender.stop(ctx)
 
     /** One-word state for the main screen row. */
     fun summary(ctx: Context): String = when {
         !enabled(ctx) -> "off"
         Role.isTablet(ctx) -> if (StreamReceiver.running && SystemClock.elapsedRealtime() - StreamReceiver.lastAt <= 2000) "connected" else "searching"
+        CarPlayer.streaming -> if (StreamSender.tablet.isEmpty()) "on, searching for the tablet" else "on, connected"
         !StreamSender.running -> if (com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(ctx)) == com.lazyneil.lazycar.GoAction.ON)
             "stopped, tap Stop then Start" else "on, waits for Start"
         StreamSender.tablet.isEmpty() -> "on, searching for the tablet"
@@ -92,6 +102,7 @@ object TabletSpeaker {
     } else {
         val s = StreamSender
         when {
+            CarPlayer.streaming -> if (s.tablet.isEmpty()) "CarApp player, waiting for the tablet" else "CarApp player streaming to ${s.tablet}, ${Wire.FORMAT}, no capture"
             s.error.isNotEmpty() && !s.running -> s.error
             !s.running -> "Waits for Start"
             s.tablet.isEmpty() -> "Capturing, waiting for the tablet"
@@ -126,6 +137,15 @@ object TabletSpeaker {
             isChecked = enabled(a); slider?.visibility = if (isChecked) View.VISIBLE else View.GONE
             setOnCheckedChangeListener { _, v -> sp(a).edit().putBoolean("on", v).apply(); slider?.visibility = if (v) View.VISIBLE else View.GONE
                 if (tablet) StreamReceiver.sync(a) else if (v) StreamSender.start(a) else StreamSender.stop(a) }
+        }
+        if (!tablet) {   // opt-in: other players need the screen share capture (system consent) for the tablet copy
+            val r = inflater.inflate(R.layout.item_set_switch, parent, false)
+            r.findViewById<TextView>(R.id.setTitle).text = "Tablet speaker for other apps"
+            r.findViewById<TextView>(R.id.setSub).text = "Start asks once to share their audio. Off: other players play on the phone speaker link only"
+            r.findViewById<MaterialSwitch>(R.id.setSwitch).apply { isSaveEnabled = false; isChecked = otherApps(a)
+                setOnCheckedChangeListener { _, v -> setOtherApps(a, v); if (!v) StreamSender.stop(a) } }
+            r.setOnClickListener { r.findViewById<MaterialSwitch>(R.id.setSwitch).toggle() }
+            parent.addView(r, parent.indexOfChild(anchor) + 1 + rows++)
         }
         if (tablet) {
             val r = inflater.inflate(R.layout.item_set_slider, parent, false)

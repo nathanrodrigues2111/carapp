@@ -60,11 +60,14 @@ class StreamSender : Service() {
         @Volatile private var granted: Intent? = null
         @Volatile private var asking = false   // the dialog is up: its answer starts or holds the capture
         /** GO tap (an activity): the system consent dialog now, so the background GO end can start capturing. */
-        fun askConsent(a: Activity) { if (!running && granted == null) a.startActivity(Intent(a, Consent::class.java)) }
+        fun askConsent(a: Activity, thenBt: Boolean = false) {
+            if (!running && granted == null) a.startActivity(Intent(a, Consent::class.java).putExtra("thenBt", thenBt))
+            else if (thenBt) com.lazyneil.lazycar.Ui.openSettings(a, Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false)
+        }
 
         /** GO end: needs the MediaProjection consent, which only an activity can ask for. */
         fun start(ctx: Context) {
-            if (running) return
+            if (running || !TabletSpeaker.needsCapture(ctx)) return   // CarApp's player streams itself; others only when opted in
             // No Bluetooth speaker on the phone: music plays on the phone itself, a tablet copy would echo.
             if (ctx.getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
                     .none { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }) { error = "Connect your speaker"; granted = null; Log.e("LazyCar", "speaker send: no Bluetooth speaker, not streaming"); return }
@@ -105,13 +108,15 @@ class StreamSender : Service() {
                 if (com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this)) == com.lazyneil.lazycar.GoAction.STARTING) granted = data
                 else startForegroundService(Intent(this, StreamSender::class.java).putExtra("data", data))
             } else error = "Capture consent denied"
-            asking = false; finish()
+            asking = false
+            if (intent.getBooleanExtra("thenBt", false)) com.lazyneil.lazycar.Ui.openSettings(this, Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false)
+            finish()
         }
     }
 
     @Volatile private var alive = false
     private var projection: MediaProjection? = null
-    private var socket: DatagramSocket? = null
+    private var net: Net? = null
     private var lock: WifiManager.MulticastLock? = null
     private var wifiLow: WifiManager.WifiLock? = null
     private var wifi: WifiManager.WifiLock? = null
@@ -154,29 +159,14 @@ class StreamSender : Service() {
         val rec = AudioRecord.Builder().setAudioFormat(fmt).setAudioPlaybackCaptureConfig(cfg)
             // 40 ms, not 80: capMs showed the read side sitting a full buffer behind, and every ms here is jitter headroom the tablet loses.
             .setBufferSizeInBytes(maxOf(Wire.CHUNK * 8, AudioRecord.getMinBufferSize(Wire.RATE, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT))).build()
-        val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; bind(InetSocketAddress(Wire.PHONE_PORT)) }
-        socket = s
-        var dest: SocketAddress? = null
-        var beaconT = 0L; var beaconAt = 0L; var beaconNs = 0L
-
-        // Tablet beacons once a second; its source address is where audio goes.
-        thread(name = "speaker-beacon") {
-            val buf = ByteArray(64)
-            while (alive) try {
-                val p = DatagramPacket(buf, buf.size); s.receive(p)
-                if (p.length >= 14 && String(buf, 0, 6) == Wire.MAGIC) {
-                    duckRemote = p.length >= 15 && buf[14] == 1.toByte(); jbl?.duck = duckRemote
-                    beaconNs = System.nanoTime(); beaconT = ByteBuffer.wrap(buf, 6, 8).long; beaconAt = SystemClock.elapsedRealtime()
-                    dest = p.socketAddress; tablet = p.address.hostAddress ?: ""
-                }
-            } catch (_: Exception) {}
-        }
+        val net = Net { jbl?.duck = it }
+        this.net = net
         thread(name = "speaker-capture") {
             StreamReceiver.urgent()
             rec.startRecording()
             val pkt = ByteArray(Wire.HEADER + Wire.CHUNK)
             val bb = ByteBuffer.wrap(pkt)
-            val dp = DatagramPacket(pkt, pkt.size); var prevRd = 0L; var gapMax = 0   // one packet object, reused
+            var prevRd = 0L; var gapMax = 0
             var seq = 0; var bytes = 0L; var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
             val pool = Array(512) { ShortArray(Wire.CHUNK / 2) }   // JBL copies, reused (the JBL queue holds < 1 s)
             var readFrames = 0L; val rts = android.media.AudioTimestamp(); var tsAt = 0L; var haveTs = false
@@ -190,11 +180,7 @@ class StreamSender : Service() {
                 // Mixer time of this chunk's first frame, so the tablet gets a smooth timeline despite bursty reads.
                 val mixNs = if (haveTs) rts.nanoTime + (readFrames - rts.framePosition) * 1_000_000_000L / Wire.RATE else System.nanoTime() - capMs * 1_000_000L
                 n += r / 2; readFrames += r / 4
-                val d = dest
-                if (d != null && now - beaconAt < 5000) {
-                    bb.putInt(0, seq).putLong(4, beaconT).putLong(12, beaconNs).putLong(20, System.nanoTime()).putLong(28, mixNs).putInt(36, if (shared) Wire.SHARED_MS else outMs)
-                    try { dp.setData(pkt, 0, Wire.HEADER + r); dp.socketAddress = d; s.send(dp); bytes += Wire.HEADER + r } catch (_: Exception) {}
-                } else tablet = ""
+                if (net.send(pkt, r, seq, mixNs, if (shared) Wire.SHARED_MS else outMs)) bytes += Wire.HEADER + r
                 seq++
                 jbl?.let { o ->
                     val sh = if (r == Wire.CHUNK) pool[(seq - 1) and 511] else ShortArray(r / 2)
@@ -291,7 +277,7 @@ class StreamSender : Service() {
         volGuard?.let { unregisterReceiver(it) }; volGuard = null
         restoreMusic(); shared = false; jbl = null
         alive = false; running = false; tablet = ""; kbps = 0; rms = 0
-        socket?.close(); socket = null
+        net?.close(); net = null
         projection?.stop(); projection = null
         lock?.release(); lock = null
         wifiLow?.release(); wifiLow = null
@@ -299,6 +285,36 @@ class StreamSender : Service() {
         wake?.release(); wake = null
         super.onDestroy()
     }
+}
+
+/** Phone to tablet UDP link: answers the tablet's beacons and sends stamped PCM packets. Capture and CarPlayer share it.
+ *  [send] gets a packet with the PCM at [Wire.HEADER]; out = phone to speaker ms, or -(exact ms to the deadline) - 1. */
+class Net(private val onDuck: (Boolean) -> Unit = {}) {
+    @Volatile private var alive = true
+    @Volatile private var dest: SocketAddress? = null
+    @Volatile private var beaconT = 0L; @Volatile private var beaconAt = 0L; @Volatile private var beaconNs = 0L
+    private val s = DatagramSocket(null).apply { reuseAddress = true; broadcast = true; bind(InetSocketAddress(Wire.PHONE_PORT)) }
+    private val dp = DatagramPacket(ByteArray(1), 1)
+    init {
+        thread(name = "speaker-beacon") {   // tablet beacons once a second; its source address is where audio goes
+            val buf = ByteArray(64)
+            while (alive) try {
+                val p = DatagramPacket(buf, buf.size); s.receive(p)
+                if (p.length >= 14 && String(buf, 0, 6) == Wire.MAGIC) {
+                    StreamSender.duckRemote = p.length >= 15 && buf[14] == 1.toByte(); onDuck(StreamSender.duckRemote)
+                    beaconNs = System.nanoTime(); beaconT = ByteBuffer.wrap(buf, 6, 8).long; beaconAt = SystemClock.elapsedRealtime()
+                    dest = p.socketAddress; StreamSender.tablet = p.address.hostAddress ?: ""
+                }
+            } catch (_: Exception) {}
+        }
+    }
+    fun send(pkt: ByteArray, len: Int, seq: Int, mixNs: Long, out: Int): Boolean {
+        val d = dest
+        if (d == null || SystemClock.elapsedRealtime() - beaconAt >= 5000) { StreamSender.tablet = ""; return false }
+        ByteBuffer.wrap(pkt).putInt(0, seq).putLong(4, beaconT).putLong(12, beaconNs).putLong(20, System.nanoTime()).putLong(28, mixNs).putInt(36, out)
+        return try { dp.setData(pkt, 0, Wire.HEADER + len); dp.socketAddress = d; s.send(dp); true } catch (_: Exception) { false }
+    }
+    fun close() { alive = false; s.close(); StreamSender.tablet = "" }
 }
 
 /** Shared wire format: tablet beacons "CARSPK"+time to PHONE_PORT, phone answers with PCM packets. */

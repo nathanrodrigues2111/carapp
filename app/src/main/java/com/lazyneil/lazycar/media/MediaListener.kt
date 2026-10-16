@@ -181,6 +181,7 @@ class MediaLink : android.app.Service() {
         val m = sess.ctl?.metadata
         val j = sess.np()
         j.put("go", com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this)) == com.lazyneil.lazycar.GoAction.ON)
+            .put("spkOff", com.lazyneil.lazycar.audio.TabletSpeaker.speakerOff(this))
         val key = sess.key(j)
         val artFor = out.filter { it.artKey != key }.onEach { it.artKey = key }
         // Decoded once per track; the JPEG and Base64 encode run on io, never the main thread.
@@ -320,7 +321,7 @@ class Session(val ctx: Context, private val local: Boolean) {
         // Tablet without a session yet: media keys straight to the player, headless.
         fun key(code: Int) = com.lazyneil.lazycar.GoAction.mediaTo(ctx, player, code)
         when (j.optString("c")) {
-            "toggle" -> if (t == null) { if (local) com.lazyneil.lazycar.audio.CarPlayer.send(ctx, "play") else com.lazyneil.lazycar.GoAction.launchPlayer(ctx, com.lazyneil.lazycar.Prefs(ctx).playerPkg) }
+            "toggle" -> if (t == null) { if (local) com.lazyneil.lazycar.audio.CarPlayer.send(ctx, "play") else com.lazyneil.lazycar.GoAction.playMedia(ctx, com.lazyneil.lazycar.Prefs(ctx).playerPkg) }   // never the player's screen
                 else if (ctl?.playbackState?.state == PlaybackState.STATE_PLAYING) t.pause() else t.play()
             "next" -> t?.skipToNext() ?: if (local) key(android.view.KeyEvent.KEYCODE_MEDIA_NEXT) else Unit
             "prev" -> t?.skipToPrevious() ?: if (local) key(android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS) else Unit
