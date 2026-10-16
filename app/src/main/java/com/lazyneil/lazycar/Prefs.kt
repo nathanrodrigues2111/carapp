@@ -59,6 +59,13 @@ class Prefs(private val ctx: Context) {
     var snapHotspotWasOn: Boolean get() = b("snapHotspot", true); set(v) = putB("snapHotspot", v)
     // GO-time STREAM_MUSIC index, restored by STOP. -1 = not captured (don't restore).
     var snapMusicVol: Int get() = i("snapMusicVol", -1); set(v) = sp.edit().putInt("snapMusicVol", v).apply()
+    var snapA11yWasOn: Boolean get() = b("snapA11y", true); set(v) = putB("snapA11y", v)
+    /** Tablet: the Drive tap turned Wi-Fi on to join the hotspot; shut down turns it back off. */
+    var snapWifiByGo: Boolean get() = b("snapWifiByGo", false); set(v) = putB("snapWifiByGo", v)
+    /** After a restore the snapshot is spent: a later Shut down without GO must not undo the user's own changes. */
+    fun clearSnap() = sp.edit().apply { listOf("snapBt", "snapMusic", "snapC1", "snapC3", "snapData", "snapHotspot", "snapMusicVol", "snapA11y", "snapWifiByGo").forEach { remove(it) } }.apply()
+    /** Shut down: nothing of CarApp runs (boot, listener rebinds, hotspot join) until the app is opened or GO is pressed. */
+    var shutDown: Boolean get() = b("shutDown", false); set(v) = putB("shutDown", v)
 
     // ---- start volume on GO (one level for the Bluetooth speaker) ----
     // Migrates the old per-device vol1 into the single vol on first read. Default 40%, on.

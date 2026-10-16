@@ -233,12 +233,7 @@ class RearSettingsActivity : AppCompatActivity() {
     }
 
     private fun openAppInfo() {
-        startActivity(
-            Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.fromParts("package", packageName, null)
-            )
-        )
+        com.lazyneil.lazycar.Ui.openSettings(this, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
     }
 
     private fun missingPermissions(): List<String> = RUNTIME_PERMISSIONS.filter {

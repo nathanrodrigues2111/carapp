@@ -28,8 +28,9 @@ class DriveWidget : AppWidgetProvider() {
     override fun onReceive(ctx: Context, intent: Intent) {
         super.onReceive(ctx, intent)
         if (intent.action != ACTION_DRIVE) return
+        Prefs(ctx).shutDown = false
         GpsService.startIfIdle(ctx)
-        TapService.joinHotspot()
+        TapService.joinHotspot(wifiOn = true)   // the tablet's GO: may switch Wi-Fi on, Shut down switches it back off
         TapService.launchApps(ctx)
     }
 

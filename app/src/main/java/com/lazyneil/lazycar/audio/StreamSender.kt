@@ -107,18 +107,12 @@ class StreamSender : Service() {
         val data = intent?.getParcelableExtra("data", Intent::class.java) ?: run { stopSelf(); return START_NOT_STICKY }
         if (running) return START_NOT_STICKY
         startForeground(com.lazyneil.lazycar.GoService.NOTIF_ID, Notification.Builder(this, com.lazyneil.lazycar.GoService.channel(this)).setContentTitle("Tablet speaker")
-            .setContentText("Streaming media audio to the tablet").setSmallIcon(R.drawable.ic_car_glyph).build(),
+            .setContentText("Streaming media audio to the tablet").setSmallIcon(R.drawable.ic_car_glyph).addAction(com.lazyneil.lazycar.GoService.shutAction(this)).build(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
         try {
             val mp = getSystemService(MediaProjectionManager::class.java).getMediaProjection(Activity.RESULT_OK, data)
-            mp.registerCallback(object : MediaProjection.Callback() { override fun onStop() {
-                val external = alive   // false when our own onDestroy stopped it
-                stopSelf()
-                // The system or the cast chip ended the capture mid drive: ask again (TapService taps the consent).
-                val ctx = applicationContext
-                if (external && com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(ctx)) == com.lazyneil.lazycar.GoAction.ON && TabletSpeaker.enabled(ctx))
-                    Handler(Looper.getMainLooper()).postDelayed({ start(ctx) }, 1500)
-            } }, Handler(Looper.getMainLooper()))
+            // Capture ended from outside (the cast chip, the system): it stays off until the next GO.
+            mp.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, Handler(Looper.getMainLooper()))
             projection = mp
             alive = true; running = true; error = ""; tablet = ""
             lock = getSystemService(WifiManager::class.java).createMulticastLock("speaker").apply { acquire() }

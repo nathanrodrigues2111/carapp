@@ -7,7 +7,7 @@ import android.content.Intent
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
-        com.lazyneil.lazycar.TapService.ensureEnabled(ctx)   // an update force stops us, which disables accessibility
+        if (com.lazyneil.lazycar.Prefs(ctx).shutDown) return   // shut down: nothing starts until the app is opened or GO
         ctx.getSharedPreferences("lazycar", Context.MODE_PRIVATE).edit().putLong("bootAt", System.currentTimeMillis()).apply()
         com.lazyneil.lazycar.Role.applyComponents(ctx)
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {   // nothing survives a reboot; an update keeps the state

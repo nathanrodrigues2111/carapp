@@ -51,6 +51,10 @@ class MediaListener : NotificationListenerService() {
         fun goTablet(on: Boolean) { self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "go").put("on", on).toString()) } } }
         /** Tablet mode: the phone UI's media commands to every tablet, as "cmd". */
         fun toTablet(j: JSONObject) { self?.let { m -> val l = j.put("t", "cmd").toString(); m.out.forEach { m.send(it, l) } } }
+        /** Shut down: tell every tablet first, then unbind (no server, no sessions) until [wake]. */
+        fun shutDownTablets() { self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "shutdown").toString()) } } }
+        fun sleep() { try { self?.requestUnbind() } catch (e: Exception) { Log.e("LazyCar", "listener unbind: $e") } }
+        fun wake(ctx: Context) { if (!bound && granted(ctx)) try { requestRebind(ComponentName(ctx, MediaListener::class.java)) } catch (e: Exception) { Log.e("LazyCar", "listener rebind: $e") } }
         fun granted(ctx: Context) = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
         fun settingsIntent() = Intent("android.settings.NOTIFICATION_LISTENER_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         /** OxygenOS lacks the plain listener screen: try detail page, list page, then app info. First that resolves wins, never throws. */
@@ -61,9 +65,7 @@ class MediaListener : NotificationListenerService() {
                     .putExtra(android.provider.Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, cn),
                 Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
                 Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName)))
-            for (i in tries) {
-                try { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return } catch (e: android.content.ActivityNotFoundException) { }
-            }
+            com.lazyneil.lazycar.Ui.openSettings(ctx, *tries.toTypedArray())
         }
     }
 
@@ -93,6 +95,7 @@ class MediaListener : NotificationListenerService() {
     }
 
     override fun onListenerConnected() {
+        if (com.lazyneil.lazycar.Prefs(this).shutDown) { Log.e("LazyCar", "listener: shut down, unbinding"); requestUnbind(); return }
         bound = true; alive = true; self = this; PhoneMedia.app = applicationContext
         com.lazyneil.lazycar.SettingsSync.init(this) { items ->
             val line = JSONObject().put("t", "prefs").put("items", items).toString(); out.forEach { send(it, line) } }
@@ -205,6 +208,9 @@ class MediaListener : NotificationListenerService() {
             "volSet" -> com.lazyneil.lazycar.media.Volumes.setJblLocal(this, j.optInt("pct")).also { main.postDelayed({ push() }, 150) }
             "tvol" -> tabletPct = j.optInt("pct")
             "goAck" -> com.lazyneil.lazycar.GoAction.tabletAcked()
+            "shutdown" -> main.post {   // Shut down on the tablet: the phone side too
+                try { startForegroundService(Intent(this, com.lazyneil.lazycar.GoService::class.java).putExtra("action", "stopPeer")) }
+                catch (e: Exception) { com.lazyneil.lazycar.GoAction.stop(applicationContext, fromPeer = true) } }
             "prefs" -> { com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))
                 if (j.optBoolean("full")) send(cl, JSONObject().put("t", "prefs").put("items", com.lazyneil.lazycar.SettingsSync.all()).toString()) }
             "np", "list" -> PhoneMedia.fromTablet(this, j)   // Tablet mode: the tablet player's Now Playing and library answers

@@ -31,7 +31,7 @@ class GoWidget : AppWidgetProvider() {
         val glyphTint = if (on) Accent.onColor(accent) else 0x99FFFFFF.toInt()
         val pill = android.content.res.ColorStateList.valueOf(pillColor)
         val desc = when (st) {
-            GoAction.ON -> "Stop CarApp"; GoAction.STARTING -> "CarApp starting"
+            GoAction.ON -> "Shut down CarApp"; GoAction.STARTING -> "CarApp starting"
             GoAction.STOPPING -> "CarApp stopping"; else -> "Start CarApp"
         }
         for (id in ids) {

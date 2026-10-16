@@ -180,7 +180,7 @@ class DebugActivity : AppCompatActivity() {
     }
 
     private fun open(i: Intent) {
-        try { startActivity(i) } catch (e: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+        Ui.openSettings(this, i)
     }
 
     private fun maps(uri: String) {

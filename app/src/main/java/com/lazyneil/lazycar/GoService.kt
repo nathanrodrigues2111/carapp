@@ -21,8 +21,6 @@ class GoService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIF_ID, notification())
-        TapService.ensureEnabled(this)   // widget path: GO needs the taps
-        com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
         // Widget tap: derive GO vs STOP here so no LazyCar activity ever has to open.
         val action = if (intent?.action == ACTION_TOGGLE) {
             when (GoAction.effectiveState(Prefs(applicationContext))) {
@@ -33,8 +31,9 @@ class GoService : Service() {
         } else intent?.getStringExtra("action")
         val dur = when (action) {
             "stop" -> GoAction.stop(applicationContext)
+            "stopPeer" -> GoAction.stop(applicationContext, fromPeer = true)
             "volume" -> { GoAction.applyVolumesNow(applicationContext); 4000L }
-            "go" -> GoAction.run(applicationContext)
+            "go" -> { com.lazyneil.lazycar.gps.GpsService.startIfIdle(this); GoAction.run(applicationContext) }
             else -> 0L    // null / transitioning toggle: nothing to do, just fall through and stop
         }
         // Live until the real end of the sequence: runSequence pushes endAt out once it knows its steps.
@@ -52,6 +51,11 @@ class GoService : Service() {
         /** Every CarApp service shows this one notification id, so the shade holds one CarApp entry. */
         const val NOTIF_ID = 47475
         /** One silent channel for it: no sound, no status bar icon, swipeable (never setOngoing). */
+        /** "Shut down" on every CarApp notification: restores the pre-GO state on both devices and stops everything. */
+        fun shutAction(ctx: Context): Notification.Action = Notification.Action.Builder(
+            android.graphics.drawable.Icon.createWithResource(ctx, R.drawable.ic_power), "Shut down",
+            android.app.PendingIntent.getForegroundService(ctx, 47, Intent(ctx, GoService::class.java).putExtra("action", "stop"),
+                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)).build()
         fun channel(ctx: Context): String {
             ctx.getSystemService(NotificationManager::class.java)
                 .createNotificationChannel(NotificationChannel("carapp", "CarApp", NotificationManager.IMPORTANCE_MIN))
@@ -64,6 +68,7 @@ class GoService : Service() {
             .setContentTitle("CarApp")
             .setContentText("Setting up for the car…")
             .setSmallIcon(R.drawable.ic_car_glyph)
+            .addAction(shutAction(this))
             .build()
     }
 }

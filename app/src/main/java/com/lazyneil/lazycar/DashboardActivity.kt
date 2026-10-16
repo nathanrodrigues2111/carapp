@@ -92,7 +92,7 @@ class DashboardActivity : AppCompatActivity() {
         click(R.id.npLibrary) { startActivity(Intent(this, LibraryActivity::class.java)) }
         click(R.id.setupBanner) {
             if (missing().isNotEmpty()) requestPermissions(missing(), 1)
-            else startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            else Ui.openAccessibility(this)
         }
         click(R.id.npPrev) { PhoneMedia.cmd("prev") }; click(R.id.npNext) { PhoneMedia.cmd("next") }
         click(R.id.npPlay) { PhoneMedia.cmd("toggle") }
@@ -120,6 +120,7 @@ class DashboardActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (!Role.isTablet(this)) { startActivity(Intent(this, MainActivity::class.java)); finish(); return }
+        Prefs(this).shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(this)   // opening the app ends a shut down
         GpsService.startIfIdle(this)
         TapService.joinHotspot()
         PhoneMedia.start(this)

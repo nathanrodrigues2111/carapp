@@ -137,7 +137,7 @@ class GpsService : Service(), LocationListener {
         }
         val open = PendingIntent.getActivity(this, 0, Intent(this, com.lazyneil.lazycar.MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, com.lazyneil.lazycar.GoService.channel(this)).setContentTitle(title).setContentText(text)
-            .setSmallIcon(R.drawable.ic_pin).setContentIntent(open).build()
+            .setSmallIcon(R.drawable.ic_pin).setContentIntent(open).addAction(com.lazyneil.lazycar.GoService.shutAction(this)).build()
     }
 
     // Refresh the notification text at most every 5 s.

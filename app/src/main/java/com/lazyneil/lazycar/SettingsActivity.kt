@@ -100,6 +100,9 @@ class SettingsActivity : AppCompatActivity() {
         bindDevice()
         bindLaunch()
         buildHeadunitPicker()
+        findViewById<View>(R.id.shutRow).setOnClickListener {
+            startForegroundService(Intent(this, GoService::class.java).putExtra("action", "stop")); toast("Shutting down")
+        }
         findViewById<View>(R.id.helpRow).setOnClickListener {
             startActivity(Intent(this, HelpActivity::class.java))
         }
@@ -294,7 +297,7 @@ class SettingsActivity : AppCompatActivity() {
             icon.setColorFilter(getColor(R.color.error))
             text.text = "Auto tap is off, tap to turn on"
             row.isClickable = true
-            row.setOnClickListener { openAccessibilitySettings() }
+            row.setOnClickListener { Ui.openAccessibility(this) }
         }
     }
 
@@ -332,17 +335,6 @@ class SettingsActivity : AppCompatActivity() {
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
 
-    private fun openAccessibilitySettings() {
-        val cn = ComponentName(this, TapService::class.java).flattenToString()
-        try {
-            val args = Bundle().apply { putString(":settings:fragment_args_key", cn) }
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                .putExtra(":settings:fragment_args_key", cn)
-                .putExtra(":settings:show_fragment_args", args))
-        } catch (e: Exception) {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
-    }
 
     private fun accessibilityEnabled(): Boolean {
         val flat = Settings.Secure.getString(contentResolver,
@@ -368,7 +360,7 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.btBox).visibility = if (r.note != null || r.canEnable) View.VISIBLE else View.GONE
         findViewById<View>(R.id.btEnable).apply {
             visibility = if (r.canEnable) View.VISIBLE else View.GONE
-            @Suppress("DEPRECATION") setOnClickListener { startActivity(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
+            @Suppress("DEPRECATION") setOnClickListener { Ui.openSettings(this@SettingsActivity, Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE), Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
         }
         findViewById<View>(R.id.outJblRow).setOnClickListener {
             if (r.audio.isEmpty()) { toast(r.note ?: "No paired devices available"); return@setOnClickListener }

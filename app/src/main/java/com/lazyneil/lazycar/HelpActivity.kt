@@ -85,7 +85,7 @@ class HelpActivity : AppCompatActivity() {
                 text = a; setTextAppearance(R.style.T_Body); maxLines = 20
                 setLineSpacing(dp(4).toFloat(), 1f)
             })
-            if (i == 2) answer.addView(Ui.pillButton(this, "Open Accessibility") { openAccessibilitySettings() },
+            if (i == 2) answer.addView(Ui.pillButton(this, "Open Accessibility") { Ui.openAccessibility(this) },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
             header.setOnClickListener {
@@ -97,15 +97,4 @@ class HelpActivity : AppCompatActivity() {
         }
     }
 
-    private fun openAccessibilitySettings() {
-        val cn = ComponentName(this, TapService::class.java).flattenToString()
-        try {
-            val args = Bundle().apply { putString(":settings:fragment_args_key", cn) }
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                .putExtra(":settings:fragment_args_key", cn)
-                .putExtra(":settings:show_fragment_args", args))
-        } catch (e: Exception) {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
-    }
 }

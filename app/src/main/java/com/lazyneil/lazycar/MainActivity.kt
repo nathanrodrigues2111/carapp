@@ -126,7 +126,6 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         if (isFinishing) return
-        setupShown = false   // a new open may show the setup dialog once more
         stateReceiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) { refreshGoButton() }
         }
@@ -143,6 +142,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (isFinishing) return
+        p.shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(this)   // opening the app ends a shut down
         refreshSetup()
         handler.post(tick)
         refreshGoButton()
@@ -214,8 +214,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.goGlow).animate().alpha(if (off) 0f else 1f).setDuration(200).start()
         btn.outlineSpotShadowColor = accent; btn.outlineAmbientShadowColor = accent
         when (state) {
-            GoAction.ON -> { power(btn, onAccent, "Stop CarApp"); paint(accent, onAccent)
-                hint.text = "Running"; sub.text = "Tap to stop" }
+            GoAction.ON -> { power(btn, onAccent, "Shut down CarApp"); paint(accent, onAccent)
+                hint.text = "Running"; sub.text = "Tap to shut down" }
             GoAction.STARTING -> { btn.text = if (big) "" else "STARTING"; busySpinner(); hint.text = "Starting"; sub.text = "Connecting the speaker and the tablet" }
             GoAction.STOPPING -> { btn.text = if (big) "" else "STOPPING"; busySpinner(); hint.text = "Stopping"; sub.text = "Restoring your settings" }
             else -> { power(btn, 0x99FFFFFF.toInt(), "Start CarApp"); paint(ContextCompat.getColor(this, R.color.card), 0x99FFFFFF.toInt()); hint.text = "Ready"; sub.text = "Tap to start the car setup" }
@@ -229,47 +229,26 @@ class MainActivity : AppCompatActivity() {
         b.iconSize = dp(72); b.iconPadding = 0; b.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; b.contentDescription = desc
     }
 
-    // Setup: a dialog over the home screen (the layout never moves). Shown once an item has been missing for 3 s
-    // (a service rebind flickers), at most once per open; Later hides it until the next open.
-    private var setupDialog: androidx.appcompat.app.AlertDialog? = null
-    private var setupMissing = ""; private var setupSince = 0L; private var setupShown = false
-
+    // Anything missing shows as one calm line on the home screen; tapping it opens the right screen. No pop-ups.
     private fun refreshSetup() {
-        findViewById<View>(R.id.setupCard).visibility = View.GONE
-        val a11y = TapService.ensureEnabled(this) || accessibilityEnabled()
+        val a11y = accessibilityEnabled()
         fun perm(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
-        val item: Triple<String, String, () -> Unit>? = when {
-            !a11y -> Triple("Turn on CarApp", "CarApp needs Accessibility to tap through the speaker and Maps screens.") { openAccessibilitySettings() }
-            !perm(Manifest.permission.BLUETOOTH_CONNECT) -> Triple("Allow Nearby devices", "CarApp needs it to connect your speaker.") {
+        val item: Pair<String, () -> Unit>? = when {
+            !a11y -> "Auto tap is off. Tap to turn it on in Accessibility" to { Ui.openAccessibility(this) }
+            !perm(Manifest.permission.BLUETOOTH_CONNECT) -> "Nearby devices is off. Tap to allow" to {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1) }
-            !com.lazyneil.lazycar.media.MediaListener.granted(this) -> Triple("Allow notification access", "Lets the tablet show and control what plays here.") {
+            !com.lazyneil.lazycar.media.MediaListener.granted(this) -> "Notification access is off. Tap to allow" to {
                 com.lazyneil.lazycar.media.MediaListener.openSettings(this) }
-            !perm(Manifest.permission.READ_MEDIA_AUDIO) -> Triple("Allow music library", "Lets the tablet browse the songs on this phone.") {
+            !perm(Manifest.permission.READ_MEDIA_AUDIO) -> "Music library is off. Tap to allow" to {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_MEDIA_AUDIO), 2) }
             else -> null
         }
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (item == null) { setupMissing = ""; setupDialog?.dismiss(); setupDialog = null; return }
-        if (item.first != setupMissing) { setupMissing = item.first; setupSince = now; setupDialog?.dismiss(); setupDialog = null }
-        if (setupShown || setupDialog != null || now - setupSince < 3000 || isFinishing) return
-        setupShown = true
-        val ok = if (item.first == "Turn on CarApp") "Open settings" else "Allow"
-        setupDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this).setTitle(item.first).setMessage(item.second)
-            .setPositiveButton(ok) { _, _ -> item.third() }.setNegativeButton("Later", null)
-            .setOnDismissListener { setupDialog = null }.show()
-            .also { d -> d.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setTextColor(Accent.now(this)) }
-    }
-
-    private fun openAccessibilitySettings() {
-        val cn = ComponentName(this, TapService::class.java).flattenToString()
-        try {
-            val args = Bundle().apply { putString(":settings:fragment_args_key", cn) }
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                .putExtra(":settings:fragment_args_key", cn)
-                .putExtra(":settings:show_fragment_args", args))
-        } catch (e: Exception) {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
+        val card = findViewById<View>(R.id.setupCard)
+        card.visibility = if (item == null) View.GONE else View.VISIBLE
+        item ?: return
+        findViewById<TextView>(R.id.setupTitle).text = item.first
+        findViewById<View>(R.id.setupBody).visibility = View.GONE; findViewById<View>(R.id.setupBtn).visibility = View.GONE
+        card.setOnClickListener { item.second() }
     }
 
     private fun accessibilityEnabled(): Boolean {

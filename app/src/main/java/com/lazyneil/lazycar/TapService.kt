@@ -32,6 +32,11 @@ class TapService : AccessibilityService() {
          * background cleanup, swipe away + force stop). With WRITE_SECURE_SETTINGS (granted once over adb, kept
          * across updates) we put it back on every app start, so "Setup needed" never comes back.
          */
+        fun enabled(ctx: Context) = android.provider.Settings.Secure.getString(ctx.contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty().split(':').any { it.substringBefore('/') == ctx.packageName }
+        /** Shut down: accessibility back off when it was off before GO. */
+        fun disable() { instance?.let { android.util.Log.e("LazyCar", "accessibility: disableSelf"); it.disableSelf() } }
+        /** Called only by GO (never on app open or boot). */
         fun ensureEnabled(ctx: android.content.Context): Boolean {
             val r = ctx.contentResolver; val me = android.content.ComponentName(ctx, TapService::class.java).flattenToString()
             val cur = android.provider.Settings.Secure.getString(r, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
@@ -108,8 +113,10 @@ class TapService : AccessibilityService() {
             catch (e: Exception) { android.util.Log.e("LazyCar", "launch $pkg: $e") }
         }
 
-        /** Tablet: get onto the phone hotspot. Safe to call often, it restarts the retry window. */
-        fun joinHotspot() { instance?.let { it.h.post { it.startJoin() } } }
+        /** Tablet: get onto the phone hotspot. Safe to call often, it restarts the retry window. Only GO ([wifiOn]) may
+         *  switch Wi-Fi on; otherwise Wi-Fi the user turned off stays off. */
+        fun joinHotspot(wifiOn: Boolean = false) { instance?.let { it.h.post { it.startJoin(wifiOn) } } }
+        fun stopJoin() { instance?.let { it.h.post { it.h.removeCallbacks(it.joinTick); it.closePanel() } } }
     }
 
     // ---- split screen launch ----
@@ -253,8 +260,10 @@ class TapService : AccessibilityService() {
     private var panelTapped = false
     private fun target() = Prefs(this).hotspotSsid.trim()
 
-    private fun startJoin() {
-        if (!Role.isTablet(this) || target().isEmpty()) return
+    private var joinWifiOn = false
+    private fun startJoin(wifiOn: Boolean) {
+        if (!Role.isTablet(this) || target().isEmpty() || Prefs(this).shutDown) return
+        joinWifiOn = wifiOn
         if (joinCb == null) try {
             joinCb = object : ConnectivityManager.NetworkCallback(FLAG_INCLUDE_LOCATION_INFO) {
                 override fun onCapabilitiesChanged(n: Network, c: NetworkCapabilities) {
@@ -277,6 +286,7 @@ class TapService : AccessibilityService() {
             val t = target()
             if (wm.isWifiEnabled && wifiSsid == t) { android.util.Log.e("LazyCar", "join: on hotspot"); return }
             if (joinTries++ >= 12) { android.util.Log.e("LazyCar", "join: gave up"); return }
+            if (!wm.isWifiEnabled && !joinWifiOn) { android.util.Log.e("LazyCar", "join: Wi-Fi is off, left off"); return }
             @Suppress("DEPRECATION") val visible = wm.isWifiEnabled && wm.scanResults.any { it.SSID == t }
             android.util.Log.e("LazyCar", "join: try $joinTries wifi=${wm.isWifiEnabled} visible=$visible")
             if (!wm.isWifiEnabled || visible) openWifiPanel()
@@ -286,9 +296,7 @@ class TapService : AccessibilityService() {
 
     private fun openWifiPanel() {
         if (SystemClock.uptimeMillis() < panelUntil) return
-        try {
-            startActivity(Intent(android.provider.Settings.Panel.ACTION_WIFI).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: Exception) { android.util.Log.e("LazyCar", "join: panel $e"); return }
+        if (!Ui.openSettings(this, Intent(android.provider.Settings.Panel.ACTION_WIFI), fallback = false)) return
         panelUntil = SystemClock.uptimeMillis() + 10000; panelTapped = false
         h.removeCallbacks(panelPoll); h.postDelayed(panelPoll, 600)
     }
@@ -299,7 +307,8 @@ class TapService : AccessibilityService() {
             val root = windows?.mapNotNull { it.root }?.firstOrNull { it.packageName == "com.android.settings" }
             if (root != null) {
                 val sw = find(root) { it.isCheckable && it.className?.contains("Switch") == true }
-                if (sw != null && !sw.isChecked) {
+                if (sw != null && !sw.isChecked && joinWifiOn) {
+                    Prefs(applicationContext).snapWifiByGo = true
                     val ok = (if (sw.isClickable) sw else clickableAncestor(sw) ?: sw).performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     android.util.Log.e("LazyCar", "join: tapped Wi-Fi toggle ok=$ok")
                 } else if (sw != null && wifiSsid == target()) { closePanel(); return }
@@ -340,7 +349,7 @@ class TapService : AccessibilityService() {
     }
 
     override fun onServiceConnected() {   // the system binds us at boot, after an update and after a process restart
-        instance = this; startJoin()
+        instance = this; startJoin(false)
         // Tablet start: we bind after unlock, give the launcher a moment, then open Maps + CarApp.
         if (Role.isTablet(this) && SystemClock.elapsedRealtime() < 300_000 && Ui.openOnBoot(this))
             h.postDelayed({ launchDrive(this) }, 8000)

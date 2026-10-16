@@ -57,6 +57,10 @@ object PhoneMedia {
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private var started = false
+    @Volatile private var gen = 0   // bumped by stop(): the old link thread and loops end
+    @Volatile private var sock: Socket? = null
+    /** Shut down: end the phone link and its loops; start() runs them again. */
+    fun stop() = io.execute { synchronized(this) { started = false; gen++ }; try { sock?.close() } catch (_: Exception) {} }
     private var reqSeq = 0
     private val pending = mutableMapOf<Int, (JSONObject) -> Unit>()
     /** Now Playing listeners, main thread. A list, so the player and the library can both listen. */
@@ -121,18 +125,18 @@ object PhoneMedia {
 
     @Synchronized fun start(ctx: Context) {
         if (started) return
-        started = true
+        started = true; val g = gen
         val app = ctx.applicationContext; this.app = app
-        main.post(object : Runnable { override fun run() { follow(app); main.postDelayed(this, 1000) } })
+        main.post(object : Runnable { override fun run() { if (g != gen) return; follow(app); main.postDelayed(this, 1000) } })
         dir = java.io.File(app.cacheDir, "lib").apply { mkdirs() }
         com.lazyneil.lazycar.SettingsSync.init(app) { items -> if (connected) cmd("prefs") { put("items", items) } }
         // Keepalive on its own clock: the phone drops a tablet that stays silent for 15 s.
-        main.post(object : Runnable { override fun run() { if (connected) send(JSONObject().put("c", "hb")); main.postDelayed(this, 5000) } })
+        main.post(object : Runnable { override fun run() { if (g != gen) return; if (connected) send(JSONObject().put("c", "hb")); main.postDelayed(this, 5000) } })
         thread(name = "phone-media", isDaemon = true) {
-            while (true) {
+            while (g == gen) {
                 try {
                     val ip = find(app) ?: throw Exception("no phone")
-                    Socket().use { s ->
+                    Socket().use { s -> sock = s
                         s.connect(InetSocketAddress(ip, Link.PORT), 3000); s.tcpNoDelay = true
                         s.soTimeout = 15_000   // the phone heartbeats every second; 15 s of silence = dead link, the timeout ends the read and we reconnect
                         w = s.getOutputStream().bufferedWriter(); phone = ip; connected = true; sentTvol = -1; localKey = ""   // the phone may have restarted: report our level (and art) again
@@ -179,6 +183,7 @@ object PhoneMedia {
                 if (!local) onNp(ctx, j)   // Tablet mode: the phone's own player is not ours to show
             }
             "prefs" -> com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))
+            "shutdown" -> main.post { com.lazyneil.lazycar.GoAction.stop(ctx, fromPeer = true) }
             "go" -> { val on = j.optBoolean("on"); if (on) cmd("goAck"); main.post { com.lazyneil.lazycar.audio.TabletSpeaker.playHere(ctx, on) } }
             "list" -> synchronized(pending) { pending.remove(j.optInt("req")) }?.let { main.post { it(j) } }
             "cmd" -> main.post { if (local) here(j) { r -> send(r.put("c", "list")) } }   // the phone UI in Tablet mode
@@ -273,14 +278,14 @@ object PhoneMedia {
 
     fun notification(ctx: Context): Notification {
         val b = Notification.Builder(ctx, com.lazyneil.lazycar.GoService.channel(ctx)).setSmallIcon(R.drawable.ic_car_glyph)
-        if (!hasTrack) return b.setContentTitle("Tablet speaker").setContentText("Ready for phone audio").build()
+        if (!hasTrack) return b.setContentTitle("Tablet speaker").setContentText("Ready for phone audio").addAction(com.lazyneil.lazycar.GoService.shutAction(ctx)).build()
         fun act(icon: Int, label: String, c: String) = Notification.Action.Builder(Icon.createWithResource(ctx, icon), label,
             PendingIntent.getBroadcast(ctx, c.hashCode(), Intent(ctx, Button::class.java).setAction(c), PendingIntent.FLAG_IMMUTABLE)).build()
         return b.setContentTitle(np.optString("title")).setContentText(np.optString("artist"))
             .setLargeIcon(art).setStyle(Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2))
             .addAction(act(R.drawable.ic_skip_prev, "Previous", "prev"))
             .addAction(if (playing) act(R.drawable.ic_pause, "Pause", "toggle") else act(R.drawable.ic_play, "Play", "toggle"))
-            .addAction(act(R.drawable.ic_skip_next, "Next", "next")).build()
+            .addAction(act(R.drawable.ic_skip_next, "Next", "next")).addAction(com.lazyneil.lazycar.GoService.shutAction(ctx)).build()
     }
 
     class Button : BroadcastReceiver() {

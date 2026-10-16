@@ -33,6 +33,26 @@ import com.lazyneil.lazycar.media.Volumes
 
 /** Themes, layouts, art accent, motion and the shared Outputs block for the home screens. */
 object Ui {
+    /** Every jump to a system screen goes through here: the first intent that starts wins, then (with [fallback])
+     *  CarApp's app info, then Settings. Never throws. */
+    fun openSettings(c: Context, vararg tries: android.content.Intent, fallback: Boolean = true): Boolean {
+        val all = tries.toList() + if (!fallback) emptyList() else listOf(
+            android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + c.packageName)),
+            android.content.Intent(android.provider.Settings.ACTION_SETTINGS))
+        for (i in all) try {
+            if (c !is Activity) i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            c.startActivity(i); return true
+        } catch (e: Exception) { android.util.Log.e("LazyCar", "open ${i.action}: $e") }
+        return false
+    }
+
+    /** Accessibility settings, scrolled to CarApp where the ROM supports it. */
+    fun openAccessibility(c: Context) {
+        val cn = android.content.ComponentName(c, TapService::class.java).flattenToString()
+        openSettings(c, android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).putExtra(":settings:fragment_args_key", cn)
+            .putExtra(":settings:show_fragment_args", android.os.Bundle().apply { putString(":settings:fragment_args_key", cn) }),
+            android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
     /** Before super.onCreate. One theme: Midnight AMOLED, accent from the album art. */
     fun apply(a: AppCompatActivity) {
         a.delegate.localNightMode = AppCompatDelegate.MODE_NIGHT_YES

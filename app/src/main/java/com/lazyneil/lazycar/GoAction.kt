@@ -63,6 +63,10 @@ object GoAction {
     /** Entry for GO. Returns ms the caller (service) should stay alive for the delayed steps. */
     fun run(ctx: Context): Long {
         val p = Prefs(ctx)
+        p.shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(ctx)
+        // Accessibility is switched on only here, because the user pressed GO; Shut down switches it back off.
+        p.snapA11yWasOn = TapService.enabled(ctx)
+        TapService.ensureEnabled(ctx)
         // Snapshot the pre-GO music level NOW, before BT-enable / A2DP connect makes OnePlus reset it.
         p.snapMusicVol = try { (ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager)
             .getStreamVolume(AudioManager.STREAM_MUSIC) } catch (e: Exception) { -1 }
@@ -187,9 +191,7 @@ object GoAction {
             log("BT off: requesting enable")
             try { @Suppress("DEPRECATION") adapter.enable() } catch (e: Exception) { log("adapter.enable() ${e.message}") }
             TapService.armButtons(listOf("Allow", "Turn on", "Yes", "OK", "Enable"))
-            try {
-                ctx.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } catch (e: Exception) { log("REQUEST_ENABLE ${e.message}") }
+            Ui.openSettings(ctx, Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false)
         } else log("BT turning on; waiting for STATE_ON")
         if (adapter.isEnabled) go(recv)
         main.postDelayed({
@@ -350,8 +352,12 @@ object GoAction {
      * Undo GO by restoring the pre-GO snapshot: only turn off / disconnect / pause what GO itself
      * turned on. Anything that was already on before GO is left exactly as it was. Returns ms alive.
      */
-    fun stop(ctx: Context): Long {
+    fun stop(ctx: Context, fromPeer: Boolean = false): Long {
         val p = Prefs(ctx)
+        p.shutDown = true
+        if (Role.isTablet(ctx)) return stopTablet(ctx, p, fromPeer)
+        // First, while the hotspot (restored below) still carries the link: the tablet restores its own side.
+        if (!fromPeer) com.lazyneil.lazycar.media.MediaListener.shutDownTablets()
         setState(ctx, p, STOPPING)
         com.lazyneil.lazycar.audio.TabletSpeaker.onStop(ctx)
         if (com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)) com.lazyneil.lazycar.media.MediaListener.goTablet(false)
@@ -381,8 +387,25 @@ object GoAction {
         if (!p.snapBtWasOn) { log("restore: bt on -> off"); main.postDelayed({ disableBt(ctx) }, at); at += 12500L }
         else log("restore: bt was already on -> left")
 
-        main.postDelayed({ setState(ctx, p, IDLE) }, maxOf(1800L, at))
-        return maxOf(2500L, at + 500L)
+        com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
+        // Taps (tiles, BT dialog) first, then accessibility goes back off if GO turned it on.
+        if (!p.snapA11yWasOn) { log("restore: accessibility on -> off"); main.postDelayed({ TapService.disable() }, at + 500L) }
+        val end = maxOf(1800L, at + 1000L)
+        main.postDelayed({ setState(ctx, p, IDLE); p.clearSnap(); com.lazyneil.lazycar.media.MediaListener.sleep() }, end)
+        return end + 500L
+    }
+
+    /** Tablet side of Shut down: undo what its GO changed, stop its services and the phone link. */
+    private fun stopTablet(ctx: Context, p: Prefs, fromPeer: Boolean): Long {
+        log("tablet shut down (from phone: $fromPeer)")
+        if (!fromPeer) com.lazyneil.lazycar.media.PhoneMedia.send(org.json.JSONObject().put("c", "shutdown"))
+        TapService.stopJoin()
+        ctx.stopService(Intent(ctx, com.lazyneil.lazycar.audio.StreamReceiver::class.java))
+        com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
+        com.lazyneil.lazycar.media.PhoneMedia.stop()
+        if (p.snapWifiByGo) { log("restore: wifi on -> off"); main.postDelayed({ TapService.armTiles(listOf(TapService.Tile(listOf("Wi-Fi"), false, "", "Wi-Fi"))) }, 1000L) }
+        p.clearSnap()
+        return 11000L
     }
 
     /**
@@ -405,8 +428,7 @@ object GoAction {
         try { @Suppress("DEPRECATION") adapter.disable() } catch (e: Exception) { log("adapter.disable() ${e.message}") }
         TapService.armButtons(listOf("Allow", "Turn off", "Turn Off", "OK", "Disable"))
         // ACTION_REQUEST_DISABLE is not a public SDK constant; its action string is stable.
-        try { ctx.startActivity(Intent("android.bluetooth.adapter.action.REQUEST_DISABLE").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        catch (e: Exception) { log("REQUEST_DISABLE ${e.message}") }
+        Ui.openSettings(ctx, Intent("android.bluetooth.adapter.action.REQUEST_DISABLE"), fallback = false)
         if (!adapter.isEnabled && done.compareAndSet(false, true)) {
             try { ctx.unregisterReceiver(recv) } catch (e: Exception) {}; TapService.disarmButtons()
         }
