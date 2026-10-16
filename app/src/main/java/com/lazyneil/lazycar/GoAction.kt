@@ -106,7 +106,8 @@ object GoAction {
             val musicActive = players.isNotEmpty()
             // Snapshot pre-GO state (connected = probe result before we connect anything) so STOP can
             // restore exactly what it found: only undo what GO turned on.
-            p.snapConn1 = tab || p.mac1.isNotEmpty() && p.mac1 in connected   // Tablet mode: the phone never touches the speaker link
+            p.snapConn1 = p.mac1.isNotEmpty() && p.mac1 in connected   // pre-GO owner: Shut down gives it back
+            handoff(ctx, p, tab)
             p.snapConn3 = p.mac3.isNotEmpty() && p.mac3 in connected
             p.snapMusicWasActive = musicActive
             log("snapshot: music=$musicActive ($players) conn1=${p.snapConn1} conn3=${p.snapConn3}")
@@ -137,6 +138,16 @@ object GoAction {
             finish = { if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0); com.lazyneil.lazycar.audio.TabletSpeaker.onGo(ctx); launchApps(ctx) } }
             main.postDelayed({ finish() }, doneAt + 300L)
         }
+    }
+
+    /** The speaker lives on exactly one device (multipoint on both kills the tablet's Dolby tuning): Tablet mode = the
+     *  phone lets go and the tablet connects it, Phone mode = the tablet lets go (the phone connects it in GO). */
+    fun handoff(ctx: Context, p: Prefs, toTablet: Boolean) {
+        if (p.mac1.isEmpty()) return
+        log("speaker ${p.mac1} -> ${if (toTablet) "tablet" else "phone"}")
+        if (toTablet) disconnectA2dp(ctx, p.mac1)
+        com.lazyneil.lazycar.media.MediaListener.speakerTo(p.mac1, p.name1, toTablet)
+        if (!toTablet && p.state == ON) main.postDelayed({ connectA2dp(ctx, p.mac1) }, 1500)   // a mode change while ON
     }
 
     private var finish: () -> Unit = {}
@@ -349,6 +360,9 @@ object GoAction {
             log("restore: music volume -> index ${p.snapMusicVol}")
         } catch (e: Exception) {}
 
+        // The tablet dropped a speaker it did not have before (its own Shut down above); a phone that had it gets it back.
+        if (p.mac1.isNotEmpty() && p.snapConn1 && com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx))
+            main.postDelayed({ connectA2dp(ctx, p.mac1) }, 1500)
         for ((mac, wasConnected) in listOf(p.mac1 to p.snapConn1, p.mac3 to p.snapConn3))
             if (mac.isNotEmpty() && !wasConnected) { log("restore: $mac connected -> disconnected"); disconnectA2dp(ctx, mac) }
             else if (mac.isNotEmpty()) log("restore: $mac was already connected -> left")
@@ -370,6 +384,7 @@ object GoAction {
         if (!fromPeer) com.lazyneil.lazycar.media.PhoneMedia.send(org.json.JSONObject().put("c", "shutdown"))
         ctx.stopService(Intent(ctx, com.lazyneil.lazycar.audio.StreamReceiver::class.java))
         main.postDelayed({ ctx.stopService(Intent(ctx, com.lazyneil.lazycar.audio.CarPlayer::class.java)) }, 500)   // after its pause
+        com.lazyneil.lazycar.media.PhoneMedia.speakerRestore(ctx)
         com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
         com.lazyneil.lazycar.media.PhoneMedia.stop()
         p.clearSnap()

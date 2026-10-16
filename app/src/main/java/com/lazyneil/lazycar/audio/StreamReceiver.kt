@@ -298,7 +298,7 @@ class StreamReceiver : Service() {
             if (TabletSpeaker.btToo(ctx)) outputs += Output("bluetooth", AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, ctx) { 0.0 }
             outputs.forEach { it.run { alive } }
         }
-        Acoustic(ctx, outputs[0], { sink }) { alive }.start()
+        Acoustic(ctx, outputs[0], { sink }, { phoneOutMs }) { alive }.start()
         // Maps (or anything) speaking directions here: duck our output and tell the phone so the JBL dips too.
         val am = getSystemService(AudioManager::class.java)
         fun nav() { val on = com.lazyneil.lazycar.Ui.duckNav(ctx) && am.activePlaybackConfigurations.any {
@@ -340,7 +340,7 @@ class StreamReceiver : Service() {
                 clock.add(t3, bb.getLong(4), bb.getLong(12), bb.getLong(20), bb.getLong(28))
                 phoneOutMs = bb.getInt(36).let { if (it < 0) -it - 1 else it }   // phone mixer to its speaker by the same math; negative: CarPlayer, exact
                 val k = bb.getInt(40).let { if (it == 0) "" else "h$it" }
-                if (k != sink) { sink = k; acousticMs = TabletSpeaker.cal(ctx, k)?.toDouble() ?: 0.0; Log.e("LazyCar", "speaker recv sink '$k' correction $acousticMs ms") }
+                if (k != sink) { sink = k; acousticMs = TabletSpeaker.cal(ctx, k, phoneOutMs)?.toDouble() ?: 0.0; Log.e("LazyCar", "speaker recv sink '$k' correction $acousticMs ms") }
                 if (seq > last) { lost += (seq - last - 1).coerceAtMost(200); last = seq }
                 val pcm = ShortArray(len / 2); ByteBuffer.wrap(buf, Wire.HEADER, len).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcm)
                 for (i in pcm.indices step 4) { val v = pcm[i].toDouble(); sq += v * v; n++ }

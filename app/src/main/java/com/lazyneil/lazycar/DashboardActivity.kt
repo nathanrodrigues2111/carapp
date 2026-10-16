@@ -258,6 +258,7 @@ class DashboardActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.setupBanner).apply {
             text = when {
                 miss.isNotEmpty() -> "Precise location is off. Tap to allow"
+                PhoneMedia.pairNeeded.isNotEmpty() -> "Pair ${PhoneMedia.pairNeeded} with the tablet (Bluetooth settings) so it can play here"
                 !com.lazyneil.lazycar.media.Files.has(this@DashboardActivity) -> "No music folder yet. Tap to pick one"
                 !com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this@DashboardActivity) && PhoneMedia.alive && PhoneMedia.np.optBoolean("spkOff") ->
                     "Tablet speaker is off for the phone's player. On the phone, tap the Tablet speaker line to share its audio"

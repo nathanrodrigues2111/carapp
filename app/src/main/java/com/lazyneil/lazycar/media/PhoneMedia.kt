@@ -194,9 +194,34 @@ object PhoneMedia {
             "go" -> { val on = j.optBoolean("on"); if (on) cmd("goAck"); main.post {
                 if (on) { com.lazyneil.lazycar.Prefs(ctx).shutDown = false; com.lazyneil.lazycar.gps.GpsService.startIfIdle(ctx) }   // GO on the phone
                 com.lazyneil.lazycar.audio.TabletSpeaker.playHere(ctx, on) } }
+            "spk" -> main.post { speaker(ctx, j.optString("mac"), j.optString("name"), j.optBoolean("on")) }
             "list" -> synchronized(pending) { pending.remove(j.optInt("req")) }?.let { main.post { it(j) } }
             "cmd" -> main.post { if (local) here(j) { r -> send(r.put("c", "list")) } }   // the phone UI in Tablet mode
         }
+    }
+
+    /** Not paired with the tablet: the speaker name for the "pair it" line, else "". */
+    @Volatile var pairNeeded = ""
+    /** The phone hands the speaker over (on) or takes it back. The first handover of a session remembers whether the
+     *  tablet already had it, so Shut down only drops what GO connected. */
+    private fun speaker(ctx: Context, mac: String, name: String, on: Boolean) {
+        val adapter = ctx.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter ?: return
+        val sp = ctx.getSharedPreferences("speaker", Context.MODE_PRIVATE)
+        val bonded = try { adapter.bondedDevices.any { it.address.equals(mac, true) } } catch (_: SecurityException) { false }
+        val has = ctx.getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+            .any { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP && it.address.equals(mac, true) }
+        if (!sp.contains("spkMac")) sp.edit().putString("spkMac", mac).putBoolean("spkHad", has).apply()
+        pairNeeded = if (on && !bonded) name.ifEmpty { mac } else ""
+        Log.e("LazyCar", "speaker $mac -> ${if (on) "tablet" else "phone"} bonded=$bonded had=$has")
+        if (on && bonded && !has) com.lazyneil.lazycar.GoAction.connectA2dp(ctx, mac)
+        else if (!on && has) com.lazyneil.lazycar.GoAction.disconnectA2dp(ctx, mac)
+    }
+    /** Tablet Shut down: a speaker GO handed us goes back (dropped here, the phone reconnects it if it had it). */
+    fun speakerRestore(ctx: Context) {
+        val sp = ctx.getSharedPreferences("speaker", Context.MODE_PRIVATE)
+        val mac = sp.getString("spkMac", null) ?: return
+        if (!sp.getBoolean("spkHad", false)) com.lazyneil.lazycar.GoAction.disconnectA2dp(ctx, mac)
+        sp.edit().remove("spkMac").remove("spkHad").apply(); pairNeeded = ""
     }
 
     private fun onNp(ctx: Context, j: JSONObject) {

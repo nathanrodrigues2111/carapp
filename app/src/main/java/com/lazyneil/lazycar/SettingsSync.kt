@@ -21,6 +21,7 @@ object SettingsSync {
         Key("duckNav", "lazycar", "duckNav", true),
         Key("speakerOn", "speaker", "on", true),        // phone "send" and tablet "play" are one switch
         Key("syncTrim", "speaker", "delay", 0),
+        Key("sinkCal", "speaker", "cals", "{}"),        // per Bluetooth sink sync corrections, learned once
         Key("gpsShare", "lazygps", "mode", true),
         Key("playFrom", "lazycar", "play_from", "tablet"))  // "tablet" (default, CarApp's player) or "phone"
 
@@ -97,6 +98,8 @@ object SettingsSync {
 
     /** Same reaction as flipping the Tablet speaker switch on this device. */
     fun react(on: Boolean, mode: Boolean = false) {
+        if (mode && !Role.isTablet(app)) com.lazyneil.lazycar.Prefs(app).let { p ->
+            if (com.lazyneil.lazycar.GoAction.effectiveState(p) == com.lazyneil.lazycar.GoAction.ON) com.lazyneil.lazycar.GoAction.handoff(app, p, com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(app)) }
         if (Role.isTablet(app)) com.lazyneil.lazycar.audio.StreamReceiver.sync(app)
         else if (on && !mode) com.lazyneil.lazycar.audio.StreamSender.start(app) else if (!on) com.lazyneil.lazycar.audio.StreamSender.stop(app)
     }

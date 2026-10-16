@@ -59,6 +59,7 @@ class MediaListener : NotificationListenerService() {
         /** Tablet mode: the phone UI's media commands to every tablet, as "cmd". */
         fun toTablet(j: JSONObject) { self?.let { m -> val l = j.put("t", "cmd").toString(); m.out.forEach { m.send(it, l) } } }
         /** Shut down: tell every tablet first, then unbind (no server, no sessions) until [wake]. */
+        fun speakerTo(mac: String, name: String, tablet: Boolean) { self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "spk").put("mac", mac).put("name", name).put("on", tablet).toString()) } } }
         fun shutDownTablets() { self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "shutdown").toString()) } } }
         fun sleep() { self?.let { it.stopSelf() } }
         /** App open or GO on the phone: start the link server (a plain in-process service, no grant needed). */
