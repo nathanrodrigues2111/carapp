@@ -61,6 +61,9 @@ class StreamReceiver : Service() {
             catch (e: Exception) { Log.e("LazyCar", "speaker receive start", e) }
         }
 
+        /** Last outside event that can move the deadlines (clock step, sink step), for the realign log. */
+        @Volatile var disturbNote = ""; @Volatile var disturbAt = 0L
+        fun disturb(n: String) { disturbNote = n; disturbAt = SystemClock.elapsedRealtime() }
         fun urgent() = try { Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO) } catch (_: Exception) {}
     }
 
@@ -89,6 +92,8 @@ class StreamReceiver : Service() {
         @Volatile var mutes = 0         // fail-safe silences
         @Volatile var realigns = 0      // 10 ms crossfade jumps to fix big sync errors
         @Volatile var lateMs = 0        // played this much behind the JBL on purpose, for jitter cover
+        @Volatile var eMin = 0.0; @Volatile var eMax = 0.0   // per chunk error range since the last log
+        @Volatile var takenAt = 0L      // last chunk taken, for the gap cause
         val underruns get() = track.underrunCount
         val device: AudioDeviceInfo? = ctx.getSystemService(AudioManager::class.java)
             .getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.type == type }
@@ -137,9 +142,14 @@ class StreamReceiver : Service() {
 
         /** Our clock time at which frame [f] leaves the speaker, from the track timestamp. */
         fun playNs(f: Long): Long? = synchronized(ts) {
-            if (!track.getTimestamp(ts) || ts.framePosition == 0L) null
-            else ts.nanoTime + (f - ts.framePosition) * 1_000_000_000L / Wire.RATE
+            // Median of the last 2 s of (time - frame) anchors: the raw timestamp moves in steps of a few ms.
+            val now = System.nanoTime()
+            if (now - anchorAt >= 50_000_000L && track.getTimestamp(ts) && ts.framePosition != 0L) { anchorAt = now
+                anchors.addLast(ts.nanoTime - ts.framePosition * 1_000_000_000L / Wire.RATE); if (anchors.size > 41) anchors.removeFirst()
+                anchor = anchors.sorted()[anchors.size / 2] }
+            if (anchors.isEmpty()) null else anchor + f * 1_000_000_000L / Wire.RATE
         }
+        private val anchors = ArrayDeque<Long>(); private var anchor = 0L; private var anchorAt = 0L
 
         fun run(alive: () -> Boolean) = thread(name = "speaker-$name") {
             urgent()
@@ -155,6 +165,7 @@ class StreamReceiver : Service() {
             var mutedAt = 0L; var starting = false
             fun glitch() { healthySince = 0 }
             var dec = 0f; var decN = 0; var seenUnder = 0; var under = false; var realignAt = 0L
+            val recent = DoubleArray(3); var recentN = 0; var offN = 0; var alignedN = 0; var silentAt = 0L
             fun write(s: ShortArray) {
                 written += track.write(s, 0, s.size).coerceAtLeast(0) / 2
                 for (i in s.indices step 8) { val v = s[i].toDouble(); outSq += v * v; outN++ }
@@ -164,14 +175,15 @@ class StreamReceiver : Service() {
             }
             while (alive()) {
                 // Stream (re)start: silent until the jitter buffer holds the full budget, then a slow fade in.
-                if (fresh) { fresh = false; muted = true; starting = true; mutedAt = 0L; healthySince = 0; sizedAt = 0; realignAt = 0L }
+                if (fresh) { fresh = false; muted = true; starting = true; mutedAt = 0L; healthySince = 0; sizedAt = 0; realignAt = 0L; silentAt = System.nanoTime() }
                 val now = System.nanoTime()
                 val playNow = playNs(written) ?: (now + (written - track.playbackHeadPosition) * 1_000_000_000L / Wire.RATE)
                 val aheadNs = playNow - now
                 aheadMs = (aheadNs / 1_000_000).toInt()
                 val client = ((written - track.playbackHeadPosition) * 1000 / Wire.RATE).toInt()
                 depthMs = client + synchronized(jb) { jb.size } * Wire.CHUNK_MS
-                if (track.underrunCount > seenUnder) { seenUnder = track.underrunCount; glitch(); if (safe) under = true }
+                if (track.underrunCount > seenUnder) { seenUnder = track.underrunCount; glitch(); if (safe) under = true
+                    synchronized(ts) { anchors.clear() } }   // an underrun shifts the track's time line: anchor afresh
                 // Track write ahead = what is left of the budget after the HAL latency and 40 ms for network jitter.
                 if (now - sizedAt > 1_000_000_000L) { sizedAt = now
                     val hal = (aheadMs - client).coerceIn(0, 300)
@@ -202,28 +214,42 @@ class StreamReceiver : Service() {
                         // A lost packet (later ones already queued) is 5 ms: conceal it and fade the next one in, no mute.
                         // Only an empty queue (the link stalled) mutes.
                         if (lostOne) { fadeIn = Wire.RATE / 200; fadeLen = fadeIn; continue }
-                        if (!muted) { muted = true; mutes++; glitch() }
+                        if (!muted) { muted = true; mutes++; glitch(); silentAt = now; Log.e("LazyCar", "mute $name: link gap, depth=$depthMs") }
                         healthySince = 0
                     } else Thread.sleep(2)
                     continue
                 }
                 val deadline = c.jblNs + ((extraMs() + lateMs) * 1e6).toLong()
                 val e = (playNow - deadline) / 1e6
+                if (e < eMin) eMin = e; if (e > eMax) eMax = e
+                val gapMs = if (takenAt == 0L) 0 else ((now - takenAt) / 1_000_000).toInt(); takenAt = now
                 // Far off (start, stall, big clock step): jump once, then micro resampling keeps it there.
                 // The JBL latency is the whole budget: playing late to grow the buffer only trades sync for drops later.
                 errMs = errMs * 0.98 + e * 0.02
-                // Off by more than drift can fix (start, stall, clock step): one re-align. This chunk fades out over
-                // 5 ms, we skip (late) or pad silence (early) by the error, the next chunk fades in over 5 ms.
-                // safe: one chunk's error is noise here (coarse mixer clock); realign on a smoothed 30 ms, at most every 5 s.
-                val jump = if (safe) abs(errMs) > 8 && now - realignAt > 5_000_000_000L else abs(e) > 50 || (abs(errMs) > 8 && abs(e) > 8)
-                if (jump) { realignAt = now
-                    val e = if (safe) errMs else e   // safe: the smoothed error, one chunk's is noise
+                // Never audibly out of sync: 3 chunks in a row (15 ms) more than 10 ms off = a disturbance (underrun, stall,
+                // clock step). Mute at once (this chunk fades out in 5 ms), skip or pad by the median of those errors,
+                // stay silent until 10 chunks in a row are within 4 ms, then fade in. While silent, smaller errors are fixed too.
+                recent[recentN++ % 3] = e
+                offN = if (abs(e) > 10) offN + 1 else 0
+                alignedN = if (abs(e) < 4) alignedN + 1 else 0
+                val med = recent.sorted()[1]
+                val jump = offN >= 3 || (muted && recentN >= 3 && abs(med) >= 4 && now - realignAt > 30_000_000L)
+                if (jump) { realignAt = now; offN = 0
+                    val dn = if (SystemClock.elapsedRealtime() - disturbAt < 3000) disturbNote else "none"
+                    val e = med; recentN = 0
+                    Log.e("LazyCar", "realign $name: e=${"%.1f".format(e)} err=${"%.1f".format(errMs)} depth=$depthMs gap=$gapMs under=${track.underrunCount} muted=$muted recent=$dn")
+                    val was = muted
+                    if (!muted) { muted = true; mutes++; mutedAt = 0L; silentAt = now }; healthySince = 0
                     val y = rs.process(c.pcm, 1.0); val yn = y.size / 2
-                    for (i in 0 until yn) { val g = 1 - i / yn.toFloat(); y[2 * i] *= g; y[2 * i + 1] *= g }
-                    if (muted || fades > 0 || fadeIn > 0) y.fill(0f)   // coming out of silence: a full level first sample would click
-                    write(lim.process(y)); last = c.pcm; realigns++
-                    if (e > 0) { var k = ((e - Wire.CHUNK_MS) / Wire.CHUNK_MS).toInt(); while (k-- > 0 && depthMs - Wire.CHUNK_MS > 30) { skip(); depthMs -= Wire.CHUNK_MS; dropped++ } }
-                    else write(ShortArray(((-e - Wire.CHUNK_MS).coerceIn(0.0, 600.0) * Wire.RATE / 1000).toInt() * 2))
+                    for (i in 0 until yn) { val g = (1 - i / yn.toFloat()) * duckG; y[2 * i] *= g; y[2 * i + 1] *= g }
+                    if (was || fades > 0 || fadeIn > 0) y.fill(0f)   // coming out of silence: a full level first sample would click
+                    // Exact: late = skip whole chunks plus shorten this (silent) chunk by the rest; early = pad the full error.
+                    var rem = 0
+                    if (e > 0) { var k = (e / Wire.CHUNK_MS).toInt(); var done = 0
+                        while (k-- > 0 && depthMs - Wire.CHUNK_MS > 30) { skip(); depthMs -= Wire.CHUNK_MS; dropped++; done++ }
+                        if (was && done == (e / Wire.CHUNK_MS).toInt()) rem = ((e - done * Wire.CHUNK_MS) * Wire.RATE / 1000).toInt().coerceIn(0, yn) }
+                    write(lim.process(if (rem > 0) y.copyOf((yn - rem) * 2) else y)); last = c.pcm; realigns++
+                    if (e < 0) write(ShortArray(((-e).coerceIn(0.0, 600.0) * Wire.RATE / 1000).toInt() * 2))
                     errMs = 0.0; fadeIn = maxOf(fadeIn, Wire.RATE / 200); fadeLen = Wire.RATE / 200
                     continue
                 }
@@ -234,16 +260,19 @@ class StreamReceiver : Service() {
                 val x = rs.process(c.pcm, r)
                 val fr = x.size / 2
                 val t = SystemClock.elapsedRealtime()
-                if (!muted && (depthMs < 20 || under)) { under = false; for (i in x.indices) x[i] *= 1 - (i / 2) / fr.toFloat(); muted = true; mutes++; healthySince = 0; glitch() }
+                if (!muted && (depthMs < 20 || under)) { under = false; for (i in x.indices) x[i] *= 1 - (i / 2) / fr.toFloat(); muted = true; mutes++; silentAt = now; Log.e("LazyCar", "mute $name: ${if (under) "underrun" else "low buffer"} depth=$depthMs"); healthySince = 0; glitch() }
                 else if (muted) {
                     // Drop: back after 150 ms of a usable buffer (fade in 50 ms), never more than 2 s of silence while audio arrives.
                     // Start: wait for the full track buffer for 500 ms (30 ms after 5 s, forced at 8 s), fade in 350 ms.
                     if (mutedAt == 0L) mutedAt = t
-                    val need = if (starting && t - mutedAt < 5000) bufferMs else 30
+                    val need = if (starting) minOf(bufferMs, 150) else 30
+                    under = false   // an underrun while silent must not mute the fade in again
                     // Start: also aligned first (never audible out of sync); the jump above fixes it while silent.
-                    if (depthMs < need || (starting && abs(errMs) > 5)) healthySince = 0 else if (healthySince == 0L) healthySince = t
-                    if ((healthySince != 0L && t - healthySince >= (if (starting) 500 else 150)) || t - mutedAt >= (if (starting) 8000 else 2000)) {
-                        fadeIn = if (starting) Wire.RATE * 35 / 100 else Wire.RATE / 20; fadeLen = fadeIn; muted = false; mutedAt = 0L; starting = false }
+                    if (depthMs < need || alignedN < 10) healthySince = 0 else if (healthySince == 0L) healthySince = t
+                    // Never forced back in while out of sync (the old 2 s / 8 s force played audibly off).
+                    if (healthySince != 0L && t - healthySince >= (if (starting) 200 else 100)) {
+                        if (silentAt != 0L) Log.e("LazyCar", "unmute $name: silent ${(now - silentAt) / 1_000_000} ms, e=${"%.1f".format(e)}${if (starting) " (start)" else ""}")
+                        fadeIn = if (starting) Wire.RATE * 15 / 100 else Wire.RATE / 20; fadeLen = fadeIn; muted = false; mutedAt = 0L; starting = false; silentAt = 0L }
                     else x.fill(0f)
                 }
                 if (!muted && fadeIn > 0) for (i in 0 until fr) { val g = 1 - (fadeIn - i).coerceAtLeast(0) / fadeLen.toFloat(); x[2 * i] *= g; x[2 * i + 1] *= g }
@@ -355,7 +384,7 @@ class StreamReceiver : Service() {
                     kbps = (bytes * 8 / (now - secAt)).toInt(); bytes = 0; secAt = now
                     rms = kotlin.math.sqrt(sq / maxOf(n, 1)).toInt(); sq = 0.0; n = 0; val g = gapMax; gapMax = 0
                     Log.e("LazyCar", "speaker recv kbps=$kbps gap=$g rms=$rms rtt=${"%.1f".format(rttMs)} jitter=${"%.1f".format(jitterMs)} target=$targetMs phoneOut=$phoneOutMs lag=$lagMs acoustic=${"%.0f".format(acousticMs)} lost=$lost " +
-                        outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} realign=${it.realigns} late=${it.lateMs} clip=${it.lim.clipped} out=${it.outLevel()} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
+                        outputs.joinToString { "${it.name} e=${"%.1f".format(it.eMin)}..${"%.1f".format(it.eMax)} ".also { _ -> it.eMin = 0.0; it.eMax = 0.0 } + "ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} realign=${it.realigns} late=${it.lateMs} clip=${it.lim.clipped} out=${it.outLevel()} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
                     outputs.firstOrNull()?.let { Log.e("LazyCar", "sync: off=${"%.1f".format(it.errMs)} ms (track vs mix+phoneOut+correction) heard=${if (Acoustic.residualMs.isNaN()) "n/a" else "%+.0f".format(Acoustic.residualMs)} ms (mic, JBL minus tablet, ${Acoustic.note}) correction=${"%+.0f".format(acousticMs)} lag=$lagMs") }
                 }
             } catch (_: Exception) {}
@@ -372,7 +401,7 @@ class StreamReceiver : Service() {
         @Volatile var offsetNs = 0L
         @Volatile var minLagNs = 0L
         private var peak = 0.0
-        private var resetNs = 0L
+        private var resetNs = 0L; private var lastNs = 0L
         fun reset() { win.clear(); peak = 0.0; resetNs = System.nanoTime() }
         fun add(t3: Long, t0: Long, p1: Long, p2: Long, mix: Long) {
             if (t0 == 0L) return
@@ -383,7 +412,13 @@ class StreamReceiver : Service() {
             val cur = win.last()
             if (rtt < cur[1]) { cur[1] = rtt; cur[2] = off }
             val best = win.minBy { it[1] }
-            offsetNs = best[2]; rttMs = best[1] / 1e6; offsetMs = offsetNs / 1e6
+            // A new best bucket can move the estimate by ms (noise, not the clocks): after the first 3 s slew at most
+            // 100 us per s (100 ppm, the drift the resampler follows inaudibly) instead of stepping every deadline.
+            val d = best[2] - offsetNs
+            if (t3 - resetNs < 3_000_000_000L || offsetNs == 0L) offsetNs = best[2]
+            else { val lim = ((t3 - lastNs).coerceIn(0, 1_000_000_000L) / 10_000).coerceAtLeast(1); offsetNs += d.coerceIn(-lim, lim)
+                if (abs(d) > 2_000_000L) disturb("clock offset estimate moved ${"%+.1f".format(d / 1e6)} ms (slewing)") }
+            lastNs = t3; rttMs = best[1] / 1e6; offsetMs = offsetNs / 1e6
             val lag = t3 - (mix - offsetNs)
             if (lag < cur[3]) cur[3] = lag
             minLagNs = win.minOf { it[3] }; lagMs = (minLagNs / 1_000_000).toInt()

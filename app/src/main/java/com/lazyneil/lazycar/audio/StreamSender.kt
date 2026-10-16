@@ -164,15 +164,19 @@ class StreamSender : Service() {
             var seq = 0; var bytes = 0L; var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
             val pool = Array(512) { ShortArray(Wire.CHUNK / 2) }   // JBL copies, reused (the JBL queue holds < 1 s)
             var readFrames = 0L; val rts = android.media.AudioTimestamp(); var tsAt = 0L; var haveTs = false
+            val capAnchors = ArrayDeque<Long>(); var capAnchor = 0L
             while (alive) {
                 val r = rec.read(pkt, Wire.HEADER, Wire.CHUNK)
                 if (r <= 0) { if (r < 0) { error = "Capture read $r"; break }; continue }
                 val tr = System.nanoTime(); if (prevRd != 0L) gapMax = maxOf(gapMax, ((tr - prevRd) / 1_000_000).toInt()); prevRd = tr
                 for (i in 0 until r / 2) { val v = java.lang.Short.reverseBytes(bb.getShort(Wire.HEADER + i * 2)).toInt(); sq += v * v.toDouble() }   // PCM is little endian
                 val now = SystemClock.elapsedRealtime()
-                if (now - tsAt > 100) { tsAt = now; haveTs = rec.getTimestamp(rts, android.media.AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS }
+                if (now - tsAt > 100) { tsAt = now; haveTs = rec.getTimestamp(rts, android.media.AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS
+                    // Median of 4 s of (time - frame) anchors: a raw capture timestamp steps by ms, each step moved every tablet deadline.
+                    if (haveTs) { capAnchors.addLast(rts.nanoTime - rts.framePosition * 1_000_000_000L / Wire.RATE); if (capAnchors.size > 41) capAnchors.removeFirst()
+                        capAnchor = capAnchors.sorted()[capAnchors.size / 2] } }
                 // Mixer time of this chunk's first frame, so the tablet gets a smooth timeline despite bursty reads.
-                val mixNs = if (haveTs) rts.nanoTime + (readFrames - rts.framePosition) * 1_000_000_000L / Wire.RATE else System.nanoTime() - capMs * 1_000_000L
+                val mixNs = if (haveTs) capAnchor + readFrames * 1_000_000_000L / Wire.RATE else System.nanoTime() - capMs * 1_000_000L
                 n += r / 2; readFrames += r / 4
                 if (net.send(pkt, r, seq, mixNs, if (shared) Wire.SHARED_MS else outMs)) bytes += Wire.HEADER + r
                 seq++

@@ -176,7 +176,7 @@ class CarPlayer : MediaBrowserService() {
         fun closeOut() { outOn[0] = false; out = null; speaker = null; net?.close(); net = null; streaming = false
             synchronized(StreamReceiver.outputs) { StreamReceiver.outputs.clear() } }
         val limJ = Limiter()
-        var written = 0L; var seq = 0; var halAt = 0L; var hal = 200
+        var written = 0L; var seq = 0; var halAt = 0L; var hal = 200; var eos = false
         var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
         val pend = ShortArray(Wire.CHUNK / 2); var pn = 0; var chunkFrame = 0L   // JBL frame index of pend[0]
         var ex: MediaExtractor? = null; var codec: MediaCodec? = null; var rs = Cubic(); var ratio = 1.0; var ch = 2; var cur: Uri? = null
@@ -200,19 +200,22 @@ class CarPlayer : MediaBrowserService() {
                         ratio = f.getInteger(MediaFormat.KEY_SAMPLE_RATE) / Wire.RATE.toDouble(); ch = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT); cur = songs[index]
                     } else codec?.flush()
                     ex!!.seekTo(to * 1000, MediaExtractor.SEEK_TO_CLOSEST_SYNC); rs = Cubic()
-                    trackStartMs = to; jblStart = written; main { state() }
+                    trackStartMs = to; jblStart = written; eos = false; main { state() }
                 }
                 val c = codec!!; val e = ex!!
+                // Song end: silence keeps both tracks running until the next song opens (an empty pipeline underran
+                // the speaker and stepped its clock 39 ms: the one desync left in a 10 min run).
+                val pcm = if (eos) ShortArray(Wire.RATE / 100 * 2) else {
                 val inIx = c.dequeueInputBuffer(10_000)
                 if (inIx >= 0) { val sz = e.readSampleData(c.getInputBuffer(inIx)!!, 0)
                     if (sz < 0) c.queueInputBuffer(inIx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM) else { c.queueInputBuffer(inIx, 0, sz, e.sampleTime, 0); e.advance() } }
                 val oIx = c.dequeueOutputBuffer(info, 10_000)
                 if (oIx < 0) continue
-                if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) { c.releaseOutputBuffer(oIx, false); main { skip(1) }; Thread.sleep(100); continue }
+                if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) { c.releaseOutputBuffer(oIx, false); eos = true; main { skip(1) }; continue }
                 val sb = c.getOutputBuffer(oIx)!!.order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
                 val raw = ShortArray(sb.remaining()).also { sb.get(it) }; c.releaseOutputBuffer(oIx, false)
                 val st = if (ch == 2) raw else ShortArray(raw.size / ch * 2) { raw[(it / 2) * ch + if (ch > 1) it % 2 else 0] }
-                val pcm = limJ.process(rs.process(st, ratio))
+                limJ.process(rs.process(st, ratio)) }
                 for (v in pcm) { sq += v * v.toDouble() }; n += pcm.size
                 // Speaker chunks: stamped with the time the JBL plays their first frame (head + queued + HAL figure).
                 val now = SystemClock.elapsedRealtime()
@@ -223,8 +226,9 @@ class CarPlayer : MediaBrowserService() {
                     if (k != sink) { sink = k; StreamReceiver.acousticMs = TabletSpeaker.cal(this, k, clk.afMs)?.toDouble() ?: 0.0; StreamSender.sinkKey = k.hashCode()
                         Log.e("LazyCar", "car player sink '$k' correction ${StreamReceiver.acousticMs} ms") }
                     StreamSender.sinkAf = clk.afMs
-                    if (++logN % 5 == 0) Log.e("LazyCar", "car player sync: out=${clk.outMs()} af=${clk.afMs} down=${"%.1f".format(clk.downMs)} hidden=${"%.1f".format(clk.hiddenMs)} " +
-                        "correction=${"%.0f".format(StreamReceiver.acousticMs)} speaker err=${o?.let { "%.1f".format(it.errMs) }} realign=${o?.realigns} heard=${"%.0f".format(Acoustic.residualMs)} (${Acoustic.note})") }
+                    if (++logN % 2 == 0) Log.e("LazyCar", "car player sync: out=${clk.outMs()} af=${clk.afMs} down=${"%.1f".format(clk.downMs)} hidden=${"%.1f".format(clk.hiddenMs)} step=${"%.1f".format(clk.stepMax)} e=${o?.let { "%.1f..%.1f".format(it.eMin, it.eMax) }} " +
+                        "correction=${"%.0f".format(StreamReceiver.acousticMs)} speaker err=${o?.let { "%.1f".format(it.errMs) }} realign=${o?.realigns} mute=${o?.mutes} under=${o?.underruns} heard=${"%.0f".format(Acoustic.residualMs)} (${Acoustic.note})")
+                    clk.stepMax = 0.0; o?.let { it.eMin = 0.0; it.eMax = 0.0 } }
                 clk.update()
                 var i = 0
                 while (i < pcm.size) {
@@ -276,6 +280,7 @@ private class Cubic {
     fun process(x: ShortArray, ratio: Double): FloatArray {
         val n = x.size / 2
         if (ratio == 1.0) return FloatArray(x.size) { x[it].toFloat() }
+        if (n < 3) return FloatArray(0)   // empty decoder buffer (after a seek): crashed the player (index -6)
         fun s(i: Int, c: Int) = if (i < 0) h[(i + 3) * 2 + c] else x[2 * i + c].toFloat()   // i in -3..n-1
         val out = FloatArray(((n - frac) / ratio + 2).toInt() * 2); var o = 0; var p = frac
         while (p + 1 < n) {   // needs samples i-1 .. i+2 with i = floor(p) - 1 relative to history
