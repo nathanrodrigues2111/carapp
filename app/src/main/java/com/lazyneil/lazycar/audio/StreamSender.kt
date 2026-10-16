@@ -41,20 +41,13 @@ class StreamSender : Service() {
         @Volatile var capMs = 0         // mixer to our read() latency, from the AudioRecord timestamp
         @Volatile var halMs = -1        // hidden AudioManager.getOutputLatency(STREAM_MUSIC), cross-check only
         @Volatile var afMs = -1         // hidden AudioTrack.getLatency() minus the client buffer, includes the A2DP delay
-        @Volatile var tsMs = -1         // monitor timestamp latency minus the client buffer, stops at the phone on BT
+        @Volatile var tsMs = -1         // how far the monitor timestamp trails the mixer read position
         /** Shared timeline: CarApp plays the JBL itself, [Wire.SHARED_MS] after capture, on the accessibility stream,
          *  with STREAM_MUSIC at 0 so the apps' direct path is silent. Off ([Wire.SHARED_ON]). */
         @Volatile var shared = false
         @Volatile var jbl: StreamReceiver.Output? = null
         @Volatile var duckRemote = false
-
-        /** ms from writing a frame to it leaving the device, from the track's own timestamp. */
-        fun latencyMs(t: android.media.AudioTrack, written: Long): Int? {
-            val ts = android.media.AudioTimestamp()
-            if (!t.getTimestamp(ts)) return null
-            val heard = ts.framePosition + (System.nanoTime() - ts.nanoTime) * Wire.RATE / 1_000_000_000
-            return ((written - heard) * 1000 / Wire.RATE).toInt()
-        }
+        @Volatile var sinkKey = 0       // hash of the Bluetooth sink's calibration key, sent so the tablet keeps one correction per sink
 
         /** The user's "Start" on the screen share consent, asked by GO while CarApp is in front, used once at the end of GO. */
         @Volatile private var granted: Intent? = null
@@ -198,31 +191,23 @@ class StreamSender : Service() {
             rec.stop(); rec.release()
             if (alive) Handler(Looper.getMainLooper()).post { stopSelf() }   // read error: stop, so start() can run again
         }
-        // Silent media track on the same route as the music: its timestamp is the real phone to JBL latency,
-        // A2DP delay reporting included. ponytail: SBC-ish 150 ms added when the HAL hides the BT part.
+        // Silent media track on the same route as the music: [SinkClock] gives the phone mixer to speaker latency by math.
         thread(name = "speaker-monitor") {
             val t = android.media.AudioTrack.Builder()
                 .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build())
                 .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(Wire.RATE)
                     .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build()).build()
-            val zero = ByteArray(Wire.CHUNK * 4); var written = 0L; var at = 0L
+            val zero = ByteArray(Wire.CHUNK * 4); var at = 0L; val clk = SinkClock(t)
             t.play()
             while (alive) {
-                written += t.write(zero, 0, zero.size).coerceAtLeast(0) / 4
+                t.write(zero, 0, zero.size); clk.update()
                 val now = SystemClock.elapsedRealtime()
                 if (now - at > 1000) { at = now
                     halMs = try { android.media.AudioManager::class.java.getMethod("getOutputLatency", Int::class.java)
                         .invoke(getSystemService(android.media.AudioManager::class.java), android.media.AudioManager.STREAM_MUSIC) as Int } catch (_: Exception) { -1 }
-                    val bt = t.routedDevice?.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
-                    // Blocking writes keep the client buffer full; the music is captured after it, so drop it.
-                    val buf = t.bufferSizeInFrames * 1000 / Wire.RATE
-                    // Hidden AudioTrack.getLatency(): mixer + HAL latency + client buffer. The A2DP HAL latency includes the
-                    // speaker's reported delay (or the stack's codec default), so this is the real figure for any speaker.
-                    afMs = try { (android.media.AudioTrack::class.java.getMethod("getLatency").invoke(t) as Int) - buf } catch (_: Exception) { -1 }
-                    latencyMs(t, written)?.let { val mix = it - buf; tsMs = mix
-                        // getLatency() was tried as phoneOut (10:48): it reads 449 ms vs ~324 ms heard, worse than the guess.
-                        // ponytail: SBC-ish 150 ms when the timestamp stops at the phone; the tablet adds the measured rest.
-                        outMs = if (bt && mix < 100) mix + 150 else mix }
+                    afMs = clk.afMs; tsMs = clk.downMs.toInt()
+                    clk.outMs()?.let { outMs = it }
+                    sinkKey = SinkClock.key(t.routedDevice).let { if (it.isEmpty()) 0 else ("p$it").hashCode() }
                 }
             }
             t.stop(); t.release()
@@ -311,7 +296,7 @@ class Net(private val onDuck: (Boolean) -> Unit = {}) {
     fun send(pkt: ByteArray, len: Int, seq: Int, mixNs: Long, out: Int): Boolean {
         val d = dest
         if (d == null || SystemClock.elapsedRealtime() - beaconAt >= 5000) { StreamSender.tablet = ""; return false }
-        ByteBuffer.wrap(pkt).putInt(0, seq).putLong(4, beaconT).putLong(12, beaconNs).putLong(20, System.nanoTime()).putLong(28, mixNs).putInt(36, out)
+        ByteBuffer.wrap(pkt).putInt(0, seq).putLong(4, beaconT).putLong(12, beaconNs).putLong(20, System.nanoTime()).putLong(28, mixNs).putInt(36, out).putInt(40, StreamSender.sinkKey)
         return try { dp.setData(pkt, 0, Wire.HEADER + len); dp.socketAddress = d; s.send(dp); true } catch (_: Exception) { false }
     }
     fun close() { alive = false; s.close(); StreamSender.tablet = "" }
@@ -328,5 +313,5 @@ object Wire {
     const val FORMAT = "lossless PCM 48 kHz 16-bit stereo"
     const val SHARED_ON = false   // blocked: JBL uses absolute volume (music index = JBL hardware level), see commit
     const val SHARED_MS = 450      // capture to speaker on both outputs in shared mode; JBL A2DP ~250 + room for stalls
-    const val HEADER = 40          // seq int, echoed tablet beacon ns, phone ns at beacon, phone ns at send, phone mixer ns of frame 0, phone to JBL ms int
+    const val HEADER = 44          // seq int, echoed tablet beacon ns, phone ns at beacon, phone ns at send, phone mixer ns of frame 0, phone to speaker ms int, sink key hash int
 }

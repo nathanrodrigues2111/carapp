@@ -33,7 +33,7 @@ import kotlin.math.tanh
  * Sync: every chunk carries the phone mixer time of its first frame and the phone to JBL latency, so the
  * chunk has a deadline on our clock (NTP-style offset from the beacon echo). The output thread compares
  * the AudioTrack timestamp (true playout time) with that deadline and micro resamples (max 0.5 %) to
- * close the gap. [Acoustic] then measures what is left with the mic and nudges [acousticMs].
+ * close the gap. A sink never seen before gets one mic calibration ([Acoustic]), kept per sink in [acousticMs].
  */
 class StreamReceiver : Service() {
     companion object {
@@ -48,7 +48,8 @@ class StreamReceiver : Service() {
         @Volatile var offsetMs = 0.0    // phone clock minus ours
         @Volatile var jitterMs = 0.0    // peak arrival spread, decays
         @Volatile var targetMs = 0      // jitter buffer the deadline never goes below
-        @Volatile var acousticMs = 0.0  // mic measured correction on top of the phone's numbers
+        @Volatile var acousticMs = 0.0  // learned correction of the current sink on top of the math (one time mic calibration)
+        @Volatile var sink = ""         // calibration key of the phone's Bluetooth sink, from the packet header
         const val MAX_LATE_MS = 0       // user: sync with the speaker first; any late was heard as out of sync
         @Volatile var lagMs = 0         // best case phone mixer to our arrival (capture + network)
         val outputs = mutableListOf<Output>()
@@ -74,6 +75,8 @@ class StreamReceiver : Service() {
         @Volatile var duck = false
         /** Software level (CarPlayer: STREAM_MUSIC there is the JBL's absolute volume). Ramped with the duck. */
         @Volatile var gain = 1f
+        /** Extra level while a new sink calibrates (lower: an unaligned copy must not sound like echo). */
+        @Volatile var trim = 1f
         private var duckG = 1f
         private val jb = TreeMap<Int, Chunk>()
         @Volatile var aheadMs = 0       // queued plus in the track, ms of audio ahead of the speaker
@@ -211,8 +214,9 @@ class StreamReceiver : Service() {
                 // Off by more than drift can fix (start, stall, clock step): one re-align. This chunk fades out over
                 // 5 ms, we skip (late) or pad silence (early) by the error, the next chunk fades in over 5 ms.
                 // safe: one chunk's error is noise here (coarse mixer clock); realign on a smoothed 30 ms, at most every 5 s.
-                val jump = if (safe) abs(errMs) > 30 && now - realignAt > 5_000_000_000L else abs(e) > 50 || (abs(errMs) > 8 && abs(e) > 8)
+                val jump = if (safe) abs(errMs) > 8 && now - realignAt > 5_000_000_000L else abs(e) > 50 || (abs(errMs) > 8 && abs(e) > 8)
                 if (jump) { realignAt = now
+                    val e = if (safe) errMs else e   // safe: the smoothed error, one chunk's is noise
                     val y = rs.process(c.pcm, 1.0); val yn = y.size / 2
                     for (i in 0 until yn) { val g = 1 - i / yn.toFloat(); y[2 * i] *= g; y[2 * i + 1] *= g }
                     if (muted || fades > 0 || fadeIn > 0) y.fill(0f)   // coming out of silence: a full level first sample would click
@@ -242,7 +246,7 @@ class StreamReceiver : Service() {
                 }
                 if (!muted && fadeIn > 0) for (i in 0 until fr) { val g = 1 - (fadeIn - i).coerceAtLeast(0) / fadeLen.toFloat(); x[2 * i] *= g; x[2 * i + 1] *= g }
                 if (fadeIn > 0) fadeIn = (fadeIn - fr).coerceAtLeast(0)
-                val dt = (if (duck) 0.25f else 1f) * gain
+                val dt = (if (duck) 0.25f else 1f) * gain * trim
                 if (duckG != dt || dt != 1f) for (i in 0 until fr) {
                     duckG = if (duckG > dt) maxOf(dt, duckG - 0.75f / (Wire.RATE / 10)) else minOf(dt, duckG + 0.75f / (Wire.RATE * 0.3f))
                     x[2 * i] *= duckG; x[2 * i + 1] *= duckG
@@ -294,7 +298,7 @@ class StreamReceiver : Service() {
             if (TabletSpeaker.btToo(ctx)) outputs += Output("bluetooth", AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, ctx) { 0.0 }
             outputs.forEach { it.run { alive } }
         }
-        Acoustic(ctx, outputs[0]) { alive }.start()
+        Acoustic(ctx, outputs[0], { sink }) { alive }.start()
         // Maps (or anything) speaking directions here: duck our output and tell the phone so the JBL dips too.
         val am = getSystemService(AudioManager::class.java)
         fun nav() { val on = com.lazyneil.lazycar.Ui.duckNav(ctx) && am.activePlaybackConfigurations.any {
@@ -334,9 +338,9 @@ class StreamReceiver : Service() {
                     last = seq - 1; clock.reset(); outputs.forEach { it.reset() }
                 }
                 clock.add(t3, bb.getLong(4), bb.getLong(12), bb.getLong(20), bb.getLong(28))
-                // ponytail: the phone's BT figure is a guess (timestamp + 150 ms); 4 restarts heard the JBL 57 ms after the
-                // tablet with it. The 10:48 phone build sends getLatency() (449 ms, 125 ms too high). Drop once the phone measures it.
-                phoneOutMs = bb.getInt(36).let { if (it < 0) -it - 1 else if (it >= 400) it - 125 else it + 57 }   // negative: CarPlayer, exact
+                phoneOutMs = bb.getInt(36).let { if (it < 0) -it - 1 else it }   // phone mixer to its speaker by the same math; negative: CarPlayer, exact
+                val k = bb.getInt(40).let { if (it == 0) "" else "h$it" }
+                if (k != sink) { sink = k; acousticMs = TabletSpeaker.cal(ctx, k)?.toDouble() ?: 0.0; Log.e("LazyCar", "speaker recv sink '$k' correction $acousticMs ms") }
                 if (seq > last) { lost += (seq - last - 1).coerceAtMost(200); last = seq }
                 val pcm = ShortArray(len / 2); ByteBuffer.wrap(buf, Wire.HEADER, len).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcm)
                 for (i in pcm.indices step 4) { val v = pcm[i].toDouble(); sq += v * v; n++ }
@@ -349,7 +353,7 @@ class StreamReceiver : Service() {
                     rms = kotlin.math.sqrt(sq / maxOf(n, 1)).toInt(); sq = 0.0; n = 0; val g = gapMax; gapMax = 0
                     Log.e("LazyCar", "speaker recv kbps=$kbps gap=$g rms=$rms rtt=${"%.1f".format(rttMs)} jitter=${"%.1f".format(jitterMs)} target=$targetMs phoneOut=$phoneOutMs lag=$lagMs acoustic=${"%.0f".format(acousticMs)} lost=$lost " +
                         outputs.joinToString { "${it.name} ahead=${it.aheadMs} depth=${it.depthMs} err=${"%.1f".format(it.errMs)} ppm=${it.ppm} under=${it.underruns} plc=${it.concealed} drop=${it.dropped} mute=${it.mutes} realign=${it.realigns} late=${it.lateMs} clip=${it.lim.clipped} out=${it.outLevel()} gr=${"%.1f".format(it.lim.reductionDb)} buf=${it.bufferMs} -> ${it.routed}" })
-                    outputs.firstOrNull()?.let { Log.e("LazyCar", "sync: off=${"%.1f".format(it.errMs)} ms (track vs mix+phoneOut+acoustic) heard=${if (Acoustic.residualMs.isNaN()) "n/a" else "%+.0f".format(Acoustic.residualMs)} ms (mic, JBL minus tablet) acoustic=${"%+.0f".format(acousticMs)} lag=$lagMs") }
+                    outputs.firstOrNull()?.let { Log.e("LazyCar", "sync: off=${"%.1f".format(it.errMs)} ms (track vs mix+phoneOut+correction) heard=${if (Acoustic.residualMs.isNaN()) "n/a" else "%+.0f".format(Acoustic.residualMs)} ms (mic, JBL minus tablet, ${Acoustic.note}) correction=${"%+.0f".format(acousticMs)} lag=$lagMs") }
                 }
             } catch (_: Exception) {}
         }

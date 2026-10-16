@@ -41,9 +41,9 @@ object TabletSpeaker {
         sp(ctx).edit().putBoolean("bt", on).apply()
         ctx.stopService(android.content.Intent(ctx, StreamReceiver::class.java)); StreamReceiver.sync(ctx)
     }
-    /** Mic measured JBL correction, kept so the next stream starts close. */
-    fun acoustic(ctx: Context) = sp(ctx).getInt("acoustic", 0)
-    fun saveAcoustic(ctx: Context, v: Int) = sp(ctx).edit().putInt("acoustic", v).apply()
+    /** Learned correction of a Bluetooth sink on top of the math (one time mic calibration), null = never calibrated. */
+    fun cal(ctx: Context, key: String): Int? = if (key.isEmpty()) 0 else sp(ctx).getInt("cal:$key", Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }
+    fun saveCal(ctx: Context, key: String, v: Int) = sp(ctx).edit().putInt("cal:$key", v).apply()
 
     /** "Tablet speaker for other apps" (default on): the share audio capture for outside players, consent once per Start. */
     fun otherApps(ctx: Context) = sp(ctx).getBoolean("otherApps", true)
@@ -93,8 +93,8 @@ object TabletSpeaker {
             !r.running -> "Off"
             SystemClock.elapsedRealtime() - r.lastAt > 2000 -> "Waiting for the phone"
             else -> "Connected to ${r.phone}, ${Wire.FORMAT}, ${r.kbps} kbps, level ${r.rms}. " +
-                "Clock offset locked, round trip ${"%.1f".format(r.rttMs)} ms. JBL latency (phone measured) ${r.phoneOutMs} ms. " +
-                "Acoustic correction ${"%+.0f".format(r.acousticMs)} ms, last residual ${if (Acoustic.residualMs.isNaN()) "n/a" else "%+.0f ms".format(Acoustic.residualMs)} (${Acoustic.note}). " +
+                "Clock offset locked, round trip ${"%.1f".format(r.rttMs)} ms. Speaker latency (phone measured) ${r.phoneOutMs} ms. " +
+                "Speaker correction ${"%+.0f".format(r.acousticMs)} ms, calibration residual ${if (Acoustic.residualMs.isNaN()) "n/a" else "%+.0f ms".format(Acoustic.residualMs)} (${Acoustic.note}). " +
                 "Jitter ${"%.0f".format(r.jitterMs)} ms, buffer target ${r.targetMs} ms" +
                 r.outputs.joinToString("") { ". ${it.name}: ${it.aheadMs} ms ahead, sync error ${"%+.1f".format(it.errMs)} ms, resample ${it.ppm} ppm, jitter depth ${it.depthMs} ms, track buffer ${it.bufferMs} ms, underruns ${it.underruns}, concealed ${it.concealed}, dropped ${it.dropped}, silenced ${it.mutes}" } +
                 ", lost ${r.lost}"

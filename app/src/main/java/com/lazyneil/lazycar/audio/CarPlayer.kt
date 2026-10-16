@@ -30,7 +30,7 @@ import kotlin.concurrent.thread
 /**
  * Tablet player "CarApp (both speakers)": plays the tablet's music files to the JBL and the built-in speaker from one
  * decode. The JBL track sets the clock; the speaker is a [StreamReceiver.Output] fed chunks stamped with the time the JBL
- * plays them, so the existing drift resampling, limiter, fades and [Acoustic] mic sync keep it on the JBL. No capture.
+ * plays them ([SinkClock] math), so the existing drift resampling, limiter and fades keep it on the JBL. No capture.
  * Controls, Now Playing and the library reach it through its MediaSession like any player.
  */
 class CarPlayer : MediaBrowserService() {
@@ -81,7 +81,7 @@ class CarPlayer : MediaBrowserService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val n = Notification.Builder(this, com.lazyneil.lazycar.GoService.channel(this)).setContentTitle("CarApp player")
             .setSmallIcon(R.drawable.ic_car_glyph).build()
-        // Microphone type lets Acoustic sync; refused when started from the background, then media only.
+        // Microphone type lets the one time calibration of a new speaker listen; refused from the background, then math only.
         try { startForeground(com.lazyneil.lazycar.GoService.NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE) }
         catch (e: Exception) { startForeground(com.lazyneil.lazycar.GoService.NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK) }
         when (intent?.action) { "play" -> play(); "pause" -> pause() }
@@ -170,13 +170,13 @@ class CarPlayer : MediaBrowserService() {
             o.gain = (com.lazyneil.lazycar.media.Volumes.tabletSaved(this) / 100f).let { it * it }
             speaker = o
             synchronized(StreamReceiver.outputs) { StreamReceiver.outputs.clear(); StreamReceiver.outputs += o }
-            o.run { alive && on[0] }; Acoustic(this, o) { alive && on[0] }.start()
+            o.run { alive && on[0] }; Acoustic(this, o, { sink }) { alive && on[0] }.start()
             return o
         }
         fun closeOut() { outOn[0] = false; out = null; speaker = null; net?.close(); net = null; streaming = false
             synchronized(StreamReceiver.outputs) { StreamReceiver.outputs.clear() } }
         val limJ = Limiter()
-        var written = 0L; var seq = 0; var halAt = 0L; var hal = 200
+        var written = 0L; var seq = 0; var halAt = 0L; var hal = 200; val clk = SinkClock(t)
         var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
         val pend = ShortArray(Wire.CHUNK / 2); var pn = 0; var chunkFrame = 0L   // JBL frame index of pend[0]
         var ex: MediaExtractor? = null; var codec: MediaCodec? = null; var rs = Cubic(); var ratio = 1.0; var ch = 2; var cur: Uri? = null
@@ -217,7 +217,14 @@ class CarPlayer : MediaBrowserService() {
                 // Speaker chunks: stamped with the time the JBL plays their first frame (head + queued + HAL figure).
                 val now = SystemClock.elapsedRealtime()
                 if (now - halAt > 1000) { halAt = now
-                    hal = try { AudioManager::class.java.getMethod("getOutputLatency", Int::class.java).invoke(am, AudioManager.STREAM_MUSIC) as Int } catch (_: Exception) { 200 } }
+                    hal = try { AudioManager::class.java.getMethod("getOutputLatency", Int::class.java).invoke(am, AudioManager.STREAM_MUSIC) as Int } catch (_: Exception) { 200 }
+                    // Sink changed: its learned correction (0 until calibrated), the phone tells the tablet which sink it is.
+                    val k = SinkClock.key(t.routedDevice).let { if (it.isEmpty()) "" else (if (phone) "p" else "t") + it }
+                    if (k != sink) { sink = k; StreamReceiver.acousticMs = TabletSpeaker.cal(this, k)?.toDouble() ?: 0.0; StreamSender.sinkKey = k.hashCode()
+                        Log.e("LazyCar", "car player sink '$k' correction ${StreamReceiver.acousticMs} ms") }
+                    if (++logN % 5 == 0) Log.e("LazyCar", "car player sync: out=${clk.outMs()} af=${clk.afMs} down=${"%.1f".format(clk.downMs)} hidden=${"%.1f".format(clk.hiddenMs)} " +
+                        "correction=${"%.0f".format(StreamReceiver.acousticMs)} speaker err=${o?.let { "%.1f".format(it.errMs) }} realign=${o?.realigns} heard=${"%.0f".format(Acoustic.residualMs)} (${Acoustic.note})") }
+                clk.update()
                 var i = 0
                 while (i < pcm.size) {
                     val k = minOf(pcm.size - i, pend.size - pn); System.arraycopy(pcm, i, pend, pn, k); pn += k; i += k
@@ -228,7 +235,8 @@ class CarPlayer : MediaBrowserService() {
                         val lost = (written - head) - t.bufferSizeInFrames - Wire.RATE / 20
                         if (lost > 0) { written -= lost; chunkFrame -= lost; jblStart -= lost; o?.reset(); rebuilds++
                             Log.e("LazyCar", "car player: JBL lost ${lost * 1000 / Wire.RATE} ms, re-primed the speaker") }
-                        val atNs = System.nanoTime() + ((chunkFrame - head) * 1_000_000_000L / Wire.RATE) + (hal + JBL_EXTRA_MS) * 1_000_000L
+                        // When the JBL plays this chunk: track timestamp + what the timestamp misses (no constants); HAL figure until it has one.
+                        val atNs = clk.playNs(chunkFrame) ?: (System.nanoTime() + ((chunkFrame - head) * 1_000_000_000L / Wire.RATE) + hal * 1_000_000L)
                         budget = ((atNs - System.nanoTime()) / 1_000_000).toInt()
                         net?.let { nt -> nsb.clear(); nsb.put(pend); val nowNs = System.nanoTime()
                             nt.send(npk, Wire.CHUNK, seq, nowNs, -maxOf(0, ((atNs - nowNs) / 1_000_000).toInt()) - 1) }
@@ -244,6 +252,8 @@ class CarPlayer : MediaBrowserService() {
     }
 
     @Volatile private var budget = 400
+    @Volatile private var sink = ""
+    private var logN = 0
     private var outTry = -10_000L
     private fun now0() = SystemClock.elapsedRealtime()
     private var rebuilds = 0
@@ -257,9 +267,6 @@ class CarPlayer : MediaBrowserService() {
         session.release(); super.onDestroy()
     }
 }
-
-/** ponytail: JBL beyond the HAL latency figure (phone measured +57..124); start guess, Acoustic trims the rest. */
-private const val JBL_EXTRA_MS = 130   // 10 min run: mic heard the JBL +35 ms late at 100, settled at +10..15
 
 /** 44.1/48 kHz to 48 kHz for CarPlayer, 4 point cubic (Catmull-Rom): the shared linear [Resampler] only does ppm drift
  *  and dulled the top end at this ratio. Carries 3 frames of history across calls. */
