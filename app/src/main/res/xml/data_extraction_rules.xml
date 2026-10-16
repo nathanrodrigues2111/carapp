@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- User settings only. Volatile keys inside lazycar.xml (GO state, shut down, GO snapshot) are dropped by Backup.onRestoreFinished. -->
 <data-extraction-rules>
     <cloud-backup>
         <include domain="sharedpref" path="lazycar.xml" />
+        <include domain="sharedpref" path="speaker.xml" />
+        <include domain="sharedpref" path="lazygps.xml" />
+        <include domain="sharedpref" path="prefsync.xml" />
+        <include domain="sharedpref" path="rearview.xml" />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="lazycar.xml" />
+        <include domain="sharedpref" path="speaker.xml" />
+        <include domain="sharedpref" path="lazygps.xml" />
+        <include domain="sharedpref" path="prefsync.xml" />
+        <include domain="sharedpref" path="rearview.xml" />
     </device-transfer>
 </data-extraction-rules>
