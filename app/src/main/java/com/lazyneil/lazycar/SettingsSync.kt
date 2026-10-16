@@ -21,7 +21,6 @@ object SettingsSync {
         Key("duckNav", "lazycar", "duckNav", true),
         Key("speakerOn", "speaker", "on", true),        // phone "send" and tablet "play" are one switch
         Key("syncTrim", "speaker", "delay", 0),
-        Key("sinkCal", "speaker", "cals", "{}"),        // per Bluetooth sink sync corrections, learned once
         Key("gpsShare", "lazygps", "mode", true),
         Key("playFrom", "lazycar", "play_from", "tablet"))  // "tablet" (default, CarApp's player) or "phone"
 
