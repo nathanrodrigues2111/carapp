@@ -288,7 +288,7 @@ class Session(val ctx: Context, private val local: Boolean) {
         // Tablet without a session yet: media keys straight to the player, headless.
         fun key(code: Int) = com.lazyneil.lazycar.GoAction.mediaTo(ctx, player, code)
         when (j.optString("c")) {
-            "toggle" -> if (t == null) { if (local) com.lazyneil.lazycar.GoAction.playMedia(ctx, player) else com.lazyneil.lazycar.GoAction.launchPlayer(ctx, com.lazyneil.lazycar.Prefs(ctx).playerPkg) }
+            "toggle" -> if (t == null) { if (local) com.lazyneil.lazycar.audio.CarPlayer.send(ctx, "play") else com.lazyneil.lazycar.GoAction.launchPlayer(ctx, com.lazyneil.lazycar.Prefs(ctx).playerPkg) }
                 else if (ctl?.playbackState?.state == PlaybackState.STATE_PLAYING) t.pause() else t.play()
             "next" -> t?.skipToNext() ?: if (local) key(android.view.KeyEvent.KEYCODE_MEDIA_NEXT) else Unit
             "prev" -> t?.skipToPrevious() ?: if (local) key(android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS) else Unit
@@ -306,6 +306,7 @@ class Session(val ctx: Context, private val local: Boolean) {
         val t = ctl?.transportControls
         if (local && t != null && (ctl?.playbackState?.actions ?: 0L) and PlaybackState.ACTION_PLAY_FROM_URI != 0L)
             t.playFromUri(ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, song), null)
+        else if (local) { com.lazyneil.lazycar.audio.CarPlayer.send(ctx, "pause"); main.postDelayed({ if (ctl != null) playFile(song) }, 800) }   // starts the player, then into its session
         else Files.play(ctx, song, player)
     }
 
@@ -410,13 +411,12 @@ object Files {
     private fun songs(rows: List<Array<String>>, item: (String, String, String, Boolean, Long) -> JSONArray) =
         rows.take(500).forEach { item("song:${it[0]}", it[1], "${it[2]}  ${it[3]}", true, it[0].toLong()) }
 
-    /** Opens the file in the active player if it takes audio files, else Poweramp. Needs TapService for the background start. */
+    /** Opens the file in the active player if it takes audio files. Needs TapService for the background start. */
     fun play(ctx: Context, song: Long, player: String) {
         val uri = ContentUris.withAppendedId(songsUri, song)
         val base = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "audio/*")
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        val pkg = listOf(player, "com.maxmpz.audioplayer").firstOrNull { it.isNotEmpty() &&
-            ctx.packageManager.queryIntentActivities(Intent(base).setPackage(it), 0).isNotEmpty() }
+        val pkg = player.takeIf { it.isNotEmpty() && ctx.packageManager.queryIntentActivities(Intent(base).setPackage(it), 0).isNotEmpty() }
         try { ctx.startActivity(if (pkg != null) base.setPackage(pkg) else base) } catch (e: Exception) { Log.e("LazyCar", "play file", e) }
     }
 }

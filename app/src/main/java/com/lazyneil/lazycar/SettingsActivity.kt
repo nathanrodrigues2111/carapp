@@ -200,19 +200,7 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.outTabSwitch).visibility = if (fromTablet) View.GONE else View.VISIBLE
         if (!fromTablet) return
         findViewById<View>(R.id.outTabSlider).visibility = View.VISIBLE
-        val players = com.lazyneil.lazycar.audio.TabletSpeaker.TABLET_PLAYERS
-        val player = row().apply { isClickable = true; isFocusable = true }
-        val label = text(R.style.SetSub, "")
-        fun show() { label.text = players.firstOrNull { it.first == com.lazyneil.lazycar.audio.TabletSpeaker.tabletPlayer(this) }?.second ?: "Poweramp" }
-        player.addView(text(R.style.SetTitle, "Tablet player")); player.addView(label); show()
-        player.setOnClickListener {
-            MaterialAlertDialogBuilder(this).setTitle("Tablet player")
-                .setSingleChoiceItems(players.map { it.second }.toTypedArray(),
-                    players.indexOfFirst { it.first == com.lazyneil.lazycar.audio.TabletSpeaker.tabletPlayer(this) }) { d, w ->
-                    sp.edit().putString("tabletPlayer", players[w].first).apply(); show(); d.dismiss() }
-                .show()
-        }
-        parent.addView(player, at)
+        // The tablet always plays with CarApp's own player: no player choice.
     }
 
     // ---- launch on widget tap ----
@@ -263,8 +251,7 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.swapBtn).setOnClickListener { val a = p.launchA; p.launchA = p.launchB; p.launchB = a; renderAll() }
         // The user's saved launcher pairs, one tap away when installed.
         val presets = listOf("Drive: Maps + CarApp" to ("com.google.android.apps.maps" to packageName),
-            "Maps + Spotify" to ("com.google.android.apps.maps" to "com.spotify.music"),
-            "Maps + Poweramp" to ("com.google.android.apps.maps" to "com.maxmpz.audioplayer"))
+            "Maps + Spotify" to ("com.google.android.apps.maps" to "com.spotify.music"))
             .filter { (_, pr) -> apps.any { it.first == pr.first } && apps.any { it.first == pr.second } }
         findViewById<View>(R.id.launchPresetRow).apply {
             visibility = if (presets.isEmpty()) View.GONE else View.VISIBLE

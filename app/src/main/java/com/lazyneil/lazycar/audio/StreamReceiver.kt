@@ -68,9 +68,12 @@ class StreamReceiver : Service() {
     /** One AudioTrack pinned to one device, fed from a reorder buffer keyed by sequence number. */
     class Output(val name: String, type: Int, ctx: Context, usage: Int = AudioAttributes.USAGE_MEDIA, private val bufMs: Int = 200,
                  /** ms from a chunk's arrival to its deadline; the track buffer is sized to fit inside it. */
-                 private val budgetMs: () -> Int = { 1000 }, val extraMs: () -> Double) {
+                 private val budgetMs: () -> Int = { 1000 }, private val safe: Boolean = false, val extraMs: () -> Double) {
+        // safe (CarPlayer speaker copy on a busy tablet): underruns fade to mute, realign at most every 5 s.
         /** Lower music for directions: -12 dB, 100 ms down, 300 ms up. */
         @Volatile var duck = false
+        /** Software level (CarPlayer: STREAM_MUSIC there is the JBL's absolute volume). Ramped with the duck. */
+        @Volatile var gain = 1f
         private var duckG = 1f
         private val jb = TreeMap<Int, Chunk>()
         @Volatile var aheadMs = 0       // queued plus in the track, ms of audio ahead of the speaker
@@ -99,6 +102,7 @@ class StreamReceiver : Service() {
         // Filled to bufMs; grows on underruns up to the capacity.
         private var fill = (Wire.RATE * bufMs / 1000).coerceAtMost(track.bufferCapacityInFrames).also { track.bufferSizeInFrames = it }
         val bufferMs get() = track.bufferSizeInFrames * 1000 / Wire.RATE
+        val session get() = track.audioSessionId
         val routed get() = track.routedDevice?.productName?.toString() + " (" + (track.routedDevice?.type ?: -1) + ")"
         /** Mono 8 kHz copy of what we wrote, for the mic correlation. Index = written frames / 6. */
         val ref = FloatArray(1 shl 16)
@@ -135,6 +139,7 @@ class StreamReceiver : Service() {
 
         fun run(alive: () -> Boolean) = thread(name = "speaker-$name") {
             urgent()
+            if (safe) { written += track.write(ShortArray(Wire.RATE / 25 * 2), 0, Wire.RATE / 25 * 2) / 2; refEnd = written / 6 }   // 40 ms primed: no start underrun
             track.play()
             val rs = Resampler()
             var last: ShortArray? = null; var fades = 0
@@ -145,7 +150,7 @@ class StreamReceiver : Service() {
             // No automatic level changes (user: volume must never move by itself); a glitch only fades around itself.
             var mutedAt = 0L; var starting = false
             fun glitch() { healthySince = 0 }
-            var dec = 0f; var decN = 0; var seenUnder = 0
+            var dec = 0f; var decN = 0; var seenUnder = 0; var under = false; var realignAt = 0L
             fun write(s: ShortArray) {
                 written += track.write(s, 0, s.size).coerceAtLeast(0) / 2
                 for (i in s.indices step 8) { val v = s[i].toDouble(); outSq += v * v; outN++ }
@@ -162,7 +167,7 @@ class StreamReceiver : Service() {
                 aheadMs = (aheadNs / 1_000_000).toInt()
                 val client = ((written - track.playbackHeadPosition) * 1000 / Wire.RATE).toInt()
                 depthMs = client + synchronized(jb) { jb.size } * Wire.CHUNK_MS
-                if (track.underrunCount > seenUnder) { seenUnder = track.underrunCount; glitch() }
+                if (track.underrunCount > seenUnder) { seenUnder = track.underrunCount; glitch(); if (safe) under = true }
                 // Track write ahead = what is left of the budget after the HAL latency and 40 ms for network jitter.
                 if (now - sizedAt > 1_000_000_000L) { sizedAt = now
                     val hal = (aheadMs - client).coerceIn(0, 300)
@@ -205,7 +210,9 @@ class StreamReceiver : Service() {
                 errMs = errMs * 0.98 + e * 0.02
                 // Off by more than drift can fix (start, stall, clock step): one re-align. This chunk fades out over
                 // 5 ms, we skip (late) or pad silence (early) by the error, the next chunk fades in over 5 ms.
-                if (abs(e) > 50 || (abs(errMs) > 8 && abs(e) > 8)) {
+                // safe: one chunk's error is noise here (coarse mixer clock); realign on a smoothed 30 ms, at most every 5 s.
+                val jump = if (safe) abs(errMs) > 30 && now - realignAt > 5_000_000_000L else abs(e) > 50 || (abs(errMs) > 8 && abs(e) > 8)
+                if (jump) { realignAt = now
                     val y = rs.process(c.pcm, 1.0); val yn = y.size / 2
                     for (i in 0 until yn) { val g = 1 - i / yn.toFloat(); y[2 * i] *= g; y[2 * i + 1] *= g }
                     if (muted || fades > 0 || fadeIn > 0) y.fill(0f)   // coming out of silence: a full level first sample would click
@@ -222,7 +229,7 @@ class StreamReceiver : Service() {
                 val x = rs.process(c.pcm, r)
                 val fr = x.size / 2
                 val t = SystemClock.elapsedRealtime()
-                if (!muted && depthMs < 20) { for (i in x.indices) x[i] *= 1 - (i / 2) / fr.toFloat(); muted = true; mutes++; healthySince = 0; glitch() }
+                if (!muted && (depthMs < 20 || under)) { under = false; for (i in x.indices) x[i] *= 1 - (i / 2) / fr.toFloat(); muted = true; mutes++; healthySince = 0; glitch() }
                 else if (muted) {
                     // Drop: back after 150 ms of a usable buffer (fade in 50 ms), never more than 2 s of silence while audio arrives.
                     // Start: wait for the full track buffer for 500 ms (30 ms after 5 s, forced at 8 s), fade in 350 ms.
@@ -235,7 +242,7 @@ class StreamReceiver : Service() {
                 }
                 if (!muted && fadeIn > 0) for (i in 0 until fr) { val g = 1 - (fadeIn - i).coerceAtLeast(0) / fadeLen.toFloat(); x[2 * i] *= g; x[2 * i + 1] *= g }
                 if (fadeIn > 0) fadeIn = (fadeIn - fr).coerceAtLeast(0)
-                val dt = if (duck) 0.25f else 1f
+                val dt = (if (duck) 0.25f else 1f) * gain
                 if (duckG != dt || dt != 1f) for (i in 0 until fr) {
                     duckG = if (duckG > dt) maxOf(dt, duckG - 0.75f / (Wire.RATE / 10)) else minOf(dt, duckG + 0.75f / (Wire.RATE * 0.3f))
                     x[2 * i] *= duckG; x[2 * i + 1] *= duckG

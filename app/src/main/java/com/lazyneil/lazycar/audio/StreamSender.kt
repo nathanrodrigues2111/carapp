@@ -59,12 +59,15 @@ class StreamSender : Service() {
         /** GO entry: needs the MediaProjection consent, which only an activity can ask for. */
         fun start(ctx: Context) {
             if (running) return
+            // No Bluetooth speaker on the phone: music plays on the phone itself, a tablet copy would echo.
+            if (ctx.getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+                    .none { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }) { error = "Connect your speaker"; Log.e("LazyCar", "speaker send: no Bluetooth speaker, not streaming"); return }
             ctx.startActivity(Intent(ctx, Consent::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
 
-        /** Tablet mode speaker level. ponytail: no-op, the tablet speaker copy is blocked on ZUI (any speaker-pinned track
-         *  is rebuilt ~8/s while playback capture runs); Tablet mode plays the JBL only. */
-        @Suppress("UNUSED_PARAMETER") fun speakerGain(pct: Int) {}
+        /** Tablet mode speaker level: CarPlayer's speaker copy (capture copies are blocked on ZUI: any speaker-pinned
+         *  track is rebuilt ~8/s while playback capture runs). 0..100, squared. */
+        fun speakerGain(pct: Int) { CarPlayer.speaker?.gain = (pct.coerceIn(0, 100) / 100f).let { it * it } }
 
         fun stop(ctx: Context) { ctx.stopService(Intent(ctx, StreamSender::class.java)) }
     }

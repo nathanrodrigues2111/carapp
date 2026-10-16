@@ -20,8 +20,7 @@ object SettingsSync {
         Key("speakerOn", "speaker", "on", true),        // phone "send" and tablet "play" are one switch
         Key("syncTrim", "speaker", "delay", 0),
         Key("gpsShare", "lazygps", "mode", true),
-        Key("playFrom", "lazycar", "play_from", "tablet"),  // "tablet" (default) or "phone"
-        Key("tabletPlayer", "lazycar", "tabletPlayer", ""))        // stored as a mode; shared as on / off
+        Key("playFrom", "lazycar", "play_from", "tablet"))  // "tablet" (default, CarApp's player) or "phone"
 
     private lateinit var app: Context
     private var send: ((JSONArray) -> Unit)? = null

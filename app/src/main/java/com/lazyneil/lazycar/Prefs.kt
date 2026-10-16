@@ -78,6 +78,6 @@ class Prefs(private val ctx: Context) {
     // Accent colour: ARGB, 0 = System (Material dynamic colour).
 
     companion object {
-        val CAPTURABLE = listOf("revanced.youtube.music", "com.google.android.apps.youtube.music", "com.maxmpz.audioplayer", "org.videolan.vlc")
+        val CAPTURABLE = listOf("revanced.youtube.music", "com.google.android.apps.youtube.music", "org.videolan.vlc")
     }
 }
