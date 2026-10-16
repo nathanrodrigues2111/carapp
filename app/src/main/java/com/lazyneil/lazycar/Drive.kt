@@ -74,7 +74,8 @@ object Drive {
  * Tablet only and optional: the user turns it on once in Android's Accessibility settings, CarApp never turns it on or
  * back on. Two jobs: (1) wake CarApp when the phone presses GO (system bound, so it listens with no notification and
  * no other service, also after Shut down); (2) open the Maps + CarApp split the way a user does on ZUI, which has no
- * app API for it (LAUNCH_ADJACENT and launch windowing modes are ignored): Recents, Maps' icon, Split screen, CarApp.
+ * app API for it (LAUNCH_ADJACENT and launch windowing modes are ignored): the saved pair icon on the home screen,
+ * else Recents, Maps' icon, Split screen, CarApp.
  */
 class SplitService : AccessibilityService() {
     companion object {
@@ -124,27 +125,43 @@ class SplitService : AccessibilityService() {
         val launch = packageManager.getLaunchIntentForPackage(maps) ?: return fail("$maps not installed")
         val mapsLabel = try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(maps, 0)).toString() } catch (_: Exception) { "Maps" }
         val ours = getString(R.string.app_name)
-        busyUntil = now + 15_000
+        busyUntil = now + 20_000
         Log.e("LazyCar", "split: start")
-        // Maps first in front, so its task tile is in Recents; ZUI puts the app picked in Recents on the left.
-        startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        main.postDelayed({
-            performGlobalAction(GLOBAL_ACTION_RECENTS)
+        fun done() { busyUntil = 0; Log.e("LazyCar", "split: done split=${isSplit(maps)}") }
+        // ponytail: English ZUI labels ("Split screen"); a localized ZUI needs its string here.
+        fun recents() {
+            // Maps first in front, so its task tile is in Recents; ZUI puts the app picked in Recents on the left.
+            startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             main.postDelayed({
-            // ponytail: English ZUI labels ("Split screen"); a localized ZUI needs its string here.
-            find("Maps icon in Recents", { node(mapsLabel) { it.packageName == ZUI_LAUNCHER && it.viewIdResourceName == "$ZUI_LAUNCHER:id/icon" } }) {
-                find("Split screen menu", { node("Split screen") { it.packageName == ZUI_LAUNCHER } }) {
-                    find("CarApp in the picker", { node(ours) { it.packageName == ZUI_PICKER && it.viewIdResourceName == "$ZUI_PICKER:id/appname_tv" } }) {
-                        main.postDelayed({ ratio(); main.postDelayed({ busyUntil = 0; Log.e("LazyCar", "split: done split=${isSplit(maps)}") }, 800) }, 1200)
+                performGlobalAction(GLOBAL_ACTION_RECENTS)
+                main.postDelayed({
+                    find("Maps icon in Recents", { node(mapsLabel) { it.packageName == ZUI_LAUNCHER && it.viewIdResourceName == "$ZUI_LAUNCHER:id/icon" } }) {
+                        find("Split screen menu", { node("Split screen") { it.packageName == ZUI_LAUNCHER } }) {
+                            find("CarApp in the picker", { node(ours) { it.packageName == ZUI_PICKER && it.viewIdResourceName == "$ZUI_PICKER:id/appname_tv" } }) {
+                                main.postDelayed({ ratio(); main.postDelayed({ done() }, 800) }, 1200)
+                            }
+                        }
                     }
-                }
+                }, 1000)   // Recents settled
+            }, 1500)
+        }
+        // The user's saved Maps + CarApp pair on the home screen or dock: one tap, its own sides and ratio.
+        // Not there (another home page, never saved) or no split after it: the Recents route.
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        main.postDelayed({
+            find("Maps + CarApp pair", { pair(mapsLabel, ours) }, tries = 4, orElse = { Log.e("LazyCar", "split: no pair icon"); recents() }) {
+                main.postDelayed({ if (isSplit(maps)) done() else { Log.e("LazyCar", "split: pair tap gave no split"); recents() } }, 2500)
             }
-            }, 1000)   // Recents settled
-        }, 1500)
+        }, 1200)
     }
 
+    /** A launcher icon whose label names both apps (ZUI app pairs are labelled with both names). */
+    private fun pair(a: String, b: String): AccessibilityNodeInfo? = windows.mapNotNull { it.root }.firstNotNullOfOrNull { root ->
+        root.findAccessibilityNodeInfosByText(a).firstOrNull { n -> n.packageName == ZUI_LAUNCHER &&
+            listOfNotNull(n.text, n.contentDescription).any { it.contains(a, true) && it.contains(b, true) } } }
+
     /** Polls up to 4 s for a node, taps its center, then [then]. */
-    private fun find(what: String, get: () -> AccessibilityNodeInfo?, tries: Int = 14, then: () -> Unit) {
+    private fun find(what: String, get: () -> AccessibilityNodeInfo?, tries: Int = 14, orElse: () -> Unit = { fail("no $what") }, then: () -> Unit) {
         val n = get()
         if (n != null) {
             // A click action survives the Recents animation; a tap at the node's bounds is the fallback.
@@ -153,8 +170,8 @@ class SplitService : AccessibilityService() {
             if (!clicked) tap(r.exactCenterX(), r.exactCenterY())
             Log.e("LazyCar", "split: $what at $r click=$clicked"); main.postDelayed(then, 900); return
         }
-        if (tries <= 0) return fail("no $what")
-        main.postDelayed({ find(what, get, tries - 1, then) }, 300)
+        if (tries <= 0) return orElse()
+        main.postDelayed({ find(what, get, tries - 1, orElse, then) }, 300)
     }
 
     private fun node(text: String, ok: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? =
