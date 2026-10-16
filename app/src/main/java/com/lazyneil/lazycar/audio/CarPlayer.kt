@@ -153,7 +153,7 @@ class CarPlayer : MediaBrowserService() {
             .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(Wire.RATE).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
             .setBufferSizeInBytes(Wire.RATE * 4 / 5).build()   // not pinned: media already routes to the JBL, and two pinned tracks
         // re-routed each other in a loop (every rebuild of one invalidated the other, ~37 rebuilds/s)
-        jbl = t
+        jbl = t; val clk = SinkClock(t)
         // The speaker Output (and Acoustic) live only while playing: a paused player holds no open track.
         var out: StreamReceiver.Output? = null; var outOn = booleanArrayOf(false)
         // Phone: the tablet speaker copy goes over Wi-Fi (Net), stamped like the speaker Output's chunks.
@@ -170,13 +170,13 @@ class CarPlayer : MediaBrowserService() {
             o.gain = (com.lazyneil.lazycar.media.Volumes.tabletSaved(this) / 100f).let { it * it }
             speaker = o
             synchronized(StreamReceiver.outputs) { StreamReceiver.outputs.clear(); StreamReceiver.outputs += o }
-            o.run { alive && on[0] }; Acoustic(this, o, { sink }) { alive && on[0] }.start()
+            o.run { alive && on[0] }; Acoustic(this, o, { sink }, { clk.afMs }) { alive && on[0] }.start()
             return o
         }
         fun closeOut() { outOn[0] = false; out = null; speaker = null; net?.close(); net = null; streaming = false
             synchronized(StreamReceiver.outputs) { StreamReceiver.outputs.clear() } }
         val limJ = Limiter()
-        var written = 0L; var seq = 0; var halAt = 0L; var hal = 200; val clk = SinkClock(t)
+        var written = 0L; var seq = 0; var halAt = 0L; var hal = 200
         var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
         val pend = ShortArray(Wire.CHUNK / 2); var pn = 0; var chunkFrame = 0L   // JBL frame index of pend[0]
         var ex: MediaExtractor? = null; var codec: MediaCodec? = null; var rs = Cubic(); var ratio = 1.0; var ch = 2; var cur: Uri? = null
@@ -188,7 +188,8 @@ class CarPlayer : MediaBrowserService() {
             if ((out != null || net != null) && !hasBt()) closeOut()
             val o = out ?: (if (now0() - outTry > 2000) { outTry = now0(); openOut().also { out = it } } else null)
             try {
-                // (Re)open on a song change or seek.
+                // (Re)open on a song change or seek. The pipeline keeps running: the new frames queue behind what is
+                // already in both tracks, so they stay aligned (no flush, no speaker reset, no realign). Seeks land ~0.2 s later.
                 if (songs.getOrNull(index) != cur || seekTo >= 0) {
                     val to = seekTo.coerceAtLeast(0); seekTo = -1
                     if (songs.getOrNull(index) != cur) { codec?.release(); ex?.release()
@@ -199,8 +200,7 @@ class CarPlayer : MediaBrowserService() {
                         ratio = f.getInteger(MediaFormat.KEY_SAMPLE_RATE) / Wire.RATE.toDouble(); ch = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT); cur = songs[index]
                     } else codec?.flush()
                     ex!!.seekTo(to * 1000, MediaExtractor.SEEK_TO_CLOSEST_SYNC); rs = Cubic()
-                    t.pause(); t.flush(); t.play(); o?.reset(); pn = 0
-                    trackStartMs = to; jblStart = t.playbackHeadPosition.toLong() and 0xffffffffL; written = jblStart; chunkFrame = jblStart; main { state() }
+                    trackStartMs = to; jblStart = written; main { state() }
                 }
                 val c = codec!!; val e = ex!!
                 val inIx = c.dequeueInputBuffer(10_000)
@@ -220,8 +220,9 @@ class CarPlayer : MediaBrowserService() {
                     hal = try { AudioManager::class.java.getMethod("getOutputLatency", Int::class.java).invoke(am, AudioManager.STREAM_MUSIC) as Int } catch (_: Exception) { 200 }
                     // Sink changed: its learned correction (0 until calibrated), the phone tells the tablet which sink it is.
                     val k = SinkClock.key(t.routedDevice).let { if (it.isEmpty()) "" else (if (phone) "p" else "t") + it }
-                    if (k != sink) { sink = k; StreamReceiver.acousticMs = TabletSpeaker.cal(this, k)?.toDouble() ?: 0.0; StreamSender.sinkKey = k.hashCode()
+                    if (k != sink) { sink = k; StreamReceiver.acousticMs = TabletSpeaker.cal(this, k, clk.afMs)?.toDouble() ?: 0.0; StreamSender.sinkKey = k.hashCode()
                         Log.e("LazyCar", "car player sink '$k' correction ${StreamReceiver.acousticMs} ms") }
+                    StreamSender.sinkAf = clk.afMs
                     if (++logN % 5 == 0) Log.e("LazyCar", "car player sync: out=${clk.outMs()} af=${clk.afMs} down=${"%.1f".format(clk.downMs)} hidden=${"%.1f".format(clk.hiddenMs)} " +
                         "correction=${"%.0f".format(StreamReceiver.acousticMs)} speaker err=${o?.let { "%.1f".format(it.errMs) }} realign=${o?.realigns} heard=${"%.0f".format(Acoustic.residualMs)} (${Acoustic.note})") }
                 clk.update()

@@ -49,6 +49,7 @@ class StreamReceiver : Service() {
         @Volatile var jitterMs = 0.0    // peak arrival spread, decays
         @Volatile var targetMs = 0      // jitter buffer the deadline never goes below
         @Volatile var acousticMs = 0.0  // learned correction of the current sink on top of the math (one time mic calibration)
+        @Volatile var sinkAf = -1       // the phone sink's reported latency, calibration signature
         @Volatile var sink = ""         // calibration key of the phone's Bluetooth sink, from the packet header
         const val MAX_LATE_MS = 0       // user: sync with the speaker first; any late was heard as out of sync
         @Volatile var lagMs = 0         // best case phone mixer to our arrival (capture + network)
@@ -163,7 +164,7 @@ class StreamReceiver : Service() {
             }
             while (alive()) {
                 // Stream (re)start: silent until the jitter buffer holds the full budget, then a slow fade in.
-                if (fresh) { fresh = false; muted = true; starting = true; mutedAt = 0L; healthySince = 0; sizedAt = 0 }
+                if (fresh) { fresh = false; muted = true; starting = true; mutedAt = 0L; healthySince = 0; sizedAt = 0; realignAt = 0L }
                 val now = System.nanoTime()
                 val playNow = playNs(written) ?: (now + (written - track.playbackHeadPosition) * 1_000_000_000L / Wire.RATE)
                 val aheadNs = playNow - now
@@ -239,7 +240,8 @@ class StreamReceiver : Service() {
                     // Start: wait for the full track buffer for 500 ms (30 ms after 5 s, forced at 8 s), fade in 350 ms.
                     if (mutedAt == 0L) mutedAt = t
                     val need = if (starting && t - mutedAt < 5000) bufferMs else 30
-                    if (depthMs < need) healthySince = 0 else if (healthySince == 0L) healthySince = t
+                    // Start: also aligned first (never audible out of sync); the jump above fixes it while silent.
+                    if (depthMs < need || (starting && abs(errMs) > 5)) healthySince = 0 else if (healthySince == 0L) healthySince = t
                     if ((healthySince != 0L && t - healthySince >= (if (starting) 500 else 150)) || t - mutedAt >= (if (starting) 8000 else 2000)) {
                         fadeIn = if (starting) Wire.RATE * 35 / 100 else Wire.RATE / 20; fadeLen = fadeIn; muted = false; mutedAt = 0L; starting = false }
                     else x.fill(0f)
@@ -298,7 +300,7 @@ class StreamReceiver : Service() {
             if (TabletSpeaker.btToo(ctx)) outputs += Output("bluetooth", AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, ctx) { 0.0 }
             outputs.forEach { it.run { alive } }
         }
-        Acoustic(ctx, outputs[0], { sink }) { alive }.start()
+        Acoustic(ctx, outputs[0], { sink }, { sinkAf }) { alive }.start()
         // Maps (or anything) speaking directions here: duck our output and tell the phone so the JBL dips too.
         val am = getSystemService(AudioManager::class.java)
         fun nav() { val on = com.lazyneil.lazycar.Ui.duckNav(ctx) && am.activePlaybackConfigurations.any {
@@ -339,8 +341,9 @@ class StreamReceiver : Service() {
                 }
                 clock.add(t3, bb.getLong(4), bb.getLong(12), bb.getLong(20), bb.getLong(28))
                 phoneOutMs = bb.getInt(36).let { if (it < 0) -it - 1 else it }   // phone mixer to its speaker by the same math; negative: CarPlayer, exact
+                sinkAf = bb.getInt(44)
                 val k = bb.getInt(40).let { if (it == 0) "" else "h$it" }
-                if (k != sink) { sink = k; acousticMs = TabletSpeaker.cal(ctx, k)?.toDouble() ?: 0.0; Log.e("LazyCar", "speaker recv sink '$k' correction $acousticMs ms") }
+                if (k != sink) { sink = k; acousticMs = TabletSpeaker.cal(ctx, k, sinkAf)?.toDouble() ?: 0.0; Log.e("LazyCar", "speaker recv sink '$k' correction $acousticMs ms") }
                 if (seq > last) { lost += (seq - last - 1).coerceAtMost(200); last = seq }
                 val pcm = ShortArray(len / 2); ByteBuffer.wrap(buf, Wire.HEADER, len).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcm)
                 for (i in pcm.indices step 4) { val v = pcm[i].toDouble(); sq += v * v; n++ }

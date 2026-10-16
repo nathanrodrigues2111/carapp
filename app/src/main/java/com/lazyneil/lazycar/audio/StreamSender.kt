@@ -47,6 +47,7 @@ class StreamSender : Service() {
         @Volatile var shared = false
         @Volatile var jbl: StreamReceiver.Output? = null
         @Volatile var duckRemote = false
+        @Volatile var sinkAf = -1       // its reported latency (getLatency), the calibration's signature
         @Volatile var sinkKey = 0       // hash of the Bluetooth sink's calibration key, sent so the tablet keeps one correction per sink
 
         /** The user's "Start" on the screen share consent, asked by GO while CarApp is in front, used once at the end of GO. */
@@ -205,7 +206,7 @@ class StreamSender : Service() {
                 if (now - at > 1000) { at = now
                     halMs = try { android.media.AudioManager::class.java.getMethod("getOutputLatency", Int::class.java)
                         .invoke(getSystemService(android.media.AudioManager::class.java), android.media.AudioManager.STREAM_MUSIC) as Int } catch (_: Exception) { -1 }
-                    afMs = clk.afMs; tsMs = clk.downMs.toInt()
+                    afMs = clk.afMs; sinkAf = afMs; tsMs = clk.downMs.toInt()
                     clk.outMs()?.let { outMs = it }
                     sinkKey = SinkClock.key(t.routedDevice).let { if (it.isEmpty()) 0 else ("p$it").hashCode() }
                 }
@@ -296,7 +297,7 @@ class Net(private val onDuck: (Boolean) -> Unit = {}) {
     fun send(pkt: ByteArray, len: Int, seq: Int, mixNs: Long, out: Int): Boolean {
         val d = dest
         if (d == null || SystemClock.elapsedRealtime() - beaconAt >= 5000) { StreamSender.tablet = ""; return false }
-        ByteBuffer.wrap(pkt).putInt(0, seq).putLong(4, beaconT).putLong(12, beaconNs).putLong(20, System.nanoTime()).putLong(28, mixNs).putInt(36, out).putInt(40, StreamSender.sinkKey)
+        ByteBuffer.wrap(pkt).putInt(0, seq).putLong(4, beaconT).putLong(12, beaconNs).putLong(20, System.nanoTime()).putLong(28, mixNs).putInt(36, out).putInt(40, StreamSender.sinkKey).putInt(44, StreamSender.sinkAf)
         return try { dp.setData(pkt, 0, Wire.HEADER + len); dp.socketAddress = d; s.send(dp); true } catch (_: Exception) { false }
     }
     fun close() { alive = false; s.close(); StreamSender.tablet = "" }
@@ -313,5 +314,5 @@ object Wire {
     const val FORMAT = "lossless PCM 48 kHz 16-bit stereo"
     const val SHARED_ON = false   // blocked: JBL uses absolute volume (music index = JBL hardware level), see commit
     const val SHARED_MS = 450      // capture to speaker on both outputs in shared mode; JBL A2DP ~250 + room for stalls
-    const val HEADER = 44          // seq int, echoed tablet beacon ns, phone ns at beacon, phone ns at send, phone mixer ns of frame 0, phone to speaker ms int, sink key hash int
+    const val HEADER = 48          // seq int, echoed tablet beacon ns, phone ns at beacon, phone ns at send, phone mixer ns of frame 0, phone to speaker ms int, sink key hash int, sink getLatency ms int
 }
