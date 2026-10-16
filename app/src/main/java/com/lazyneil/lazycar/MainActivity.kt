@@ -231,10 +231,8 @@ class MainActivity : AppCompatActivity() {
 
     // Anything missing shows as one calm line on the home screen; tapping it opens the right screen. No pop-ups.
     private fun refreshSetup() {
-        val a11y = accessibilityEnabled()
         fun perm(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
         val item: Pair<String, () -> Unit>? = when {
-            !a11y -> "Auto tap is off. Tap to turn it on in Accessibility" to { Ui.openAccessibility(this) }
             !perm(Manifest.permission.BLUETOOTH_CONNECT) -> "Nearby devices is off. Tap to allow" to {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1) }
             // Only an outside player needs it (its session, controls, Now Playing for the tablet).
@@ -249,12 +247,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.setupTitle).text = item.first
         findViewById<View>(R.id.setupBody).visibility = View.GONE; findViewById<View>(R.id.setupBtn).visibility = View.GONE
         card.setOnClickListener { item.second() }
-    }
-
-    private fun accessibilityEnabled(): Boolean {
-        val flat = Settings.Secure.getString(contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
-        return flat.split(':').any { it.substringBefore('/') == packageName }
     }
 
     override fun onRequestPermissionsResult(rc: Int, perms: Array<out String>, res: IntArray) {
@@ -385,7 +377,8 @@ class MainActivity : AppCompatActivity() {
             .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
         tile(R.id.tileBt, R.drawable.ic_speaker, "Speaker", if (bt != null) "Connected" else "Off", if (bt != null) Ui.GREEN else off, false)
         val on = GoAction.effectiveState(p) == GoAction.ON
-        tile(R.id.tileHotspot, R.drawable.ic_share, "Hotspot", when { !p.hotspot -> "Off"; on -> "On"; else -> "Off" }, if (p.hotspot && on) Ui.GREEN else off, false)
+        // No public hotspot state on Android 16: the tablet link is the proof it is up.
+        tile(R.id.tileHotspot, R.drawable.ic_share, "Hotspot", if (com.lazyneil.lazycar.media.MediaListener.clients > 0) "Tablet joined" else "Keep it on", if (com.lazyneil.lazycar.media.MediaListener.clients > 0) Ui.GREEN else off, false)
         // Same source as Debug's "Media control for the tablet" row: the link's client count.
         val ml = com.lazyneil.lazycar.media.MediaListener
         val tab = ml.clients > 0; val waiting = ml.bound

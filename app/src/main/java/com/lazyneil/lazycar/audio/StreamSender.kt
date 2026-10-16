@@ -42,8 +42,8 @@ class StreamSender : Service() {
         @Volatile var halMs = -1        // hidden AudioManager.getOutputLatency(STREAM_MUSIC), cross-check only
         @Volatile var afMs = -1         // hidden AudioTrack.getLatency() minus the client buffer, includes the A2DP delay
         @Volatile var tsMs = -1         // monitor timestamp latency minus the client buffer, stops at the phone on BT
-        /** Shared timeline: CarApp plays the JBL itself, [Wire.SHARED_MS] after capture, on the accessibility stream
-         *  (own volume via TapService), with STREAM_MUSIC at 0 so the apps' direct path is silent. */
+        /** Shared timeline: CarApp plays the JBL itself, [Wire.SHARED_MS] after capture, on the accessibility stream,
+         *  with STREAM_MUSIC at 0 so the apps' direct path is silent. Off ([Wire.SHARED_ON]). */
         @Volatile var shared = false
         @Volatile var jbl: StreamReceiver.Output? = null
         @Volatile var duckRemote = false
@@ -56,13 +56,23 @@ class StreamSender : Service() {
             return ((written - heard) * 1000 / Wire.RATE).toInt()
         }
 
-        /** GO entry: needs the MediaProjection consent, which only an activity can ask for. */
+        /** The user's "Start" on the screen share consent, asked by GO while CarApp is in front, used once at the end of GO. */
+        @Volatile private var granted: Intent? = null
+        @Volatile private var asking = false   // the dialog is up: its answer starts or holds the capture
+        /** GO tap (an activity): the system consent dialog now, so the background GO end can start capturing. */
+        fun askConsent(a: Activity) { if (!running && granted == null) a.startActivity(Intent(a, Consent::class.java)) }
+
+        /** GO end: needs the MediaProjection consent, which only an activity can ask for. */
         fun start(ctx: Context) {
             if (running) return
             // No Bluetooth speaker on the phone: music plays on the phone itself, a tablet copy would echo.
             if (ctx.getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
-                    .none { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }) { error = "Connect your speaker"; Log.e("LazyCar", "speaker send: no Bluetooth speaker, not streaming"); return }
-            ctx.startActivity(Intent(ctx, Consent::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    .none { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }) { error = "Connect your speaker"; granted = null; Log.e("LazyCar", "speaker send: no Bluetooth speaker, not streaming"); return }
+            if (asking) return
+            val g = granted; granted = null
+            if (g != null) try { ctx.startForegroundService(Intent(ctx, StreamSender::class.java).putExtra("data", g)); return }
+                catch (e: Exception) { Log.e("LazyCar", "speaker send start", e) }
+            ctx.startActivity(Intent(ctx, Consent::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))   // in front only: else Android blocks it
         }
 
         /** Tablet mode speaker level: CarPlayer's speaker copy (capture copies are blocked on ZUI: any speaker-pinned
@@ -76,23 +86,26 @@ class StreamSender : Service() {
     class Consent : Activity() {
         override fun onCreate(savedInstanceState: Bundle?) {
             super.onCreate(savedInstanceState)
+            asking = true
             if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
                 requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
             else ask()
         }
         override fun onRequestPermissionsResult(rc: Int, p: Array<out String>, r: IntArray) {
-            if (r.firstOrNull() == PackageManager.PERMISSION_GRANTED) ask() else { error = "Microphone permission needed"; finish() }
+            if (r.firstOrNull() == PackageManager.PERMISSION_GRANTED) ask() else { error = "Microphone permission needed"; asking = false; finish() }
         }
-        // The consent is per session on Android 14+; TapService taps it so GO stays zero-touch.
-        private fun ask() = com.lazyneil.lazycar.TapService.armButtons(listOf("Start now", "Share screen", "Start")).let { val mpm = getSystemService(MediaProjectionManager::class.java)
+        // The consent is per session on Android 14+: the standard system dialog, the user taps Start.
+        private fun ask() { val mpm = getSystemService(MediaProjectionManager::class.java)
             // Whole display, so the dialog skips the "Share one app" picker.
             startActivityForResult(if (android.os.Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(
                 android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent(), 2) }
         override fun onActivityResult(rc: Int, res: Int, data: Intent?) {
-            if (res == RESULT_OK && data != null)
-                startForegroundService(Intent(this, StreamSender::class.java).putExtra("data", data))
-            else error = "Capture consent denied"
-            finish()
+            // GO still running: hold it for GO's end (the speaker must be connected first). Asked later: start now.
+            if (res == RESULT_OK && data != null) {
+                if (com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this)) == com.lazyneil.lazycar.GoAction.STARTING) granted = data
+                else startForegroundService(Intent(this, StreamSender::class.java).putExtra("data", data))
+            } else error = "Capture consent denied"
+            asking = false; finish()
         }
     }
 
@@ -241,7 +254,7 @@ class StreamSender : Service() {
         val m = android.media.AudioManager.STREAM_MUSIC; val a = android.media.AudioManager.STREAM_ACCESSIBILITY
         val mMax = am.getStreamMaxVolume(m)
         // OnePlus ignores setStreamVolume on music from apps (OPLUS ADJUSTVOLUME_FORBID), but mute works and the
-        // capture stays full scale while muted. Our level goes on the accessibility stream (own volume via TapService).
+        // capture stays full scale while muted. Our level goes on the accessibility stream.
         val saved = am.getStreamVolume(m)
         p.edit().putBoolean("musicMuted", true).apply()   // a crash leaves music muted: the next start or stop unmutes
         am.adjustStreamVolume(a, android.media.AudioManager.ADJUST_SAME, 0)

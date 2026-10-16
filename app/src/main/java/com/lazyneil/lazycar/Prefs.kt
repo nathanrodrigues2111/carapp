@@ -34,10 +34,9 @@ class Prefs(private val ctx: Context) {
         set(v) = put("launchMode", v)
     // Left app share of the width in split mode; 65 matches the launcher's saved pair.
     var splitRatio: Int get() = i("splitRatio", 65); set(v) = sp.edit().putInt("splitRatio", v).apply()
-    /** "auto", "lenovo" (launcher saved pair) or "standard" (adjacent launch, any Android 12L+ tablet). */
-    var splitMethod: String get() = sp.getString("splitMethod", null) ?: "auto"; set(v) = put("splitMethod", v)
-    // Tablet joins this phone hotspot on start (saved network on the tablet).
+    // Tablet joins this phone hotspot (a Wi-Fi suggestion, see Drive.join). Blank password = open network.
     var hotspotSsid: String get() = sp.getString("hotspotSsid", null)?.takeIf { it.isNotBlank() } ?: "Nathan's Oneplus"; set(v) = put("hotspotSsid", v)
+    var hotspotPass: String get() = s("hotspotPass"); set(v) = put("hotspotPass", v)
     private fun b(k: String, def: Boolean) = sp.getBoolean(k, def)
     private fun putB(k: String, v: Boolean) = sp.edit().putBoolean(k, v).apply()
 
@@ -57,15 +56,10 @@ class Prefs(private val ctx: Context) {
     var snapMusicWasActive: Boolean get() = b("snapMusic", true); set(v) = putB("snapMusic", v)
     var snapConn1: Boolean get() = b("snapC1", true); set(v) = putB("snapC1", v)
     var snapConn3: Boolean get() = b("snapC3", true); set(v) = putB("snapC3", v)
-    var snapDataWasOn: Boolean get() = b("snapData", true); set(v) = putB("snapData", v)
-    var snapHotspotWasOn: Boolean get() = b("snapHotspot", true); set(v) = putB("snapHotspot", v)
     // GO-time STREAM_MUSIC index, restored by STOP. -1 = not captured (don't restore).
     var snapMusicVol: Int get() = i("snapMusicVol", -1); set(v) = sp.edit().putInt("snapMusicVol", v).apply()
-    var snapA11yWasOn: Boolean get() = b("snapA11y", true); set(v) = putB("snapA11y", v)
-    /** Tablet: the Drive tap turned Wi-Fi on to join the hotspot; shut down turns it back off. */
-    var snapWifiByGo: Boolean get() = b("snapWifiByGo", false); set(v) = putB("snapWifiByGo", v)
     /** After a restore the snapshot is spent: a later Shut down without GO must not undo the user's own changes. */
-    fun clearSnap() = sp.edit().apply { listOf("snapBt", "snapMusic", "snapC1", "snapC3", "snapData", "snapHotspot", "snapMusicVol", "snapA11y", "snapWifiByGo").forEach { remove(it) } }.apply()
+    fun clearSnap() = sp.edit().apply { listOf("snapBt", "snapMusic", "snapC1", "snapC3", "snapMusicVol").forEach { remove(it) } }.apply()
     /** Shut down: nothing of CarApp runs (boot, listener rebinds, hotspot join) until the app is opened or GO is pressed. */
     var shutDown: Boolean get() = b("shutDown", false); set(v) = putB("shutDown", v)
 
@@ -73,10 +67,6 @@ class Prefs(private val ctx: Context) {
     // Migrates the old per-device vol1 into the single vol on first read. Default 40%, on.
     var vol: Int get() = i("vol", i("vol1", 40)); set(v) = sp.edit().putInt("vol", v).apply()
     var volOn: Boolean get() = b("volOn", true); set(v) = putB("volOn", v)
-
-    // ---- optional network setup on GO (Task 4) ----
-    var hotspot: Boolean get() = b("hotspot", false); set(v) = putB("hotspot", v)
-    var mobileData: Boolean get() = b("mobileData", false); set(v) = putB("mobileData", v)
     // Accent colour: ARGB, 0 = System (Material dynamic colour).
 
     companion object {

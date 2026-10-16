@@ -86,17 +86,6 @@ class SettingsActivity : AppCompatActivity() {
             "Detected: " + (d?.second ?: "none")
         findViewById<TextInputEditText>(R.id.ipField).setText(p.headunitIp)
 
-        val mobile = findViewById<MaterialSwitch>(R.id.mobileSwitch)
-        findViewById<MaterialSwitch>(R.id.hotspotSwitch).apply {
-            isChecked = p.hotspot
-            mobile.visibility = if (p.hotspot) View.VISIBLE else View.GONE
-            setOnCheckedChangeListener { _, on -> p.hotspot = on; mobile.visibility = if (on) View.VISIBLE else View.GONE }
-        }
-        mobile.apply {
-            isChecked = p.mobileData
-            setOnCheckedChangeListener { _, on -> p.mobileData = on }
-        }
-
         bindDevice()
         bindLaunch()
         buildHeadunitPicker()
@@ -119,7 +108,6 @@ class SettingsActivity : AppCompatActivity() {
         super.onResume()
         // A change made on the other device shows at once, at the same scroll position.
         SettingsSync.onRemote = { keepScroll = findViewById<View>(R.id.settingsScroll).scrollY; recreate() }
-        refreshA11y()
         handler.post(tick)
     }
 
@@ -129,20 +117,22 @@ class SettingsActivity : AppCompatActivity() {
         handler.removeCallbacks(tick)
         p.headunitIp = findViewById<TextInputEditText>(R.id.ipField).text.toString().trim()
         val ssid = findViewById<TextInputEditText>(R.id.ssidField).text.toString().trim()
-        if (Role.isTablet(this) && ssid.isNotEmpty() && ssid != p.hotspotSsid) { p.hotspotSsid = ssid; TapService.joinHotspot() }
+        val pass = findViewById<TextInputEditText>(R.id.hotspotPassField).text.toString()
+        if (Role.isTablet(this) && ssid.isNotEmpty() && (ssid != p.hotspotSsid || pass != p.hotspotPass)) { p.hotspotSsid = ssid; p.hotspotPass = pass; Drive.join(this) }
     }
 
     private fun bindDevice() {
         val tablet = Role.isTablet(this)
         // Phone-only car audio controls are hidden on the tablet, the camera row on the phone.
-        intArrayOf(R.id.rowHeadunit, R.id.headunitExtra, R.id.rowHotspot, R.id.rowMobile, R.id.a11yRow)
+        intArrayOf(R.id.rowHeadunit, R.id.headunitExtra)
             .forEach { if (tablet) findViewById<View>(it).visibility = View.GONE }
         // The camera section is tablet only.
         intArrayOf(R.id.camSection, R.id.camSectionHeader).forEach { findViewById<View>(it).visibility = if (tablet) View.VISIBLE else View.GONE }
         if (!SHOW_HEADUNIT) intArrayOf(R.id.rowHeadunit, R.id.headunitExtra)
             .forEach { findViewById<View>(it).visibility = View.GONE }
-        (findViewById<View>(R.id.ssidBox).parent as View).visibility = if (tablet) View.VISIBLE else View.GONE
+        intArrayOf(R.id.ssidBox, R.id.hotspotPassBox).forEach { (findViewById<View>(it).parent as View).visibility = if (tablet) View.VISIBLE else View.GONE }
         findViewById<TextInputEditText>(R.id.ssidField).setText(p.hotspotSsid)
+        findViewById<TextInputEditText>(R.id.hotspotPassField).setText(p.hotspotPass)
         findViewById<View>(R.id.camRow).apply {
             visibility = if (tablet) View.VISIBLE else View.GONE
             setOnClickListener { startActivity(Intent(this@SettingsActivity, com.lazyneil.lazycar.rear.RearSettingsActivity::class.java)) }
@@ -269,25 +259,6 @@ class SettingsActivity : AppCompatActivity() {
         renderAll()
     }
 
-    private fun refreshA11y() {
-        val on = accessibilityEnabled()
-        val icon = findViewById<ImageView>(R.id.a11yIcon)
-        val text = findViewById<TextView>(R.id.a11yText)
-        val row = findViewById<View>(R.id.a11yRow)
-        if (on) {
-            icon.setImageResource(R.drawable.ic_check_circle)
-            icon.setColorFilter(Accent.now(this))
-            text.text = "Auto tap is on"
-            row.setOnClickListener(null); row.isClickable = false
-        } else {
-            icon.setImageResource(R.drawable.ic_error_outline)
-            icon.setColorFilter(getColor(R.color.error))
-            text.text = "Auto tap is off, tap to turn on"
-            row.isClickable = true
-            row.setOnClickListener { Ui.openAccessibility(this) }
-        }
-    }
-
     private fun buildHeadunitPicker() {
         val r = BtDevices.load(this)
         allDevices = r.all
@@ -323,11 +294,6 @@ class SettingsActivity : AppCompatActivity() {
 
 
 
-    private fun accessibilityEnabled(): Boolean {
-        val flat = Settings.Secure.getString(contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
-        return flat.split(':').any { it.substringBefore('/') == packageName }
-    }
 
     private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
 
@@ -362,10 +328,6 @@ class SettingsActivity : AppCompatActivity() {
     // ---- Drive: open the Maps + CarApp split by itself (tablet) ----
     private fun bindDrive() {
         val tablet = Role.isTablet(this)
-        findViewById<View>(R.id.splitMethodBox).visibility = if (tablet) View.VISIBLE else View.GONE
-        val methods = listOf("auto", "lenovo", "standard")
-        Ui.segmented(findViewById(R.id.splitMethod), listOf("Auto", "Lenovo pair", "Standard"), methods.indexOf(p.splitMethod).coerceAtLeast(0)) {
-            p.splitMethod = methods[it] }
         intArrayOf(R.id.driveHeader, R.id.driveCard).forEach { findViewById<View>(it).visibility = if (tablet) View.VISIBLE else View.GONE }
         // Lower music for directions: pref "duckNav" (lazycar, default on), shared; audio reads it.
         findViewById<MaterialSwitch>(R.id.duckSwitch).apply {

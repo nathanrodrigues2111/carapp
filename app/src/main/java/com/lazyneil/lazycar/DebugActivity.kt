@@ -87,16 +87,14 @@ class DebugActivity : AppCompatActivity() {
             rows += Row("Maps test", { St.WAITING to "Tap a button, Maps should show your location" }, listOf(
                 "My location" to { maps("geo:0,0?q=my+location") },
                 "Navigate" to { maps("google.navigation:q=petrol+pump") }))
-            rows += Row("Hotspot join", ::hotspot, listOf("Run" to { TapService.joinHotspot() }),
-                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            rows += Row("Hotspot join", ::hotspot, listOf("Suggest again" to { com.lazyneil.lazycar.Drive.join(this) }),
+                Intent(Settings.ACTION_WIFI_SETTINGS))
         } else {
             rows += Row("GPS", ::gpsPhone)
         }
-        if (tablet) rows += Row("Split launch", ::split, listOf("Run" to { TapService.launchApps(this) }))
         if (tablet) rows += Row("Tablet Bluetooth output", {
             St.WAITING to if (com.lazyneil.lazycar.audio.TabletSpeaker.btToo(this)) "On: also plays on a speaker paired with the tablet" else "Off" },
             listOf("Toggle" to { com.lazyneil.lazycar.audio.TabletSpeaker.setBtToo(this, !com.lazyneil.lazycar.audio.TabletSpeaker.btToo(this)) }))
-        if (tablet) rows += Row("Maps pane", { if (TapService.lastRepair.isEmpty()) St.PASS to "No repair needed yet" else St.WAITING to "Repaired Maps pane at ${TapService.lastRepair}" })
         if (tablet) rows += Row("Rear camera", ::camera,
             listOf("Open preview" to { startActivity(Intent(this, RearActivity::class.java)) }))
         else rows += Row("Speaker and Wi-Fi stream", ::audio, listOf("Refresh" to { loadA2dp() }))
@@ -111,7 +109,6 @@ class DebugActivity : AppCompatActivity() {
                 !m.bound -> St.WAITING to "Granted, waiting for Android to start the listener"
                 else -> St.PASS to "Listening, ${m.clients} tablet(s), player ${m.player.ifEmpty { "none" }}"
             } }, fix = com.lazyneil.lazycar.media.MediaListener.settingsIntent())
-        rows += Row("Accessibility service", ::a11y, fix = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         rows += Row("Battery optimisation", ::battery, fix = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         if (tablet) rows += Row("Mock location app", ::mock, fix = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
         rows += Row("Boot receiver", ::boot)
@@ -234,18 +231,7 @@ class DebugActivity : AppCompatActivity() {
         val d = "Current: ${cur ?: "unknown"}, target: $target"
         return when {
             cur != null && cur == target -> St.PASS to d
-            !accessibilityEnabled() -> St.FAIL to "$d. Accessibility is off, cannot auto join"
             else -> St.WAITING to d
-        }
-    }
-
-    private fun split(): Pair<St, String> {
-        val mode = p.launchMode
-        val d = "Mode $mode, A ${if (p.launchA.isEmpty()) "unset" else "set"}, B ${if (p.launchB.isEmpty()) "unset" else "set"}"
-        return when {
-            mode == "none" || p.launchA.isEmpty() -> St.FAIL to d
-            mode == "split" && (p.launchB.isEmpty() || !accessibilityEnabled()) -> St.FAIL to "$d, accessibility ${if (accessibilityEnabled()) "on" else "off"}"
-            else -> St.PASS to d
         }
     }
 
@@ -281,12 +267,7 @@ class DebugActivity : AppCompatActivity() {
     }
 
     // ---- health ----
-    private fun accessibilityEnabled(): Boolean {
-        val flat = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
-        return flat.split(':').any { it.substringBefore('/') == packageName }
-    }
 
-    private fun a11y() = if (accessibilityEnabled()) St.PASS to "Enabled" else St.FAIL to "Off, auto-tap and hotspot join will not work"
 
     private fun battery() =
         if (getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)) St.PASS to "Exempt"

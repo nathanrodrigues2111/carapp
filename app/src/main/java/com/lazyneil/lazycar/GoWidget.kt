@@ -13,10 +13,10 @@ class GoWidget : AppWidgetProvider() {
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
         val p = Prefs(ctx)
         val st = GoAction.effectiveState(p)
-        // Tap goes straight to the foreground service (user-initiated, so an FGS start is allowed).
-        // It must never open a LazyCar screen; GoService decides GO vs STOP itself.
-        val pi = PendingIntent.getForegroundService(
-            ctx, 0, Intent(ctx, GoService::class.java).setAction(GoService.ACTION_TOGGLE),
+        // Tap opens the invisible GoActivity (no CarApp screen): it decides GO vs STOP and may open the system
+        // Bluetooth / screen share dialogs, which Android only allows while an app activity is in front.
+        val pi = PendingIntent.getActivity(
+            ctx, 0, Intent(ctx, GoActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         // Same states as the GO button: OFF neutral grey with a grey car, ON the live art accent,

@@ -34,7 +34,7 @@ class DashboardActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var ticks = 0
     private val tick = object : Runnable {
-        override fun run() { render(); if (++ticks % 2 == 0 && isInMultiWindowMode) TapService.checkMapsPane(); handler.postDelayed(this, 1000) }
+        override fun run() { render(); handler.postDelayed(this, 1000) }
     }
 
     // Always needed: precise location (coarse must be asked with it). Camera asks on rearview, the mic when a phone copy plays.
@@ -93,7 +93,6 @@ class DashboardActivity : AppCompatActivity() {
         click(R.id.npLibrary) { startActivity(Intent(this, LibraryActivity::class.java)) }
         click(R.id.setupBanner) {
             if (missing().isNotEmpty()) requestPermissions(missing(), 1)
-            else Ui.openAccessibility(this)
         }
         click(R.id.npPrev) { PhoneMedia.cmd("prev") }; click(R.id.npNext) { PhoneMedia.cmd("next") }
         click(R.id.npPlay) { PhoneMedia.cmd("toggle") }
@@ -124,14 +123,13 @@ class DashboardActivity : AppCompatActivity() {
         if (!Role.isTablet(this)) { startActivity(Intent(this, MainActivity::class.java)); finish(); return }
         Prefs(this).shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(this)   // opening the app ends a shut down
         GpsService.startIfIdle(this)
-        TapService.joinHotspot()
+        Drive.join(this)
         PhoneMedia.start(this)
         StreamReceiver.sync(this)
         handler.post(tick)
-        // Only a launcher tap opens the split (boot and GO have their own paths). A restart after an install
-        // or a crash, or a return from Settings, never does: going HOME would send navigating Maps to PiP.
-        if (launcherOpen && !isInMultiWindowMode && Ui.openOnLaunch(this) && SystemClock.elapsedRealtime() - splitAt > 15_000) {
-            splitAt = SystemClock.elapsedRealtime(); TapService.launchDrive(this)
+        // A launcher (or Drive widget) open outside the split: remind the user of the Maps + CarApp pair icon.
+        if (launcherOpen && !isInMultiWindowMode && SystemClock.elapsedRealtime() - splitAt > 15_000) {
+            splitAt = SystemClock.elapsedRealtime(); Drive.hint(this)
         }
         launcherOpen = false
     }
@@ -232,13 +230,9 @@ class DashboardActivity : AppCompatActivity() {
         if (!micAsked && StreamReceiver.kbps > 0 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             micAsked = true; requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2) }
         val miss = missing()
-        // The accessibility service is what turns Wi-Fi on, joins the phone hotspot and opens the Maps split.
-        val a11y = (android.provider.Settings.Secure.getString(contentResolver,
-            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: "").contains("$packageName/")
         findViewById<TextView>(R.id.setupBanner).apply {
             text = when {
                 miss.isNotEmpty() -> "Precise location is off. Tap to allow"
-                !a11y -> "Tap to turn on CarApp in Accessibility"
                 else -> ""
             }
             visibility = if (text.isEmpty()) View.GONE else View.VISIBLE

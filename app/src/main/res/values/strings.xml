@@ -1,4 +1,3 @@
 <resources>
     <string name="app_name">CarApp</string>
-    <string name="tap_service_desc">Taps system dialogs and quick settings tiles for you: Bluetooth confirm, hotspot, mobile data, screen share and Wi-Fi join.</string>
 </resources>

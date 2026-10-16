@@ -176,7 +176,7 @@ object PhoneMedia {
                 // connect (an app restart, an install, a Wi-Fi drop) only records the state: a restart must never
                 // re-split, because going HOME sends navigating Maps to PiP. Boot has its own path.
                 val go = j.optBoolean("go")
-                if (go && lastGo == false && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.TapService.launchDrive(ctx) }
+                if (go && lastGo == false && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.Drive.hint(ctx) }
                 lastGo = go
                 // Report our speaker level so the phone slider is live; hardware buttons included.
                 Volumes.localPct(ctx).let { if (it != sentTvol) { sentTvol = it; Volumes.saveTablet(ctx, it); cmd("tvol") { put("pct", it) } } }

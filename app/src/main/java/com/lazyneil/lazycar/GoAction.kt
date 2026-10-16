@@ -64,9 +64,6 @@ object GoAction {
     fun run(ctx: Context): Long {
         val p = Prefs(ctx)
         p.shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(ctx)
-        // Accessibility is switched on only here, because the user pressed GO; Shut down switches it back off.
-        p.snapA11yWasOn = TapService.enabled(ctx)
-        TapService.ensureEnabled(ctx)
         // Snapshot the pre-GO music level NOW, before BT-enable / A2DP connect makes OnePlus reset it.
         p.snapMusicVol = try { (ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager)
             .getStreamVolume(AudioManager.STREAM_MUSIC) } catch (e: Exception) { -1 }
@@ -76,11 +73,12 @@ object GoAction {
         val state = try { adapter?.state ?: BluetoothAdapter.STATE_OFF } catch (e: Exception) { BluetoothAdapter.STATE_OFF }
         p.snapBtWasOn = adapter != null && state == BluetoothAdapter.STATE_ON
         log("snapshot: btWasOn=${p.snapBtWasOn}")
-        if (adapter != null && state != BluetoothAdapter.STATE_ON) {
-            enableBtThenRun(ctx, adapter, p, prompt = state != BluetoothAdapter.STATE_TURNING_ON)
-            return 12000L + 1500L + sequenceDuration(p)
+        // Tablet mode: the tablet plays the speaker, the phone needs no Bluetooth.
+        if (adapter != null && state != BluetoothAdapter.STATE_ON && !com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)) {
+            enableBtThenRun(ctx, adapter, p)
+            return BT_WAIT_MS + 1500L + sequenceDuration(p)
         }
-        log("skipped BT enable (already on)")
+        log("skipped BT enable (on, or Tablet mode)")
         runSequence(ctx, p)
         return sequenceDuration(p)
     }
@@ -115,13 +113,8 @@ object GoAction {
             var doneAt = 0L
             if (need3) doneAt = 800L
 
-            // Order: BT -> connects -> mobile data + hotspot -> player -> play. Both network
-            // tiles are toggled in one Quick Settings session before the player/switcher.
-            var netAt = settle
-            if (p.mobileData || p.hotspot) {
-                main.postDelayed({ setNetwork(if (p.mobileData) true else null, if (p.hotspot) true else null, record = true) }, netAt)
-                doneAt = maxOf(doneAt, netAt + 6000L); netAt += 6500L
-            }
+            // Order: BT -> connects -> player -> play. Hotspot and mobile data are the user's (no public API).
+            val netAt = settle
 
             if (tab) { main.postDelayed({ goTablet(ctx, p) }, netAt); doneAt = maxOf(doneAt, netAt + TABLET_ACK_MS + 2500L) }
             else if (musicActive) log("skipped player launch (music active)")
@@ -142,7 +135,7 @@ object GoAction {
 
             if (p.headunit) { main.postDelayed({ launchHeadunit(ctx, p.headunitIp) }, playAt + 2000); doneAt = maxOf(doneAt, playAt + 2000) }
             endAt = SystemClock.uptimeMillis() + maxOf(doneAt + 300L, if (p.volOn) maxOf(settle, 300L) + 12000L else 0L)
-            finish = { if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0); com.lazyneil.lazycar.audio.TabletSpeaker.onGo(ctx); TapService.launchApps(ctx) } }
+            finish = { if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0); com.lazyneil.lazycar.audio.TabletSpeaker.onGo(ctx); launchApps(ctx) } }
             main.postDelayed({ finish() }, doneAt + 300L)
         }
     }
@@ -165,17 +158,14 @@ object GoAction {
     fun tabletAcked() = main.post { log("tablet acked"); acked = true; ackP?.snapMusicVol = -1; finish() }   // phone volume untouched: STOP leaves it
     private var ackP: Prefs? = null
 
-    /**
-     * Android 16 forbids a silent adapter.enable(); we try it, then pop the system REQUEST_ENABLE
-     * dialog and let TapService click its confirm button. On STATE_ON we settle 1.5s then run the
-     * rest. Gives up after 12s. ponytail: relies on the accessibility service to auto-confirm.
-     */
-    private fun enableBtThenRun(ctx: Context, adapter: BluetoothAdapter, p: Prefs, prompt: Boolean) {
+    /** GO opened the system "Turn on Bluetooth?" dialog ([GoActivity]); the user taps Allow. Waits for STATE_ON, settles
+     *  1.5 s, runs the rest. Gives up after [BT_WAIT_MS]: GO goes back to idle, nothing else changed. */
+    const val BT_WAIT_MS = 30000L
+    private fun enableBtThenRun(ctx: Context, adapter: BluetoothAdapter, p: Prefs) {
         val started = AtomicBoolean(false)
         fun go(recv: BroadcastReceiver?) {
             if (!started.compareAndSet(false, true)) return
             recv?.let { try { ctx.unregisterReceiver(it) } catch (e: Exception) {} }
-            TapService.disarmButtons()
             log("BT on -> running sequence")
             main.postDelayed({ runSequence(ctx, p) }, 1500)
         }
@@ -185,20 +175,15 @@ object GoAction {
             }
         }
         ctx.registerReceiver(recv, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
-        if (prompt) {
-            log("BT off: requesting enable")
-            try { @Suppress("DEPRECATION") adapter.enable() } catch (e: Exception) { log("adapter.enable() ${e.message}") }
-            TapService.armButtons(listOf("Allow", "Turn on", "Yes", "OK", "Enable"))
-            Ui.openSettings(ctx, Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false)
-        } else log("BT turning on; waiting for STATE_ON")
+        log("BT off: waiting for the user to allow it")
         if (adapter.isEnabled) go(recv)
         main.postDelayed({
             if (!started.get()) {
                 try { ctx.unregisterReceiver(recv) } catch (e: Exception) {}
-                TapService.disarmButtons(); setState(ctx, p, IDLE)
+                setState(ctx, p, IDLE)
                 log("BT enable timeout")
             }
-        }, 12000)
+        }, BT_WAIT_MS)
     }
 
     /** Live-apply the start volume to the speaker (slider released while ON, or volumeOnly). */
@@ -267,20 +252,6 @@ object GoAction {
         volTick?.let { main.removeCallbacks(it) }; volTick = null
         volReceiver?.let { try { ctx.applicationContext.unregisterReceiver(it) } catch (e: Exception) {} }
         volReceiver = null
-    }
-
-    /**
-     * Drive mobile data and/or the Wi-Fi hotspot to [wantOn] via their Quick Settings tiles (there's
-     * no public setter for either without a privileged permission). [record] snapshots each tile's
-     * pre-state so STOP can restore it. GO passes both wanted-on; STOP passes only what it must undo.
-     */
-    fun setNetwork(data: Boolean?, hotspot: Boolean?, record: Boolean) {
-        val t = mutableListOf<TapService.Tile>()
-        // The mobile-data tile desc is "SIM1, Mobile data off" when off but only "SIM1, " when on,
-        // so match on "SIM1" (present in both) with "Mobile data" as a fallback for other ROMs.
-        if (data != null) t += TapService.Tile(listOf("SIM1", "Mobile data"), data, if (record) "snapData" else "", "mobile data")
-        if (hotspot != null) t += TapService.Tile(listOf("hotspot"), hotspot, if (record) "snapHotspot" else "", "hotspot")
-        if (t.isNotEmpty()) { log("network: ${t.joinToString { "${it.feature}->${it.wantOn}" }}"); TapService.armTiles(t) }
     }
 
     // ---- Bluetooth profile-proxy helper (dedup for connect / disconnect / getConnected) ----
@@ -375,20 +346,12 @@ object GoAction {
             if (mac.isNotEmpty() && !wasConnected) { log("restore: $mac connected -> disconnected"); disconnectA2dp(ctx, mac) }
             else if (mac.isNotEmpty()) log("restore: $mac was already connected -> left")
 
-        // Network tiles (one QS session) then BT-off (its own dialog) open system UI: serialize them.
-        val offData = if (p.mobileData && !p.snapDataWasOn) false else null
-        val offHotspot = if (p.hotspot && !p.snapHotspotWasOn) false else null
-        if (p.hotspot) log(if (offHotspot != null) "restore: hotspot on -> off" else "restore: hotspot was already on -> left")
-        if (p.mobileData) log(if (offData != null) "restore: data on -> off" else "restore: data was already on -> left")
-        var at = 0L
-        if (offData != null || offHotspot != null) { main.postDelayed({ setNetwork(offData, offHotspot, record = false) }, at); at += 6500L }
-        if (!p.snapBtWasOn) { log("restore: bt on -> off"); main.postDelayed({ disableBt(ctx) }, at); at += 12500L }
+        // BT off is the system "Turn off Bluetooth?" dialog, the user taps it.
+        if (!p.snapBtWasOn) { log("restore: bt on -> off"); disableBt(ctx) }
         else log("restore: bt was already on -> left")
 
         com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
-        // Taps (tiles, BT dialog) first, then accessibility goes back off if GO turned it on.
-        if (!p.snapA11yWasOn) { log("restore: accessibility on -> off"); main.postDelayed({ TapService.disable() }, at + 500L) }
-        val end = maxOf(1800L, at + 1000L)
+        val end = 1800L
         main.postDelayed({ setState(ctx, p, IDLE); p.clearSnap(); com.lazyneil.lazycar.media.MediaListener.sleep() }, end)
         return end + 500L
     }
@@ -397,20 +360,15 @@ object GoAction {
     private fun stopTablet(ctx: Context, p: Prefs, fromPeer: Boolean): Long {
         log("tablet shut down (from phone: $fromPeer)")
         if (!fromPeer) com.lazyneil.lazycar.media.PhoneMedia.send(org.json.JSONObject().put("c", "shutdown"))
-        TapService.stopJoin()
         ctx.stopService(Intent(ctx, com.lazyneil.lazycar.audio.StreamReceiver::class.java))
         com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
         com.lazyneil.lazycar.media.PhoneMedia.stop()
-        if (p.snapWifiByGo) { log("restore: wifi on -> off"); main.postDelayed({ TapService.armTiles(listOf(TapService.Tile(listOf("Wi-Fi"), false, "", "Wi-Fi"))) }, 1000L) }
         p.clearSnap()
         return 11000L
     }
 
-    /**
-     * Turn BT off the same way we turn it on: try the silent disable, then pop the system
-     * REQUEST_DISABLE dialog and let TapService confirm it (com.oplus.wirelesssettings). Waits for
-     * STATE_OFF; on timeout it only logs. No toasts - either it happens or it's in the log.
-     */
+    /** The system REQUEST_DISABLE dialog (no silent disable on Android 13+). Opens only while CarApp was just in front
+     *  (app, widget, notification all go through [GoActivity]); from the tablet's Shut down Android blocks it and BT stays on. */
     private fun disableBt(ctx: Context) {
         val adapter = adapterOf(ctx) ?: return
         val done = AtomicBoolean(false)
@@ -418,21 +376,19 @@ object GoAction {
             override fun onReceive(c: Context, i: Intent) {
                 if (i.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) == BluetoothAdapter.STATE_OFF && done.compareAndSet(false, true)) {
                     try { ctx.unregisterReceiver(this) } catch (e: Exception) {}
-                    TapService.disarmButtons(); log("BT off")
+                    log("BT off")
                 }
             }
         }
         ctx.registerReceiver(recv, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
-        try { @Suppress("DEPRECATION") adapter.disable() } catch (e: Exception) { log("adapter.disable() ${e.message}") }
-        TapService.armButtons(listOf("Allow", "Turn off", "Turn Off", "OK", "Disable"))
         // ACTION_REQUEST_DISABLE is not a public SDK constant; its action string is stable.
         Ui.openSettings(ctx, Intent("android.bluetooth.adapter.action.REQUEST_DISABLE"), fallback = false)
         if (!adapter.isEnabled && done.compareAndSet(false, true)) {
-            try { ctx.unregisterReceiver(recv) } catch (e: Exception) {}; TapService.disarmButtons()
+            try { ctx.unregisterReceiver(recv) } catch (e: Exception) {}
         }
         main.postDelayed({
-            if (!done.get()) { try { ctx.unregisterReceiver(recv) } catch (e: Exception) {}; TapService.disarmButtons(); log("BT disable timeout") }
-        }, 12000)
+            if (!done.get()) { try { ctx.unregisterReceiver(recv) } catch (e: Exception) {}; log("BT disable timeout") }
+        }, BT_WAIT_MS)
     }
 
     /** On app open: clears a stuck busy state. ON stays ON until Shut down (which restores the snapshot), even when
@@ -462,6 +418,13 @@ object GoAction {
         val t = SystemClock.uptimeMillis()
         am.dispatchMediaKeyEvent(KeyEvent(t, t, KeyEvent.ACTION_DOWN, code, 0))
         am.dispatchMediaKeyEvent(KeyEvent(t, t, KeyEvent.ACTION_UP, code, 0))
+    }
+
+    /** After GO: the app chosen in Settings (Widget tap opens). Split screen is the launcher's pair icon, the user taps it. */
+    fun launchApps(ctx: Context) {
+        val p = Prefs(ctx)
+        if (p.launchMode == "none" || p.launchA.isEmpty()) return
+        launchPlayer(ctx, p.launchA)
     }
 
     fun launchPlayer(ctx: Context, pkg: String) {
