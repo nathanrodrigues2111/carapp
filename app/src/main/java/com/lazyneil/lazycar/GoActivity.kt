@@ -24,14 +24,20 @@ class GoActivity : Activity() {
         }
         android.util.Log.e("LazyCar", "GoActivity -> service ${svc.getStringExtra("action")}")
         startForegroundService(svc)
-        if (svc.getStringExtra("action") == "go" && !com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this)) {
-            val bt = getSystemService(BluetoothManager::class.java)?.adapter
+        if (svc.getStringExtra("action") == "go" && !com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this)) phoneDialogs(this)
+        finish()
+    }
+
+    companion object {
+        /** Phone mode needs, from an activity: the screen share consent (outside player) and Bluetooth on. The helper
+         *  presses them when it is on. Used by GO and by a switch to Phone mode while ON. */
+        fun phoneDialogs(a: android.app.Activity) {
+            val bt = a.getSystemService(BluetoothManager::class.java)?.adapter
             val btOff = bt != null && !bt.isEnabled
             SplitService.press("Start now", "Share screen", "Start", "Allow", "Turn on")
             // One system dialog at a time: a second one opened on top closed the Bluetooth one. Consent first, it opens Bluetooth after.
-            if (com.lazyneil.lazycar.audio.TabletSpeaker.needsCapture(this)) com.lazyneil.lazycar.audio.StreamSender.askConsent(this, thenBt = btOff)
-            else if (btOff) Ui.openSettings(this, Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false)
+            if (com.lazyneil.lazycar.audio.TabletSpeaker.needsCapture(a)) com.lazyneil.lazycar.audio.StreamSender.askConsent(a, thenBt = btOff)
+            else if (btOff) Ui.openSettings(a, Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false)
         }
-        finish()
     }
 }

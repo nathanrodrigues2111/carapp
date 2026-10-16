@@ -169,8 +169,19 @@ object GoAction {
         if (p.mac1.isEmpty()) return
         log("speaker ${p.mac1} -> ${if (toTablet) "tablet" else "phone"}")
         if (toTablet) disconnectA2dp(ctx, p.mac1)
+        // To Tablet mode while ON: the phone's player and its tablet copy stop (it would carry on on the phone speaker).
+        if (toTablet && p.state == ON) { mediaTo(ctx, p.playerPkg, android.view.KeyEvent.KEYCODE_MEDIA_PAUSE); com.lazyneil.lazycar.audio.StreamSender.stop(ctx) }
         com.lazyneil.lazycar.media.MediaListener.speakerTo(p.mac1, p.name1, toTablet)
-        if (!toTablet && p.state == ON) main.postDelayed({ connectA2dp(ctx, p.mac1) }, 1500)   // a mode change while ON
+        if (!toTablet && p.state == ON) toPhoneWhileOn(ctx, p, 0)   // a mode change while ON
+    }
+
+    /** Switched to Phone mode while ON: what GO does in Phone mode once Bluetooth is on (the switch's activity asked):
+     *  connect the speaker, play on it the moment it is ours, start the tablet copy. */
+    private fun toPhoneWhileOn(ctx: Context, p: Prefs, n: Int) {
+        if (p.state != ON || com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)) return
+        if (adapterOf(ctx)?.isEnabled != true) { if (n < 100) main.postDelayed({ toPhoneWhileOn(ctx, p, n + 1) }, 300); return }
+        log("mode switch: Phone mode while ON")
+        main.postDelayed({ connectA2dp(ctx, p.mac1); retryConnect(ctx, p, 1); playWhenConnected(ctx, p, 0); com.lazyneil.lazycar.audio.TabletSpeaker.onGo(ctx) }, 1500)
     }
 
     private var finish: () -> Unit = {}

@@ -184,7 +184,9 @@ class SettingsActivity : AppCompatActivity() {
         Ui.segmented(seg, listOf("Phone", "Tablet"), if (fromTablet) 1 else 0) {
             if (modes[it] == (if (com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this)) "tablet" else "phone")) return@segmented
             sp.edit().putString("play_from", modes[it]).apply()
-            if (!Role.isTablet(this)) com.lazyneil.lazycar.Prefs(this).let { p -> if (GoAction.effectiveState(p) == GoAction.ON) GoAction.handoff(this, p, modes[it] == "tablet") }   // hand the speaker over while ON
+            if (!Role.isTablet(this)) com.lazyneil.lazycar.Prefs(this).let { p -> if (GoAction.effectiveState(p) == GoAction.ON) {
+                if (modes[it] == "phone") GoActivity.phoneDialogs(this)   // Bluetooth on + consent, like GO in Phone mode
+                GoAction.handoff(this, p, modes[it] == "tablet") } }   // hand the speaker over while ON
             keepScroll = findViewById<View>(R.id.settingsScroll).scrollY; recreate()
         }
         var at = parent.indexOfChild(anchor) + 1
