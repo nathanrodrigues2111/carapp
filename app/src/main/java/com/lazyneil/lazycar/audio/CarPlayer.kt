@@ -170,7 +170,7 @@ class CarPlayer : MediaBrowserService() {
             o.gain = (com.lazyneil.lazycar.media.Volumes.tabletSaved(this) / 100f).let { it * it }
             speaker = o
             synchronized(StreamReceiver.outputs) { StreamReceiver.outputs.clear(); StreamReceiver.outputs += o }
-            o.run { alive && on[0] }; Acoustic(this, o, { sink }, { clk.afMs }) { alive && on[0] }.start()
+            o.run { alive && on[0] }; Acoustic(this, o, { sink }) { alive && on[0] }.start()
             return o
         }
         fun closeOut() { outOn[0] = false; out = null; speaker = null; net?.close(); net = null; streaming = false
@@ -220,7 +220,7 @@ class CarPlayer : MediaBrowserService() {
                     hal = try { AudioManager::class.java.getMethod("getOutputLatency", Int::class.java).invoke(am, AudioManager.STREAM_MUSIC) as Int } catch (_: Exception) { 200 }
                     // Sink changed: its learned correction (0 until calibrated), the phone tells the tablet which sink it is.
                     val k = SinkClock.key(t.routedDevice).let { if (it.isEmpty()) "" else (if (phone) "p" else "t") + it }
-                    if (k != sink) { sink = k; StreamReceiver.acousticMs = TabletSpeaker.cal(this, k, clk.afMs)?.toDouble() ?: 0.0; StreamSender.sinkKey = k.hashCode()
+                    if (k != sink) { sink = k; StreamReceiver.acousticMs = TabletSpeaker.cal(this, k)?.toDouble() ?: 0.0; StreamSender.sinkKey = k.hashCode()
                         Log.e("LazyCar", "car player sink '$k' correction ${StreamReceiver.acousticMs} ms") }
                     if (++logN % 5 == 0) Log.e("LazyCar", "car player sync: out=${clk.outMs()} af=${clk.afMs} down=${"%.1f".format(clk.downMs)} hidden=${"%.1f".format(clk.hiddenMs)} " +
                         "correction=${"%.0f".format(StreamReceiver.acousticMs)} speaker err=${o?.let { "%.1f".format(it.errMs) }} realign=${o?.realigns} heard=${"%.0f".format(Acoustic.residualMs)} (${Acoustic.note})") }

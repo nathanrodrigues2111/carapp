@@ -22,12 +22,11 @@ import kotlin.math.sqrt
  * (GCC-PHAT against what we played, with its true play time from the track timestamp): one peak per speaker,
  * the strongest is the tablet, the next the sink. Many windows, median, 4 of 6 must agree within 5 ms; the
  * correction is applied and checked again until the residual is under 4 ms, then stored per sink address
- * ([TabletSpeaker.cal]) and the mic never opens for that sink again (unless its reported latency moves > 20 ms).
- * While calibrating the tablet copy plays 12 dB lower, so the unaligned copy is not heard as echo.
+ * ([TabletSpeaker.cal]) and the mic never opens for that sink again. While calibrating the tablet copy plays 6 dB lower.
  * No mic permission: math only. Test instrument: a file "sync_probe" in the app's files dir logs the residual
  * (measure only, never corrects).
  */
-class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output, private val sink: () -> String, private val lat: () -> Int, private val alive: () -> Boolean) {
+class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output, private val sink: () -> String, private val alive: () -> Boolean) {
     companion object {
         @Volatile var residualMs = Double.NaN   // last measured sink minus tablet, ms
         @Volatile var note = "not run yet"
@@ -42,22 +41,17 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
     fun start() = Thread({ loop() }, "speaker-acoustic").apply { isDaemon = true; start() }
 
     private fun loop() {
-        var key = "?"; var was = false; val votes = mutableListOf<Double>(); var rounds = 0; var since = 0L; var gaveUp = false
+        var key = "?"; val votes = mutableListOf<Double>(); var rounds = 0; var since = 0L; var gaveUp = false
         while (alive()) {
             Thread.sleep(500)
             val now = SystemClock.elapsedRealtime()
             val k = sink()
             if (k != key) { key = k; votes.clear(); rounds = 0; since = 0; gaveUp = false; residualMs = Double.NaN
-                note = if (k.isEmpty()) "no Bluetooth sink" else "new sink, will calibrate" }
+                note = if (k.isEmpty()) "no Bluetooth sink" else if (TabletSpeaker.cal(ctx, k) != null) "calibrated earlier, math only" else "new sink, will calibrate" }
             val probe = java.io.File(ctx.filesDir, "sync_probe").exists()
-            val l = lat(); if (k.isNotEmpty() && l <= 0) continue   // the math has no latency yet
-            val stored = TabletSpeaker.cal(ctx, k, l)
-            if (stored != null && k.isNotEmpty() && votes.isEmpty() && rounds == 0) note = "calibrated earlier, math only"
-            val need = k.isNotEmpty() && !gaveUp && stored == null &&
+            val need = k.isNotEmpty() && !gaveUp && TabletSpeaker.cal(ctx, k) == null &&
                 ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-            if (need && !was) StreamReceiver.acousticMs = 0.0   // stale correction (latency moved): start from the math
-            was = need
-            out.trim = if (need) 0.25f else 1f
+            out.trim = if (need) 0.5f else 1f
             if (!need && !probe) continue                        // known sink (or no mic): math only, the mic stays closed
             if (now - StreamReceiver.lastAt > 2000 || StreamReceiver.rms < 200) { since = 0; continue }
             if (since == 0L) since = now
@@ -75,7 +69,7 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
             if (votes.size < 6 || agree.size < 4) { note = "calibrating, ${votes.size} votes, ${agree.size} agree on ${"%+.0f".format(med)} ms"; Log.e("LazyCar", "acoustic: $note, last ${"%+.1f".format(res)}"); continue }
             val m = agree.average(); votes.clear()
             if (abs(m) <= 4) {
-                TabletSpeaker.saveCal(ctx, k, StreamReceiver.acousticMs.roundToInt(), l)
+                TabletSpeaker.saveCal(ctx, k, StreamReceiver.acousticMs.roundToInt())
                 note = "calibrated ${"%+.0f".format(StreamReceiver.acousticMs)} ms (residual ${"%+.1f".format(m)} ms), math only from now"
             } else if (rounds >= 3) { gaveUp = true; StreamReceiver.acousticMs = 0.0; note = "peak did not follow 3 corrections (reflection?), math only this session" }
             else { rounds++; StreamReceiver.acousticMs = (StreamReceiver.acousticMs + m).coerceIn(-MAX_MS, MAX_MS); note = "corrected ${"%+.0f".format(m)} ms, checking" }
