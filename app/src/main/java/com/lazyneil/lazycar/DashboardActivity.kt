@@ -109,8 +109,6 @@ class DashboardActivity : AppCompatActivity() {
         findViewById<Slider>(R.id.npSeek).addOnChangeListener { s, v, user -> if (user) findViewById<TextView>(R.id.npPos).text = clock(v.toLong())
             .also { findViewById<TextView>(R.id.npDur).text = "-" + clock(maxOf(0, s.valueTo.toLong() - v.toLong())) } }
         artGestures(findViewById(R.id.npArt))
-        // Marquee runs only while selected; twice per new title, then it rests (forever = redraws at the display rate).
-        findViewById<TextView>(R.id.npTitle).apply { isSelected = true; marqueeRepeatLimit = 2 }
         Ui.paintAccent(root, Accent.forArt(this, null))
         Ui.blur(findViewById(R.id.npBackdrop))
         Ui.press(*intArrayOf(R.id.npPrev, R.id.npNext, R.id.npPlay, R.id.npLibrary, R.id.settingsBtn)

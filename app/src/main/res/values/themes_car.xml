@@ -58,10 +58,9 @@
         <item name="android:textSize">@dimen/t_track</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:letterSpacing">-0.02</item>
-        <!-- Overflowing titles scroll slowly instead of being cut. -->
-        <item name="android:singleLine">true</item>
-        <item name="android:ellipsize">marquee</item>
-        <item name="android:marqueeRepeatLimit">marquee_forever</item>
+        <!-- One line, cut with an ellipsis. No marquee: it draws a second copy of the title and restarts on focus changes. -->
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
     </style>
     <style name="T.TrackSub">
         <item name="android:maxLines">2</item>
