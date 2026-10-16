@@ -198,7 +198,9 @@ object Ui {
     }
 
     fun swapText(tv: TextView?, t: CharSequence) {
-        if (tv == null || tv.text.toString() == t.toString()) return
+        // The target, not the shown text: renders arrive many times per second, a repeat must not restart the fade.
+        if (tv == null || (tv.getTag(R.id.npTitle) ?: tv.text.toString()) == t.toString()) return
+        tv.setTag(R.id.npTitle, t.toString())
         tv.animate().cancel()
         tv.animate().alpha(0f).translationY(8f).setDuration(120).withEndAction {
             tv.text = t; tv.animate().alpha(1f).translationY(0f).setDuration(220).start()

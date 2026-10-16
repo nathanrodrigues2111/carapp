@@ -406,6 +406,7 @@ object GoAction {
             override fun onReceive(c: Context, i: Intent) {
                 if (i.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) == BluetoothAdapter.STATE_OFF && done.compareAndSet(false, true)) {
                     try { ctx.unregisterReceiver(this) } catch (e: Exception) {}
+                    ctx.getSystemService(android.app.NotificationManager::class.java).cancel(BT_NOTICE_ID)   // done: no stale notice
                     log("BT off")
                 }
             }

@@ -166,7 +166,7 @@ class DashboardActivity : AppCompatActivity() {
         iv.setImageDrawable(android.graphics.drawable.TransitionDrawable(arrayOf(from, to)).apply { isCrossFadeEnabled = true; startTransition(260) })
     }
     private var shownPlaying: Boolean? = null
-    private var shownTitle = ""; private var titleAt = 0L
+    private var shownTitle = ""; private var titleAt = 0L; private var realAt = 0L
 
     /** Tap = play/pause, swipe left = next, swipe right = previous. */
     private fun artGestures(art: ImageView) {
@@ -191,15 +191,21 @@ class DashboardActivity : AppCompatActivity() {
     private fun clock(ms: Long) = (ms / 1000).let { "%d:%02d".format(it / 60, it % 60) }
 
     private fun renderNowPlaying() {
-        val np = PhoneMedia.np; val has = PhoneMedia.hasTrack; val alive = PhoneMedia.alive
+        val np = PhoneMedia.np; val alive = PhoneMedia.alive
+        // A blip (session switch, a packet without metadata) keeps the last title 3 s: no placeholder flash between updates.
+        val now = SystemClock.elapsedRealtime()
+        if (PhoneMedia.hasTrack) realAt = now
+        val has = PhoneMedia.hasTrack || (shownTitle.isNotEmpty() && now - realAt < 3000)
+        val title = if (PhoneMedia.hasTrack) np.optString("title") else shownTitle
         // Any phone traffic (link, audio, GPS) = connected. No traffic: "Connecting..." for 10 s, then not connected.
-        Ui.swapText(findViewById(R.id.npTitle), when { has -> np.optString("title"); alive -> "Nothing playing"
+        Ui.swapText(findViewById(R.id.npTitle), when { has -> title; alive -> "Nothing playing"
             PhoneMedia.reconnecting -> "Connecting..."; else -> "Phone not connected" })
-        Ui.swapText(findViewById(R.id.npArtist), when {
-            has -> listOf(np.optString("artist"), np.optString("album")).filter { it.isNotEmpty() }.joinToString(" · ")
+        when {
+            PhoneMedia.hasTrack -> listOf(np.optString("artist"), np.optString("album")).filter { it.isNotEmpty() }.joinToString(" · ")
+            has -> null   // blip: keep what is shown
             alive -> "Start music on the phone"
             PhoneMedia.reconnecting -> ""
-            else -> "Phone not reachable. Same Wi-Fi and notification access on?" })
+            else -> "Phone not reachable. Same Wi-Fi and notification access on?" }?.let { Ui.swapText(findViewById(R.id.npArtist), it) }
         // Last track stays during the grace period, slightly dimmed.
         findViewById<View>(R.id.npArtBox).let { val a = if (alive) 1f else 0.6f; if (it.alpha != a) it.animate().alpha(a).setDuration(250).start() }
         if (shownArt !== PhoneMedia.art) {
@@ -209,7 +215,7 @@ class DashboardActivity : AppCompatActivity() {
             Ui.paintAccent(root, Accent.forArt(this, shownArt))
         }
         // Loader on the art while a new track's art is still coming from the phone (gives up after 5 s).
-        if (np.optString("title") != shownTitle) { shownTitle = np.optString("title"); titleAt = SystemClock.elapsedRealtime() }
+        if (PhoneMedia.hasTrack && np.optString("title") != shownTitle) { shownTitle = np.optString("title"); titleAt = now }
         Ui.showLoader(findViewById(R.id.npLoader), alive && has && PhoneMedia.art == null && SystemClock.elapsedRealtime() - titleAt < 5000)
         val playing = PhoneMedia.playing
         if (shownPlaying != playing) {

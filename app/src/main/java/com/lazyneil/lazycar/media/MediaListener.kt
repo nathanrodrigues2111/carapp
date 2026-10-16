@@ -164,7 +164,9 @@ class MediaLink : android.app.Service() {
         val list = try {
             getSystemService(MediaSessionManager::class.java).getActiveSessions(ComponentName(this, MediaListener::class.java))
         } catch (e: SecurityException) { emptyList() }.filter { it.packageName != "com.android.server.telecom" }
-        val next = list.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING } ?: list.firstOrNull()
+        // Nothing playing (a track change, a pause): stay on the current player, a flip to another session flickers the title.
+        val next = list.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+            ?: list.firstOrNull { it.sessionToken == sess.ctl?.sessionToken } ?: list.firstOrNull()
         if (next?.sessionToken != sess.ctl?.sessionToken) {
             sess.ctl?.unregisterCallback(cb); sess.ctl = next; next?.registerCallback(cb, main)
             if (next?.packageName != sess.browser?.serviceComponent?.packageName) { sess.browser?.disconnect(); sess.browser = null }

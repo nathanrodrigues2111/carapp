@@ -52,9 +52,16 @@ object TabletSpeaker {
     fun needsCapture(ctx: Context) = enabled(ctx) && otherApps(ctx) && com.lazyneil.lazycar.Prefs(ctx).playerPkg != ctx.packageName
     fun onGo(ctx: Context) = StreamSender.start(ctx)
     /** Phone, ON: an outside player plays to the Bluetooth speaker but nothing goes to the tablet. Never silent without saying so. */
-    fun speakerOff(ctx: Context) = !Role.isTablet(ctx) && enabled(ctx) && !StreamSender.running && !CarPlayer.streaming &&
-        com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(ctx)) == com.lazyneil.lazycar.GoAction.ON && players(ctx).isNotEmpty() &&
-        ctx.getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).any { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
+    fun speakerOff(ctx: Context): Boolean {
+        val off = !Role.isTablet(ctx) && enabled(ctx) && !StreamSender.running && !CarPlayer.streaming &&
+            com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(ctx)) == com.lazyneil.lazycar.GoAction.ON && players(ctx).isNotEmpty() &&
+            ctx.getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).any { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
+        // Held 5 s first: a track change briefly has no player, a flapping banner would move the whole screen.
+        val now = SystemClock.elapsedRealtime()
+        if (!off) offSince = 0L else if (offSince == 0L) offSince = now
+        return off && now - offSince >= 5000
+    }
+    @Volatile private var offSince = 0L
     fun onStop(ctx: Context) = StreamSender.stop(ctx)
 
     /** One-word state for the main screen row. */
