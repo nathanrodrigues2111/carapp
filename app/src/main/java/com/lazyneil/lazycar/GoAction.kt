@@ -335,9 +335,12 @@ object GoAction {
      * Undo GO by restoring the pre-GO snapshot: only turn off / disconnect / pause what GO itself
      * turned on. Anything that was already on before GO is left exactly as it was. Returns ms alive.
      */
+    /** Uptime until which coming back to CarApp is not an open: Shut down's own restore dialog (Turn off Bluetooth?)
+     *  covers CarApp, and its closing must not undo the Shut down. Ends 2 s after Bluetooth is off. */
+    @Volatile var quietUntil = 0L
     fun stop(ctx: Context, fromPeer: Boolean = false): Long {
         val p = Prefs(ctx)
-        p.shutDown = true
+        p.shutDown = true; quietUntil = SystemClock.uptimeMillis() + BT_WAIT_MS + 5000
         if (Role.isTablet(ctx)) return stopTablet(ctx, p, fromPeer)
         // First, while the hotspot (restored below) still carries the link: the tablet restores its own side.
         if (!fromPeer) com.lazyneil.lazycar.media.MediaListener.shutDownTablets()
@@ -422,6 +425,7 @@ object GoAction {
                 if (i.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) == BluetoothAdapter.STATE_OFF && done.compareAndSet(false, true)) {
                     try { ctx.unregisterReceiver(this) } catch (e: Exception) {}
                     ctx.getSystemService(android.app.NotificationManager::class.java).cancel(BT_NOTICE_ID)   // done: no stale notice
+                    quietUntil = minOf(quietUntil, SystemClock.uptimeMillis() + 2000)
                     log("BT off")
                 }
             }

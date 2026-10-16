@@ -126,7 +126,7 @@ class DashboardActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (!Role.isTablet(this)) { startActivity(Intent(this, MainActivity::class.java)); finish(); return }
-        if (opening) { opening = false; Prefs(this).shutDown = false }   // an open ends a Shut down, a resume (back from GoActivity) does not
+        if (opening) { opening = false; if (SystemClock.uptimeMillis() >= GoAction.quietUntil) Prefs(this).shutDown = false }   // an open ends a Shut down, a resume (back from GoActivity) does not
         com.lazyneil.lazycar.media.Files.refresh(this)   // new music files show without a restart
         if (!Prefs(this).shutDown) {
             GpsService.startIfIdle(this)

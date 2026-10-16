@@ -255,7 +255,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** The user opened the app (launcher, back from another app): that ends a Shut down. GPS starts with GO. */
-    private fun opened() { p.shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(this) }
+    private fun opened() { if (android.os.SystemClock.uptimeMillis() < GoAction.quietUntil) return; p.shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(this) }
     override fun onRestart() { super.onRestart(); opened() }
     override fun onNewIntent(i: Intent) { super.onNewIntent(i); opened() }
 

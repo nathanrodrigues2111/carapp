@@ -32,6 +32,7 @@ class App : Application() {
     private fun trampoline(a: Activity) = a is GoActivity || a is com.lazyneil.lazycar.audio.StreamSender.Consent
 
     private fun opened(a: Activity) {
+        if (android.os.SystemClock.uptimeMillis() < GoAction.quietUntil) return   // back from Shut down's own dialog
         Prefs(this).shutDown = false
         if (!Role.isTablet(this)) { com.lazyneil.lazycar.media.MediaListener.wake(this); return }
         com.lazyneil.lazycar.gps.GpsService.startIfIdle(a)
