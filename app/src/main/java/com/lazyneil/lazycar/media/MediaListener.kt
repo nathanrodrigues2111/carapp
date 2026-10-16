@@ -159,7 +159,7 @@ class MediaLink : android.app.Service() {
         super.onDestroy()
     }
 
-    /** Playing session wins, else the most recent one. */
+    /** Playing session wins, else the current one, else the most recent. */
     private fun pick() {
         val list = try {
             getSystemService(MediaSessionManager::class.java).getActiveSessions(ComponentName(this, MediaListener::class.java))
