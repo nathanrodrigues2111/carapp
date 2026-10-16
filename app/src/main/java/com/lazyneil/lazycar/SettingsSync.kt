@@ -74,6 +74,11 @@ object SettingsSync {
             val j = items.getJSONObject(i)
             val k = KEYS.firstOrNull { it.name == j.optString("k") } ?: continue
             val ts = j.optLong("ts")
+            if (k.name == "sinkCal") {   // merged per sink, never replaced whole
+                val mine = value(k) as String; val merged = mergeCalsJson(mine, j.optString("v", "{}"))
+                if (merged != mine) { applying = true; try { sp(k.file).edit().putString(k.key, merged).commit() } finally { applying = false } }
+                continue
+            }
             // Older peers send no "set": a stamped value is real, an unstamped one a default.
             if (!remoteWins(j.optBoolean("set", ts > 0), ts, real(k), stamps().getLong(k.name, 0), Role.isTablet(app)) || j.opt("v") == value(k)) {
                 if (ts > stamps().getLong(k.name, 0)) stamps().edit().putLong(k.name, ts).apply()
@@ -103,6 +108,16 @@ object SettingsSync {
         if (Role.isTablet(app)) com.lazyneil.lazycar.audio.StreamReceiver.sync(app)
         else if (on && !mode) com.lazyneil.lazycar.audio.StreamSender.start(app) else if (!on) com.lazyneil.lazycar.audio.StreamSender.stop(app)
     }
+}
+
+/** Per sink calibration maps {key: [correction, latency, saved ms]}: union, the newer entry wins per key. */
+internal fun mergeCals(a: Map<String, List<Long>>, b: Map<String, List<Long>>): Map<String, List<Long>> =
+    (a.keys + b.keys).associateWith { k -> listOfNotNull(a[k], b[k]).maxBy { it.getOrElse(2) { 0L } } }
+
+private fun mergeCalsJson(a: String, b: String): String {
+    fun parse(s: String) = try { JSONObject(s).let { o -> o.keys().asSequence().associateWith { k -> o.getJSONArray(k).let { e -> List(e.length()) { e.getLong(it) } } } } }
+        catch (_: Exception) { emptyMap() }
+    return JSONObject().apply { mergeCals(parse(a), parse(b)).forEach { (k, v) -> put(k, JSONArray(v)) } }.toString()
 }
 
 /** Pure merge rule: a default never beats a real value, otherwise newer wins, a tie goes to the tablet's value. */

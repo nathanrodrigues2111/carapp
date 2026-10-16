@@ -43,15 +43,15 @@ object TabletSpeaker {
     }
     /** Learned correction of a Bluetooth sink on top of the math (one time mic calibration), null = never calibrated or
      *  the sink's latency [latMs] moved more than 20 ms from the calibrated session (codec change). latMs < 0: not known yet.
-     *  One JSON map {key: [correction, latency]} in "cals", backed up and shared with the other device by SettingsSync. */
+     *  One JSON map {key: [correction, latency, saved ms]} in "cals", backed up and shared with the other device by SettingsSync. */
     fun cal(ctx: Context, key: String, latMs: Int): Int? {
         if (key.isEmpty()) return 0
         val e = cals(ctx).optJSONArray(key) ?: return sp(ctx).getInt("cal:$key", Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }   // 0.6.2 dev builds
         return if (latMs < 0 || kotlin.math.abs(e.optInt(1) - latMs) <= 20) e.optInt(0) else null
     }
     fun saveCal(ctx: Context, key: String, v: Int, latMs: Int) =
-        sp(ctx).edit().putString("cals", cals(ctx).put(key, org.json.JSONArray().put(v).put(latMs)).toString()).apply()
-    // ponytail: the whole map syncs last writer wins; two devices calibrating different sinks at once keep only one
+        sp(ctx).edit().putString("cals", cals(ctx).put(key, org.json.JSONArray().put(v).put(latMs).put(System.currentTimeMillis())).toString()).apply()
+    // SettingsSync merges the map per sink (newer entry wins), see mergeCals.
     private fun cals(ctx: Context) = try { org.json.JSONObject(sp(ctx).getString("cals", null) ?: "{}") } catch (_: Exception) { org.json.JSONObject() }
 
     /** "Tablet speaker for other apps" (default on): the share audio capture for outside players, consent once per Start. */
