@@ -60,11 +60,15 @@ class StreamSender : Service() {
         }
 
         /** GO end: needs the MediaProjection consent, which only an activity can ask for. */
-        fun start(ctx: Context) {
+        fun start(ctx: Context, tries: Int = 40) {
             if (running || !TabletSpeaker.needsCapture(ctx)) return   // CarApp's player streams itself; others only when opted in
-            // No Bluetooth speaker on the phone: music plays on the phone itself, a tablet copy would echo.
+            // No Bluetooth speaker on the phone yet: music plays on the phone itself, a tablet copy would echo. The speaker
+            // is often still on its way (the tablet lets go of it during GO): keep the consent, look again for 20 s.
             if (ctx.getSystemService(android.media.AudioManager::class.java).getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
-                    .none { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }) { error = "Connect your speaker"; granted = null; Log.e("LazyCar", "speaker send: no Bluetooth speaker, not streaming"); return }
+                    .none { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }) {
+                val on = com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(ctx)) != com.lazyneil.lazycar.GoAction.IDLE
+                if (tries > 0 && on) { android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ start(ctx, tries - 1) }, 500); return }
+                error = "Connect your speaker"; granted = null; Log.e("LazyCar", "speaker send: no Bluetooth speaker, not streaming"); return }
             if (asking) return
             val g = granted; granted = null
             if (g != null) try { ctx.startForegroundService(Intent(ctx, StreamSender::class.java).putExtra("data", g)); return }

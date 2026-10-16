@@ -132,7 +132,10 @@ object GoAction {
             val playAt = netAt + (if (musicActive) 0L else 1000L)
             if (tab) {}
             else if (musicActive) log("skipped MEDIA_PLAY (music active)")
-            else { main.postDelayed({ playMedia(ctx, p.playerPkg) }, playAt + 1500); doneAt = maxOf(doneAt, playAt + 1500) }
+            // Speaker already connected (it reconnects by itself when Bluetooth comes on): play now, the tablet copy
+            // joins aligned when it is ready. Only a speaker we are still connecting gets the 2.5 s wait.
+            else if (!need1) main.post { playMedia(ctx, p.playerPkg) }
+            else playWhenConnected(ctx, p, 0)   // never on the phone's own speaker: the moment the speaker is ours
 
             if (p.headunit) { main.postDelayed({ launchHeadunit(ctx, p.headunitIp) }, playAt + 2000); doneAt = maxOf(doneAt, playAt + 2000) }
             endAt = SystemClock.uptimeMillis() + maxOf(doneAt + 300L, if (p.volOn) maxOf(settle, 300L) + 12000L else 0L)
@@ -141,14 +144,23 @@ object GoAction {
         }
     }
 
+    /** Plays as soon as the speaker connects (polls 300 ms, up to 30 s; then plays anyway, the user pressed GO). */
+    private fun playWhenConnected(ctx: Context, p: Prefs, n: Int) {
+        if (p.state == IDLE) return
+        a2dpConnectedDevices(ctx) { c ->
+            if (p.mac1 in c || n >= 100) { log("play: speaker ${if (p.mac1 in c) "connected" else "still not connected"} after ${n * 300} ms"); playMedia(ctx, p.playerPkg) }
+            else main.postDelayed({ playWhenConnected(ctx, p, n + 1) }, 300)
+        }
+    }
+
     /** Phone mode: a speaker still held by the tablet refuses the phone until the tablet lets go, which can take a
-     *  woken tablet ~10 s (screen on, CarApp, link). Try again every 4 s for 20 s while it is not ours. */
+     *  woken tablet a few seconds (screen on, CarApp, link). Try again every 1.5 s for 30 s while it is not ours. */
     private fun retryConnect(ctx: Context, p: Prefs, n: Int) {
-        if (n > 5) return
+        if (n > 20) return
         main.postDelayed({
             if (p.state == IDLE || com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)) return@postDelayed
             a2dpConnectedDevices(ctx) { c -> if (p.mac1 !in c) { log("connect ${p.mac1} again ($n)"); connectA2dp(ctx, p.mac1); retryConnect(ctx, p, n + 1) } }
-        }, 4000)
+        }, 1500)
     }
 
     /** The speaker lives on exactly one device (multipoint on both kills the tablet's Dolby tuning): Tablet mode = the

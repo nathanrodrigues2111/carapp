@@ -23,7 +23,9 @@ import kotlin.math.sqrt
  * the strongest is the tablet, the next the sink. Many windows, median, 4 of 6 must agree within 5 ms; the
  * correction is applied and checked again until the residual is under 4 ms, then stored per sink address
  * ([TabletSpeaker.cal]) and the mic never opens for that sink again (unless its reported latency moves > 20 ms).
- * While calibrating the tablet copy plays 12 dB lower, so the unaligned copy is not heard as echo.
+ * While calibrating the tablet copy is SILENT (no echo): the mic hears the sink alone against what the tablet would
+ * have played, minus the tablet's own speaker-to-mic path ([TabletSpeaker.selfLag], a property of the tablet, measured
+ * once ever with the copy 12 dB down and stored). 3 windows within 5 ms apply and store at once, then the copy fades in.
  * No mic permission: math only. Test instrument: a file "sync_probe" in the app's files dir logs the residual
  * (measure only, never corrects).
  */
@@ -33,7 +35,7 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
         @Volatile var note = "not run yet"
         @Volatile var runs = 0
         const val SR = 8000
-        const val N = 16384        // 2 s of mic at 8 kHz
+        const val N = 8192         // 1 s of mic at 8 kHz: a vote every ~2 s
         const val L = 4096         // +-512 ms of lag search
         const val F = 32768
         const val MAX_MS = 400.0   // learned correction on top of the math
@@ -43,6 +45,7 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
 
     private fun loop() {
         var key = "?"; var was = false; val votes = mutableListOf<Double>(); var rounds = 0; var since = 0L; var gaveUp = false
+        val selfVotes = mutableListOf<Double>()
         while (alive()) {
             Thread.sleep(500)
             val now = SystemClock.elapsedRealtime()
@@ -57,24 +60,32 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
                 ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             if (need && !was) StreamReceiver.acousticMs = 0.0   // stale correction (latency moved): start from the math
             was = need
-            out.trim = if (need) 0.25f else 1f
+            val self = TabletSpeaker.selfLag(ctx)
+            val silent = need && self != null
+            out.trim = if (!need) 1f else if (silent) 0f else 0.25f
             if (!need && !probe) continue                        // known sink (or no mic): math only, the mic stays closed
             if (now - StreamReceiver.lastAt > 2000 || StreamReceiver.rms < 200) { since = 0; continue }
             if (since == 0L) since = now
             if (need && now - since > 120_000) { gaveUp = true; StreamReceiver.acousticMs = 0.0; note = "no agreement in 2 min, math only this session"; Log.e("LazyCar", "acoustic: $note"); continue }
-            if (now - since < 3000 || abs(out.errMs) > 8) continue   // the speaker first settles on the math
+            if (now - since < 1000 || abs(out.errMs) > 8) continue   // the speaker first settles on the math
             val err = out.errMs
-            val r = try { measure() } catch (e: Exception) { note = "error ${e.message}"; Log.e("LazyCar", "acoustic", e); null }
+            val r = try { measure(if (silent) self else null) } catch (e: Exception) { note = "error ${e.message}"; Log.e("LazyCar", "acoustic", e); null }
             runs++
             if (r == null) { Log.e("LazyCar", "acoustic: $note"); continue }
             val res = r + err   // relative to the math deadline: the speaker was err ms late while measuring
             residualMs = res
             if (!need) { Log.e("LazyCar", "acoustic probe: sink ${"%+.1f".format(res)} ms vs tablet (speaker err ${"%.1f".format(err)}), correction ${"%.0f".format(StreamReceiver.acousticMs)}, $note"); continue }
+            if (!silent) selfLast?.let { selfVotes += it }
             votes += res; if (votes.size > 10) votes.removeAt(0)
             val med = votes.sorted()[votes.size / 2]; val agree = votes.filter { abs(it - med) <= 5 }
-            if (votes.size < 6 || agree.size < 4) { note = "calibrating, ${votes.size} votes, ${agree.size} agree on ${"%+.0f".format(med)} ms"; Log.e("LazyCar", "acoustic: $note, last ${"%+.1f".format(res)}"); continue }
+            if (votes.size < 3 || agree.size < 3) { note = "calibrating, ${votes.size} votes, ${agree.size} agree on ${"%+.0f".format(med)} ms"; Log.e("LazyCar", "acoustic: $note, last ${"%+.1f".format(res)}"); continue }
             val m = agree.average(); votes.clear()
-            if (abs(m) <= 4) {
+            if (silent) {   // absolute (sink vs where the tablet plays), no re-check round needed
+                StreamReceiver.acousticMs = (StreamReceiver.acousticMs + m).coerceIn(-MAX_MS, MAX_MS)
+                TabletSpeaker.saveCal(ctx, k, StreamReceiver.acousticMs.roundToInt(), l)
+                note = "calibrated ${"%+.0f".format(StreamReceiver.acousticMs)} ms silently, math only from now"
+            } else if (abs(m) <= 4) {
+                if (selfVotes.size >= 3) TabletSpeaker.saveSelfLag(ctx, selfVotes.sorted()[selfVotes.size / 2])
                 TabletSpeaker.saveCal(ctx, k, StreamReceiver.acousticMs.roundToInt(), l)
                 note = "calibrated ${"%+.0f".format(StreamReceiver.acousticMs)} ms (residual ${"%+.1f".format(m)} ms), math only from now"
             } else if (rounds >= 3) { gaveUp = true; StreamReceiver.acousticMs = 0.0; note = "peak did not follow 3 corrections (reflection?), math only this session" }
@@ -86,7 +97,10 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
 
     /** One window: sink minus tablet in ms, 0 when only the tablet is heard (in sync within 3 ms), null when unusable. */
     @SuppressLint("MissingPermission")
-    private fun measure(): Double? {
+    private var selfLast: Double? = null
+    /** [self] = the tablet's own path (silent copy: the strongest peak is the sink), null = tablet audible too. */
+    private fun measure(self: Double?): Double? {
+        selfLast = null
         if (ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { note = "no mic permission"; return null }
         val am = ctx.getSystemService(android.media.AudioManager::class.java)
         val src = if (am.getProperty(android.media.AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED) == "true")
@@ -121,7 +135,13 @@ class Acoustic(private val ctx: Context, private val out: StreamReceiver.Output,
             val floor = c.map { abs(it) }.sorted()[c.size / 2] + 1e-12
             // ponytail: strongest peak = tablet (mic is centimetres from its speaker); fails if the JBL is far louder at the tablet
             val kt = c.indices.maxBy { c[it] }; val st = c[kt] / floor
+            if (self != null) {   // copy silent: the only peak is the sink
+                if (st < 6) { note = "no clear sink peak (x${"%.0f".format(st)})"; return null }
+                note = "sink ${"%.1f".format(lag(kt))} ms (x${"%.0f".format(st)}), tablet path ${"%.1f".format(self)} ms"
+                return lag(kt) - self + out.lateMs
+            }
             if (st < 6 || abs(lag(kt)) > 200) { note = "no clear tablet peak (x${"%.0f".format(st)})"; return null }
+            selfLast = lag(kt)
             // Remove the tablet's own sound: least squares FIR of the tablet path (2 ms either side of its peak),
             // subtract it from the mic, then the JBL is the main peak of what is left instead of a side lobe.
             val k0 = (kt - SR * 2 / 1000).coerceAtLeast(0); val k1 = (kt + SR * 2 / 1000).coerceAtMost(2 * L)

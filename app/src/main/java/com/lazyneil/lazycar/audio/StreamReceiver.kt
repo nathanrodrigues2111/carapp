@@ -166,11 +166,14 @@ class StreamReceiver : Service() {
             fun glitch() { healthySince = 0 }
             var dec = 0f; var decN = 0; var seenUnder = 0; var under = false; var realignAt = 0L
             val recent = DoubleArray(3); var recentN = 0; var offN = 0; var alignedN = 0; var silentAt = 0L
-            fun write(s: ShortArray) {
+            /** [pre]: the same frames before the trim/duck gain, for the calibration reference (a silent copy still has one).
+             *  Every written frame gets one reference frame, so reference and track positions stay in step. */
+            fun write(s: ShortArray, pre: FloatArray? = null) {
                 written += track.write(s, 0, s.size).coerceAtLeast(0) / 2
                 for (i in s.indices step 8) { val v = s[i].toDouble(); outSq += v * v; outN++ }
                 for (i in 0 until s.size / 2) {
-                    dec += s[2 * i] + s[2 * i + 1]; if (++decN == 6) { ref[(refEnd and 0xffff).toInt()] = dec / 393216f; refEnd++; dec = 0f; decN = 0 }
+                    dec += if (pre != null) pre[2 * i] + pre[2 * i + 1] else (s[2 * i] + s[2 * i + 1]).toFloat()
+                    if (++decN == 6) { ref[(refEnd and 0xffff).toInt()] = dec / 393216f; refEnd++; dec = 0f; decN = 0 }
                 }
             }
             while (alive()) {
@@ -277,12 +280,13 @@ class StreamReceiver : Service() {
                 }
                 if (!muted && fadeIn > 0) for (i in 0 until fr) { val g = 1 - (fadeIn - i).coerceAtLeast(0) / fadeLen.toFloat(); x[2 * i] *= g; x[2 * i + 1] *= g }
                 if (fadeIn > 0) fadeIn = (fadeIn - fr).coerceAtLeast(0)
+                val pre = x.copyOf()
                 val dt = (if (duck) 0.25f else 1f) * gain * trim
                 if (duckG != dt || dt != 1f) for (i in 0 until fr) {
                     duckG = if (duckG > dt) maxOf(dt, duckG - 0.75f / (Wire.RATE / 10)) else minOf(dt, duckG + 0.75f / (Wire.RATE * 0.3f))
                     x[2 * i] *= duckG; x[2 * i + 1] *= duckG
                 }
-                write(lim.process(x))
+                write(lim.process(x), pre)
                 last = c.pcm; fades = 0
             }
             track.stop(); track.release()

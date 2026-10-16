@@ -101,6 +101,7 @@ class DashboardActivity : AppCompatActivity() {
                 // Straight to the row: Settings scrolls to and highlights the fragment arg key.
                 !mockAllowed() -> Ui.openSettings(this, Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).putExtra(":settings:fragment_args_key", "mock_location_app"))
                 Ui.offerHelper(this) -> Ui.openHelper(this)
+                dozes() -> try { startActivity(Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:$packageName"))) } catch (_: Exception) {}
             }
         }
         click(R.id.npPrev) { PhoneMedia.cmd("prev") }; click(R.id.npNext) { PhoneMedia.cmd("next") }
@@ -259,6 +260,8 @@ class DashboardActivity : AppCompatActivity() {
         if (com.lazyneil.lazycar.media.Files.picked(this, rc, data)) render()
     }
 
+    /** Helper on but Doze may hold the phone's wake packet: ask once for the battery exemption. */
+    private fun dozes() = Ui.helperOn(this) && !getSystemService(android.os.PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
     private fun missing() = perms.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.toTypedArray()
 
     private fun render() {
@@ -276,6 +279,7 @@ class DashboardActivity : AppCompatActivity() {
                     "Tablet speaker is off for the phone's player. On the phone, tap the Tablet speaker line to share its audio"
                 !mockAllowed() -> "Phone GPS for Maps: tap, then Select mock location app, CarApp"
                 Ui.offerHelper(this@DashboardActivity) -> "Open Maps beside CarApp by itself when the phone starts: tap, then CarApp helper, turn on"
+                dozes() -> "Let the phone's Start wake this tablet from deep sleep: tap, Allow"
                 else -> ""
             }
             visibility = if (text.isEmpty()) View.GONE else View.VISIBLE

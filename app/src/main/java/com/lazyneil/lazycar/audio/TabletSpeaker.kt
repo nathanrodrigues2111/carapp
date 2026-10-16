@@ -49,6 +49,9 @@ object TabletSpeaker {
         val e = cals(ctx).optJSONArray(key) ?: return sp(ctx).getInt("cal:$key", Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }   // 0.6.2 dev builds
         return if (latMs < 0 || kotlin.math.abs(e.optInt(1) - latMs) <= 20) e.optInt(0) else null
     }
+    /** The tablet's own speaker-to-mic lag as the calibration measures it (same for every sink), null until measured once. */
+    fun selfLag(ctx: Context): Double? = sp(ctx).getFloat("selfLag", Float.NaN).takeIf { !it.isNaN() }?.toDouble()
+    fun saveSelfLag(ctx: Context, ms: Double) = sp(ctx).edit().putFloat("selfLag", ms.toFloat()).apply()
     fun saveCal(ctx: Context, key: String, v: Int, latMs: Int) =
         sp(ctx).edit().putString("cals", cals(ctx).put(key, org.json.JSONArray().put(v).put(latMs).put(System.currentTimeMillis())).toString()).apply()
     // SettingsSync merges the map per sink (newer entry wins), see mergeCals.
