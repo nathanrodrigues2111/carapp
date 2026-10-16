@@ -53,6 +53,18 @@ class MediaListener : NotificationListenerService() {
         fun toTablet(j: JSONObject) { self?.let { m -> val l = j.put("t", "cmd").toString(); m.out.forEach { m.send(it, l) } } }
         fun granted(ctx: Context) = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
         fun settingsIntent() = Intent("android.settings.NOTIFICATION_LISTENER_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        /** OxygenOS lacks the plain listener screen: try detail page, list page, then app info. First that resolves wins, never throws. */
+        fun openSettings(ctx: Context) {
+            val cn = ComponentName(ctx.packageName, MediaListener::class.java.name).flattenToString()
+            val tries = listOf(
+                Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, cn),
+                Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName)))
+            for (i in tries) {
+                try { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return } catch (e: android.content.ActivityNotFoundException) { }
+            }
+        }
     }
 
     /** One writer thread per tablet: a dead or slow socket blocks only its own queue, never the heartbeat or other work. */

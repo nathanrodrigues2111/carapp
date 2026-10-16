@@ -243,7 +243,7 @@ class MainActivity : AppCompatActivity() {
             !perm(Manifest.permission.BLUETOOTH_CONNECT) -> Triple("Allow Nearby devices", "CarApp needs it to connect your speaker.") {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1) }
             !com.lazyneil.lazycar.media.MediaListener.granted(this) -> Triple("Allow notification access", "Lets the tablet show and control what plays here.") {
-                startActivity(com.lazyneil.lazycar.media.MediaListener.settingsIntent()) }
+                com.lazyneil.lazycar.media.MediaListener.openSettings(this) }
             !perm(Manifest.permission.READ_MEDIA_AUDIO) -> Triple("Allow music library", "Lets the tablet browse the songs on this phone.") {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_MEDIA_AUDIO), 2) }
             else -> null
