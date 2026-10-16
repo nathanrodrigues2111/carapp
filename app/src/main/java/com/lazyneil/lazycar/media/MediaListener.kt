@@ -199,6 +199,14 @@ class MediaLink : android.app.Service() {
         }
     }
 
+    /** A tablet that connects while GO runs (woken by GO, or back after a drop) hears who owns the speaker now: the
+     *  handoff sent before it was connected went nowhere. */
+    private fun speakerOwner(cl: Client) {
+        val p = com.lazyneil.lazycar.Prefs(this)
+        if (p.mac1.isEmpty() || p.state == com.lazyneil.lazycar.GoAction.IDLE) return
+        send(cl, JSONObject().put("t", "spk").put("mac", p.mac1).put("name", p.name1).put("on", com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this)).toString())
+    }
+
     fun send(cl: Client, line: String) = write(cl, line)
     private fun write(cl: Client, line: String) = try {
         cl.q.execute { try { cl.w.write(line); cl.w.write("\n"); cl.w.flush() } catch (_: Exception) { drop(cl) } }
@@ -215,7 +223,7 @@ class MediaLink : android.app.Service() {
                 // Dead sockets go via heartbeat silence (15 s), never by IP: a live tablet link must not be kicked.
                 Log.e("LazyCar", "media accept ${s.inetAddress?.hostAddress} clients=${out.size + 1}")
                 out += cl; clients = out.size
-                main.post { push() }
+                main.post { push(); speakerOwner(cl) }
                 thread(name = "media-client") {
                     try { s.getInputStream().bufferedReader().forEachLine { l -> cl.heardAt = SystemClock.elapsedRealtime(); main.post { handle(cl, JSONObject(l)) } } }
                     catch (_: Exception) {}
@@ -347,7 +355,12 @@ class Session(val ctx: Context, private val local: Boolean) {
         else Files.play(ctx, Uri.parse(song), player)
     }
 
-    private fun noFolder() = if (Files.has(ctx)) "" else if (local) "No music folder yet. Tap here to pick one" else "No music folder yet. Pick one on the phone's CarApp home screen"
+    /** Why a file list is empty, never a silent blank. io thread only (may wait for the first scan). */
+    private fun noFolder() = when {
+        !Files.has(ctx) -> if (local) "No music folder yet. Tap here to pick one" else "No music folder yet. Pick one on the phone's CarApp home screen"
+        Files.songs(ctx).isEmpty() -> if (local) "No music files in the picked folder. Tap here to pick another" else "No music files in the phone's music folder. Pick another on the phone's CarApp home screen"
+        else -> ""
+    }
 
     private fun list(req: JSONObject, items: JSONArray, err: String = "") =
         JSONObject().put("t", "list").put("req", req.optInt("req")).put("items", items).put("err", err)
@@ -417,7 +430,13 @@ object Files {
     private val scanner = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     private fun tree(ctx: Context) = com.lazyneil.lazycar.Prefs(ctx).musicTree
-    fun has(ctx: Context) = tree(ctx).let { t -> t.isNotEmpty() && ctx.contentResolver.persistedUriPermissions.any { it.uri.toString() == t && it.isReadPermission } }
+    /** A folder without its grant (restored by backup, or the user revoked it) is no folder: forgotten, so the
+     *  "pick a folder" line shows instead of an empty library. */
+    fun has(ctx: Context): Boolean {
+        val t = tree(ctx); if (t.isEmpty()) return false
+        if (ctx.contentResolver.persistedUriPermissions.any { it.uri.toString() == t && it.isReadPermission }) return true
+        Log.e("LazyCar", "music folder grant gone, forgetting $t"); com.lazyneil.lazycar.Prefs(ctx).musicTree = ""; return false
+    }
     fun pick(a: android.app.Activity) = try { a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), PICK) } catch (e: Exception) { Log.e("LazyCar", "pick folder", e) }
     /** From onActivityResult: keeps the picked folder across reboots and scans it. True when it was the folder pick. */
     fun picked(ctx: Context, rc: Int, data: Intent?): Boolean {

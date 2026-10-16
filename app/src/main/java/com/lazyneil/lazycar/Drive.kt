@@ -78,15 +78,18 @@ object Drive {
 }
 
 /**
- * Tablet only and optional: the user turns it on once in Android's Accessibility settings, CarApp never turns it on or
- * back on. Two jobs: (1) wake CarApp when the phone presses GO (system bound, so it listens with no notification and
- * no other service, also after Shut down); (2) open the Maps + CarApp split the way a user does on ZUI, which has no
+ * Optional: the user turns it on once in Android's Accessibility settings, CarApp never turns it on or back on. Off =
+ * the dialogs and the split are one tap each for the user. Phone: presses the confirm buttons of the system dialogs GO
+ * and Shut down open ([press]). Tablet: (1) wakes CarApp when the phone presses GO (system bound, so it listens with no
+ * notification and no other service, also after Shut down); (2) opens the Maps + CarApp split the way a user does on ZUI, which has no
  * app API for it (LAUNCH_ADJACENT and launch windowing modes are ignored): the saved pair icon on the home screen,
  * else Recents, Maps' icon, Split screen, CarApp.
  */
 class SplitService : AccessibilityService() {
     companion object {
         @Volatile var self: SplitService? = null
+        /** Arm the confirm buttons of the system dialog GO is about to open. Nothing when the user has it off. */
+        fun press(vararg texts: String, ms: Long = 30_000) { self?.press(texts.toList(), ms) }
         const val PORT = 47478
         const val WAKE = "CARWAKE"
         private const val ZUI_LAUNCHER = "com.zui.launcher"
@@ -96,11 +99,32 @@ class SplitService : AccessibilityService() {
     @Volatile private var sock: DatagramSocket? = null
 
     override fun onServiceConnected() {
-        if (!Role.isTablet(this)) { disableSelf(); return }
         self = this
-        thread(name = "wake-listen", isDaemon = true) { listen() }
+        if (Role.isTablet(this)) thread(name = "wake-listen", isDaemon = true) { listen() }
     }
-    override fun onAccessibilityEvent(e: AccessibilityEvent?) {}
+
+    /** GO / Shut down opened a system dialog (screen share consent, Bluetooth on or off): its confirm button is
+     *  pressed for the user while armed. Only system dialogs, only these labels, only for [ms]. */
+    fun press(texts: List<String>, ms: Long) { pressTexts = texts; pressUntil = SystemClock.uptimeMillis() + ms; main.post { pressNow() } }
+    @Volatile private var pressTexts = emptyList<String>()
+    @Volatile private var pressUntil = 0L
+    private var pressedAt = 0L
+    override fun onAccessibilityEvent(e: AccessibilityEvent?) { if (pressTexts.isNotEmpty()) pressNow() }
+    private fun pressNow() {
+        val now = SystemClock.uptimeMillis()
+        if (now >= pressUntil) { pressTexts = emptyList(); return }
+        if (now - pressedAt < 800) return   // one dialog at a time: the next one opens after this click
+        for (w in windows) {
+            val root = w.root ?: continue
+            val pkg = root.packageName?.toString() ?: continue
+            if (pkg != "android" && pkg != "com.android.systemui" && pkg != "com.android.settings" && pkg != "com.android.permissioncontroller" && !pkg.startsWith("com.oplus")) continue
+            for (t in pressTexts) for (n in root.findAccessibilityNodeInfosByText(t)) {
+                if (n.text?.toString()?.trim()?.equals(t, true) != true) continue
+                var c: AccessibilityNodeInfo? = n; while (c != null && !c.isClickable) c = c.parent
+                if (c?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) { pressedAt = now; Log.e("LazyCar", "pressed '$t' in $pkg"); return }
+            }
+        }
+    }
     override fun onInterrupt() {}
     override fun onDestroy() { self = null; sock?.close(); main.removeCallbacksAndMessages(null); super.onDestroy() }
 

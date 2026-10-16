@@ -97,7 +97,7 @@ object GoAction {
             val tab = com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)
             val need1 = !tab && p.mac1.isNotEmpty() && p.mac1 !in connected
             val need3 = p.headunit && p.mac3.isNotEmpty() && p.mac3 !in connected
-            if (need1) connectA2dp(ctx, p.mac1) else if (p.mac1.isNotEmpty()) log("skipped connect ${p.mac1} (${if (tab) "Tablet mode" else "connected"})")
+            if (need1) { connectA2dp(ctx, p.mac1); retryConnect(ctx, p, 1) } else if (p.mac1.isNotEmpty()) log("skipped connect ${p.mac1} (${if (tab) "Tablet mode" else "connected"})")
             if (need3) main.postDelayed({ connectA2dp(ctx, p.mac3) }, 800)
 
             val settle = if (need1) 2000L else 0L
@@ -139,6 +139,16 @@ object GoAction {
             finish = { if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0); com.lazyneil.lazycar.audio.TabletSpeaker.onGo(ctx); launchApps(ctx) } }
             main.postDelayed({ finish() }, doneAt + 300L)
         }
+    }
+
+    /** Phone mode: a speaker still held by the tablet refuses the phone until the tablet lets go, which can take a
+     *  woken tablet ~10 s (screen on, CarApp, link). Try again every 4 s for 20 s while it is not ours. */
+    private fun retryConnect(ctx: Context, p: Prefs, n: Int) {
+        if (n > 5) return
+        main.postDelayed({
+            if (p.state == IDLE || com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)) return@postDelayed
+            a2dpConnectedDevices(ctx) { c -> if (p.mac1 !in c) { log("connect ${p.mac1} again ($n)"); connectA2dp(ctx, p.mac1); retryConnect(ctx, p, n + 1) } }
+        }, 4000)
     }
 
     /** The speaker lives on exactly one device (multipoint on both kills the tablet's Dolby tuning): Tablet mode = the
@@ -433,6 +443,7 @@ object GoAction {
         }
         ctx.registerReceiver(recv, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
         // ACTION_REQUEST_DISABLE is not a public SDK constant; its action string is stable.
+        SplitService.press("Allow", "Turn off")
         Ui.openSettings(ctx, Intent("android.bluetooth.adapter.action.REQUEST_DISABLE"), fallback = false)
         if (!adapter.isEnabled && done.compareAndSet(false, true)) {
             try { ctx.unregisterReceiver(recv) } catch (e: Exception) {}

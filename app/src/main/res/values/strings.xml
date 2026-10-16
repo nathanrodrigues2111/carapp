@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">CarApp</string>
-    <string name="split_service_desc">Tablet only. Opens Maps and CarApp side by side on GO or Drive (taps Recents, Split screen, CarApp for you), and opens CarApp when the phone presses GO. Nothing else.</string>
+    <string name="split_service_desc">Presses for you only what CarApp itself opens: the screen share and Bluetooth dialogs of Start and Shut down on the phone; on the tablet it opens CarApp when the phone starts and puts Maps and CarApp side by side. Nothing else.</string>
 </resources>

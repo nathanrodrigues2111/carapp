@@ -92,7 +92,7 @@ class StreamSender : Service() {
             if (r.firstOrNull() == PackageManager.PERMISSION_GRANTED) ask() else { error = "Microphone permission needed"; asking = false; finish() }
         }
         // The consent is per session on Android 14+: the standard system dialog, the user taps Start.
-        private fun ask() { val mpm = getSystemService(MediaProjectionManager::class.java)
+        private fun ask() { com.lazyneil.lazycar.SplitService.press("Start now", "Share screen", "Start"); val mpm = getSystemService(MediaProjectionManager::class.java)
             // Whole display, so the dialog skips the "Share one app" picker.
             startActivityForResult(if (android.os.Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(
                 android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent(), 2) }

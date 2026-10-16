@@ -144,7 +144,7 @@ class LibraryActivity : AppCompatActivity() {
             setCompoundDrawablesRelativeWithIntrinsicBounds(null, getDrawable(R.drawable.ic_library)?.mutate()?.apply { setTint(Ui.attr(context, R.attr.carTextDim)) }, null, null)
             compoundDrawablePadding = dp(8)
             // Tablet mode lists this tablet's own files: the folder is picked right here.
-            setOnClickListener { if (com.lazyneil.lazycar.Role.isTablet(context) && PhoneMedia.source == "Tablet" && !Files.has(context)) Files.pick(this@LibraryActivity) }
+            setOnClickListener { if (com.lazyneil.lazycar.Role.isTablet(context) && PhoneMedia.source == "Tablet") Files.pick(this@LibraryActivity) }
         }
         val empty = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
         empty.addView(status)

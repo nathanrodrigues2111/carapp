@@ -130,12 +130,11 @@
             android:name=".DashboardActivity"
             android:exported="false" />
 
-        <!-- Tablet split + phone GO wake, optional (Drive.kt). Off until Role.applyComponents enables it on the tablet. -->
+        <!-- Optional helper (Drive.kt): tablet split + GO wake, phone GO / Shut down dialogs. -->
         <service
             android:name=".SplitService"
-            android:enabled="false"
             android:exported="true"
-            android:label="CarApp split"
+            android:label="CarApp helper"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

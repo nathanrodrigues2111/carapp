@@ -27,6 +27,7 @@ class GoActivity : Activity() {
         if (svc.getStringExtra("action") == "go" && !com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this)) {
             val bt = getSystemService(BluetoothManager::class.java)?.adapter
             val btOff = bt != null && !bt.isEnabled
+            SplitService.press("Start now", "Share screen", "Start", "Allow", "Turn on")
             // One system dialog at a time: a second one opened on top closed the Bluetooth one. Consent first, it opens Bluetooth after.
             if (com.lazyneil.lazycar.audio.TabletSpeaker.needsCapture(this)) com.lazyneil.lazycar.audio.StreamSender.askConsent(this, thenBt = btOff)
             else if (btOff) Ui.openSettings(this, Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false)
