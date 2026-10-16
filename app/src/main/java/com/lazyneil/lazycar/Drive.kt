@@ -99,7 +99,7 @@ class SplitService : AccessibilityService() {
     @Volatile private var sock: DatagramSocket? = null
 
     override fun onServiceConnected() {
-        self = this
+        self = this; Ui.backFromGrant(this)
         if (Role.isTablet(this)) thread(name = "wake-listen", isDaemon = true) { listen() }
     }
 

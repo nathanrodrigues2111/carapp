@@ -88,8 +88,9 @@ class MainActivity : AppCompatActivity() {
         val root = findViewById<View>(R.id.root)
         Ui.edge(this, scroll, 0, dp(16))   // backdrop stays full window
         // Required first; notifications are optional and asked on their own, once, after these.
+        // Microphone here too (screen share audio capture needs it): asked at GO it was one more tap mid start.
         val want = arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION)
+            Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.RECORD_AUDIO)
             .filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (want.isNotEmpty()) ActivityCompat.requestPermissions(this, want.toTypedArray(), 1) else askNotifications()
         if (savedInstanceState == null) opened()   // a recreate (accent change) is not an open
@@ -242,6 +243,7 @@ class MainActivity : AppCompatActivity() {
                 com.lazyneil.lazycar.media.MediaListener.openSettings(this) }
             // The phone's folder is only the fallback library for Phone mode players; the tablet's CarApp player has its own.
             !tabMode() && !com.lazyneil.lazycar.media.Files.has(this) -> "No music folder yet. Tap to pick one" to { com.lazyneil.lazycar.media.Files.pick(this) }
+            Ui.offerHelper(this) -> "Let CarApp press Start and Bluetooth for you: tap, then Downloaded apps, CarApp helper, turn on" to { Ui.openHelper(this) }
             com.lazyneil.lazycar.audio.TabletSpeaker.speakerOff(this) -> "Tablet speaker is off for this player. Tap to share its audio" to {
                 com.lazyneil.lazycar.audio.TabletSpeaker.setOtherApps(this, true); com.lazyneil.lazycar.audio.StreamSender.askConsent(this) }
             else -> null

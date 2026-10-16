@@ -43,7 +43,7 @@ import com.lazyneil.lazycar.media.MediaListener.Companion.tabletPct
 /** Notification access, optional: only the grant matters (it lets [MediaLink] read and control other players'
  *  sessions). CarApp's own player and the phone-tablet link work without it. */
 class MediaListener : NotificationListenerService() {
-    override fun onListenerConnected() { MediaLink.self?.let { it.main.post { it.watchSessions() } } }
+    override fun onListenerConnected() { MediaLink.self?.let { it.main.post { it.watchSessions() } }; com.lazyneil.lazycar.Ui.backFromGrant(this) }
 
     companion object {
         /** The phone's link server runs (between app open or GO and Shut down). */
@@ -74,7 +74,7 @@ class MediaListener : NotificationListenerService() {
                     .putExtra(android.provider.Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, cn),
                 Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
                 Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName)))
-            com.lazyneil.lazycar.Ui.openSettings(ctx, *tries.toTypedArray())
+            com.lazyneil.lazycar.Ui.grantOpened(); com.lazyneil.lazycar.Ui.openSettings(ctx, *tries.toTypedArray())
         }
     }
 

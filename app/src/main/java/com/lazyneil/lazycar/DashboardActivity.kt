@@ -97,7 +97,9 @@ class DashboardActivity : AppCompatActivity() {
             when {
                 missing().isNotEmpty() -> requestPermissions(missing(), 1)
                 !com.lazyneil.lazycar.media.Files.has(this) -> com.lazyneil.lazycar.media.Files.pick(this)
-                !mockAllowed() -> Ui.openSettings(this, Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+                // Straight to the row: Settings scrolls to and highlights the fragment arg key.
+                !mockAllowed() -> Ui.openSettings(this, Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).putExtra(":settings:fragment_args_key", "mock_location_app"))
+                Ui.offerHelper(this) -> Ui.openHelper(this)
             }
         }
         click(R.id.npPrev) { PhoneMedia.cmd("prev") }; click(R.id.npNext) { PhoneMedia.cmd("next") }
@@ -119,7 +121,9 @@ class DashboardActivity : AppCompatActivity() {
         getSystemService(android.app.ActivityManager::class.java).appTasks
             .filter { it.taskInfo.taskId != taskId }.forEach { try { it.finishAndRemoveTask() } catch (_: Exception) {} }
         // Notifications are optional: asked once with location, the app works without them.
-        if (missing().isNotEmpty()) requestPermissions(missing() + Manifest.permission.POST_NOTIFICATIONS, 1)
+        // Microphone with them (speaker calibration): asked just in time it was a tap during the first GO.
+        val mic = checkSelfPermission(Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (missing().isNotEmpty() || mic) requestPermissions(missing() + Manifest.permission.POST_NOTIFICATIONS + Manifest.permission.RECORD_AUDIO, 1)
     }
 
     override fun onResume() {
@@ -269,7 +273,8 @@ class DashboardActivity : AppCompatActivity() {
                 !com.lazyneil.lazycar.media.Files.has(this@DashboardActivity) -> "No music folder yet. Tap to pick one"
                 !com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this@DashboardActivity) && PhoneMedia.alive && PhoneMedia.np.optBoolean("spkOff") ->
                     "Tablet speaker is off for the phone's player. On the phone, tap the Tablet speaker line to share its audio"
-                !mockAllowed() -> "Phone GPS for Maps: in Developer options, Select mock location app, pick CarApp. Tap to open"
+                !mockAllowed() -> "Phone GPS for Maps: tap, then Select mock location app, CarApp"
+                Ui.offerHelper(this@DashboardActivity) -> "Open Maps beside CarApp by itself when the phone starts: tap, then CarApp helper, turn on"
                 else -> ""
             }
             visibility = if (text.isEmpty()) View.GONE else View.VISIBLE

@@ -35,12 +35,33 @@ import com.lazyneil.lazycar.media.Volumes
 object Ui {
     /** Every jump to a system screen goes through here: the first intent that starts wins, then (with [fallback])
      *  CarApp's app info, then Settings. Never throws. */
+    /** A grant screen CarApp opened: when the grant lands ([backFromGrant]) CarApp comes back, no Back press. */
+    @Volatile private var grantUntil = 0L
+    fun grantOpened() { grantUntil = android.os.SystemClock.uptimeMillis() + 300_000 }
+    fun backFromGrant(c: Context) {
+        if (android.os.SystemClock.uptimeMillis() > grantUntil) return; grantUntil = 0
+        val home = if (Role.isTablet(c)) DashboardActivity::class.java else MainActivity::class.java
+        try { c.startActivity(android.content.Intent(c, home).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } catch (_: Exception) {}
+    }
+
+    /** The optional helper ([SplitService]): offered once as a setup line, never again after that tap. */
+    fun helperOn(c: Context) = android.provider.Settings.Secure.getString(c.contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        ?.contains("${c.packageName}/") == true
+    fun offerHelper(c: Context) = !helperOn(c) && !sp(c).getBoolean("helperAsked", false)
+    fun openHelper(a: Activity) {
+        sp(a).edit().putBoolean("helperAsked", true).apply(); grantOpened()
+        val cn = android.content.ComponentName(a, SplitService::class.java).flattenToString()
+        openSettings(a, android.content.Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").putExtra(android.content.Intent.EXTRA_COMPONENT_NAME, cn),
+            android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
     fun openSettings(c: Context, vararg tries: android.content.Intent, fallback: Boolean = true): Boolean {
         val all = tries.toList() + if (!fallback) emptyList() else listOf(
             android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + c.packageName)),
             android.content.Intent(android.provider.Settings.ACTION_SETTINGS))
         for (i in all) try {
-            if (c !is Activity) i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            // Own task always: left in CarApp's task, a Settings page came back on the next CarApp icon tap.
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             c.startActivity(i); return true
         } catch (e: Exception) { android.util.Log.e("LazyCar", "open ${i.action}: $e") }
         return false
