@@ -25,6 +25,8 @@ object Drive {
     /** Split screen is the launcher's own pair icon (apps cannot start a split on this tablet): remind, never auto tap. */
     fun hint(ctx: Context) {
         if (!Ui.openWithMaps(ctx)) return
-        Toast.makeText(ctx, "For Maps beside CarApp, tap the Maps + CarApp pair on the home screen", Toast.LENGTH_LONG).show()
+        // The launcher only has the pairs the user saved (Maps + Poweramp, Maps + Spotify): say how to make ours once.
+        Toast.makeText(ctx, "Maps beside CarApp: tap the Maps + CarApp pair on the home screen. No pair yet? Open Maps and CarApp " +
+            "side by side once, then in Recents tap the icon above them and choose Save app pair", Toast.LENGTH_LONG).show()
     }
 }
