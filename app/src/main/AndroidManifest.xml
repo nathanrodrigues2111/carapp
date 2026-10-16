@@ -206,6 +206,10 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!-- Phone side of the phone-tablet link (runs between app open or GO and Shut down) -->
+        <service
+            android:name=".media.MediaLink"
+            android:exported="false" />
         <receiver
             android:name=".media.PhoneMedia$Button"
             android:exported="false" />

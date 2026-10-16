@@ -239,7 +239,8 @@ class MainActivity : AppCompatActivity() {
             // Only an outside player needs it (its session, controls, Now Playing for the tablet).
             p.playerPkg != packageName && !com.lazyneil.lazycar.media.MediaListener.granted(this) -> "Notification access is off. Tap to allow" to {
                 com.lazyneil.lazycar.media.MediaListener.openSettings(this) }
-            !com.lazyneil.lazycar.media.Files.has(this) -> "No music folder yet. Tap to pick one" to { com.lazyneil.lazycar.media.Files.pick(this) }
+            // The phone's folder is only the fallback library for Phone mode players; the tablet's CarApp player has its own.
+            !tabMode() && !com.lazyneil.lazycar.media.Files.has(this) -> "No music folder yet. Tap to pick one" to { com.lazyneil.lazycar.media.Files.pick(this) }
             else -> null
         }
         val card = findViewById<View>(R.id.setupCard)

@@ -32,18 +32,26 @@ import java.net.Socket
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
+import com.lazyneil.lazycar.media.MediaListener.Companion.clients
+import com.lazyneil.lazycar.media.MediaListener.Companion.player
+import com.lazyneil.lazycar.media.MediaListener.Companion.tabletPct
 
 /**
  * Phone side of "control like Spotify Connect": the notification listener grant is what lets us read
  * every app's media session. Serves Now Playing + library browsing to the tablet over TCP [Link.PORT].
  */
+/** Notification access, optional: only the grant matters (it lets [MediaLink] read and control other players'
+ *  sessions). CarApp's own player and the phone-tablet link work without it. */
 class MediaListener : NotificationListenerService() {
+    override fun onListenerConnected() { MediaLink.self?.let { it.main.post { it.watchSessions() } } }
+
     companion object {
-        @Volatile var bound = false
+        /** The phone's link server runs (between app open or GO and Shut down). */
+        val bound get() = MediaLink.self != null
         @Volatile var clients = 0
         @Volatile var player = ""
         @Volatile var tabletPct = -1     // tablet speaker level, reported by the tablet
-        private var self: MediaListener? = null
+        private val self get() = MediaLink.self
         /** Phone slider: tell every tablet to set its speaker level. */
         fun setTablet(pct: Int) { tabletPct = pct; self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "tvol").put("pct", pct).put("user", true).toString()) } } }
         /** Tablet mode GO / STOP; the tablet answers "goAck". */
@@ -52,8 +60,9 @@ class MediaListener : NotificationListenerService() {
         fun toTablet(j: JSONObject) { self?.let { m -> val l = j.put("t", "cmd").toString(); m.out.forEach { m.send(it, l) } } }
         /** Shut down: tell every tablet first, then unbind (no server, no sessions) until [wake]. */
         fun shutDownTablets() { self?.let { m -> m.out.forEach { m.send(it, JSONObject().put("t", "shutdown").toString()) } } }
-        fun sleep() { try { self?.requestUnbind() } catch (e: Exception) { Log.e("LazyCar", "listener unbind: $e") } }
-        fun wake(ctx: Context) { if (!bound && granted(ctx)) try { requestRebind(ComponentName(ctx, MediaListener::class.java)) } catch (e: Exception) { Log.e("LazyCar", "listener rebind: $e") } }
+        fun sleep() { self?.let { it.stopSelf() } }
+        /** App open or GO on the phone: start the link server (a plain in-process service, no grant needed). */
+        fun wake(ctx: Context) { if (!bound && !com.lazyneil.lazycar.Role.isTablet(ctx)) try { ctx.startService(Intent(ctx, MediaLink::class.java)) } catch (e: Exception) { Log.e("LazyCar", "link start: $e") } }
         fun granted(ctx: Context) = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
         fun settingsIntent() = Intent("android.settings.NOTIFICATION_LISTENER_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         /** OxygenOS lacks the plain listener screen: try detail page, list page, then app info. First that resolves wins, never throws. */
@@ -68,6 +77,16 @@ class MediaListener : NotificationListenerService() {
         }
     }
 
+}
+
+/**
+ * Phone side of "control like Spotify Connect": serves Now Playing, library browsing, GO, Shut down and settings to the
+ * tablet over TCP [Link.PORT]. Other players' sessions need the [MediaListener] grant; without it only CarApp's own.
+ */
+class MediaLink : android.app.Service() {
+    companion object { @Volatile var self: MediaLink? = null }
+    override fun onBind(i: Intent?) = null
+
     /** One writer thread per tablet: a dead or slow socket blocks only its own queue, never the heartbeat or other work. */
     class Client(val s: Socket) {
         val w: Writer = s.getOutputStream().bufferedWriter(); var artKey: String? = null
@@ -75,7 +94,7 @@ class MediaListener : NotificationListenerService() {
         @Volatile var heardAt = SystemClock.elapsedRealtime()
     }
 
-    private val main = Handler(Looper.getMainLooper())
+    val main = Handler(Looper.getMainLooper())
     val out = CopyOnWriteArrayList<Client>()
     @Volatile private var alive = false
     private var server: ServerSocket? = null
@@ -93,16 +112,16 @@ class MediaListener : NotificationListenerService() {
         override fun run() { push(); main.postDelayed(this, 1000) }
     }
 
-    override fun onListenerConnected() {
-        if (com.lazyneil.lazycar.Prefs(this).shutDown) { Log.e("LazyCar", "listener: shut down, unbinding"); requestUnbind(); return }
-        // The tablet only needs the grant (its own player's session); serving here made it connect to itself.
-        if (com.lazyneil.lazycar.Role.isTablet(this)) { bound = true; return }
-        bound = true; alive = true; self = this; PhoneMedia.app = applicationContext
+    override fun onStartCommand(i: Intent?, flags: Int, id: Int) = START_NOT_STICKY
+
+    override fun onCreate() {
+        super.onCreate()
+        // Shut down: nothing runs until the app is opened or GO. The tablet never serves (it would connect to itself).
+        if (com.lazyneil.lazycar.Prefs(this).shutDown || com.lazyneil.lazycar.Role.isTablet(this)) { stopSelf(); return }
+        alive = true; self = this; PhoneMedia.app = applicationContext
         com.lazyneil.lazycar.SettingsSync.init(this) { items ->
             val line = JSONObject().put("t", "prefs").put("items", items).toString(); out.forEach { send(it, line) } }
-        val msm = getSystemService(MediaSessionManager::class.java)
-        msm.addOnActiveSessionsChangedListener(sessions, ComponentName(this, MediaListener::class.java), main)
-        pick(); main.post(tick)
+        watchSessions(); main.post(tick)
         thread(name = "media-server") { serve() }
         thread(name = "media-probe") { answerProbes() }
         thread(name = "media-hb", isDaemon = true) { heartbeat() }
@@ -118,14 +137,26 @@ class MediaListener : NotificationListenerService() {
         }
     }
 
-    override fun onListenerDisconnected() {
-        bound = false; alive = false; self = null
-        getSystemService(MediaSessionManager::class.java).removeOnActiveSessionsChangedListener(sessions)
+    private var watching = false
+    /** Other players' sessions, once notification access is granted (called again when it is). */
+    fun watchSessions() {
+        if (!watching) try {
+            getSystemService(MediaSessionManager::class.java).addOnActiveSessionsChangedListener(sessions, ComponentName(this, MediaListener::class.java), main)
+            watching = true
+        } catch (_: SecurityException) {}
+        pick()
+    }
+
+    override fun onDestroy() {
+        if (!alive) { super.onDestroy(); return }
+        alive = false; self = null
+        if (watching) getSystemService(MediaSessionManager::class.java).removeOnActiveSessionsChangedListener(sessions)
         sess.ctl?.unregisterCallback(cb); sess.ctl = null
         main.removeCallbacks(tick)
         sess.browser?.disconnect(); sess.browser = null
         server?.close(); probe?.close()
         out.forEach(::drop); clients = 0
+        super.onDestroy()
     }
 
     /** Playing session wins, else the most recent one. */

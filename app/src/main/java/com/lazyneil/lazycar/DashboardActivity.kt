@@ -92,7 +92,11 @@ class DashboardActivity : AppCompatActivity() {
         click(R.id.settingsBtn, settings); click(R.id.statusRow, settings)
         click(R.id.npLibrary) { startActivity(Intent(this, LibraryActivity::class.java)) }
         click(R.id.setupBanner) {
-            if (missing().isNotEmpty()) requestPermissions(missing(), 1)
+            when {
+                missing().isNotEmpty() -> requestPermissions(missing(), 1)
+                !com.lazyneil.lazycar.media.Files.has(this) -> com.lazyneil.lazycar.media.Files.pick(this)
+                !mockAllowed() -> Ui.openSettings(this, Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+            }
         }
         click(R.id.npPrev) { PhoneMedia.cmd("prev") }; click(R.id.npNext) { PhoneMedia.cmd("next") }
         click(R.id.npPlay) { PhoneMedia.cmd("toggle") }
@@ -223,6 +227,14 @@ class DashboardActivity : AppCompatActivity() {
         GpsService.startIfIdle(this); render()
     }
 
+    private fun mockAllowed() = getSystemService(android.app.AppOpsManager::class.java).unsafeCheckOpNoThrow(
+        android.app.AppOpsManager.OPSTR_MOCK_LOCATION, android.os.Process.myUid(), packageName) == android.app.AppOpsManager.MODE_ALLOWED
+
+    override fun onActivityResult(rc: Int, res: Int, data: Intent?) {
+        super.onActivityResult(rc, res, data)
+        if (com.lazyneil.lazycar.media.Files.picked(this, rc, data)) render()
+    }
+
     private fun missing() = perms.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.toTypedArray()
 
     private fun render() {
@@ -234,6 +246,8 @@ class DashboardActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.setupBanner).apply {
             text = when {
                 miss.isNotEmpty() -> "Precise location is off. Tap to allow"
+                !com.lazyneil.lazycar.media.Files.has(this@DashboardActivity) -> "No music folder yet. Tap to pick one"
+                !mockAllowed() -> "Phone GPS for Maps: in Developer options, Select mock location app, pick CarApp. Tap to open"
                 else -> ""
             }
             visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
