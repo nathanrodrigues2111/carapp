@@ -96,6 +96,8 @@ class MediaListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         if (com.lazyneil.lazycar.Prefs(this).shutDown) { Log.e("LazyCar", "listener: shut down, unbinding"); requestUnbind(); return }
+        // The tablet only needs the grant (its own player's session); serving here made it connect to itself.
+        if (com.lazyneil.lazycar.Role.isTablet(this)) { bound = true; return }
         bound = true; alive = true; self = this; PhoneMedia.app = applicationContext
         com.lazyneil.lazycar.SettingsSync.init(this) { items ->
             val line = JSONObject().put("t", "prefs").put("items", items).toString(); out.forEach { send(it, line) } }

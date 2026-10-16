@@ -157,10 +157,8 @@ object GoAction {
         com.lazyneil.lazycar.media.MediaListener.goTablet(true)
         main.postDelayed({
             if (acked || p.state != STARTING) return@postDelayed
-            log("tablet no ack, playing on phone"); toast(ctx, "Tablet not reachable, playing on phone")
-            if (p.mac1.isNotEmpty() && !p.snapConn1) connectA2dp(ctx, p.mac1)
-            main.postDelayed({ launchPlayer(ctx, p.playerPkg) }, 1000)
-            main.postDelayed({ playMedia(ctx, p.playerPkg) }, 2500)
+            // CarApp on the tablet is the player: no other app is started in its place.
+            log("tablet no ack"); toast(ctx, "Tablet not reachable. Open CarApp on the tablet"); finish()
         }, TABLET_ACK_MS)
     }
     /** The tablet answered "go": ON now. */
@@ -437,16 +435,12 @@ object GoAction {
         }, 12000)
     }
 
-    /** Real-state probe on app open: clears a stuck busy state, and ON drops to IDLE once the speaker is gone.
-     *  Never promotes IDLE to ON: the speaker being connected does not mean Start ran. */
+    /** On app open: clears a stuck busy state. ON stays ON until Shut down (which restores the snapshot), even when
+     *  the speaker went away: dropping to IDLE here would leave GO's changes behind with no way to undo them. */
     fun deriveState(ctx: Context, p: Prefs, done: (Int) -> Unit) {
         val es = effectiveState(p)
         if (es != p.state) setState(ctx, p, es)
-        if (es != ON || p.mac1.isEmpty()) { done(es); return }
-        a2dpConnectedDevices(ctx) { connected ->
-            if (p.mac1 !in connected && p.state == ON) setState(ctx, p, IDLE)
-            done(p.state)
-        }
+        done(es)
     }
 
     private fun pauseMedia(ctx: Context) = mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PAUSE)
