@@ -15,6 +15,8 @@ class Prefs(private val ctx: Context) {
     // Blank = first installed player that allows the tablet speaker copy (Spotify blocks it).
     var playerPkg: String get() = s("player").ifEmpty { CAPTURABLE.firstOrNull { ctx.packageManager.getLaunchIntentForPackage(it) != null } ?: "" }
         set(v) = put("player", v)
+    /** Music folder tree URI (ACTION_OPEN_DOCUMENT_TREE, persisted read grant). Per device, never synced. */
+    var musicTree: String get() = s("musicTree"); set(v) = put("musicTree", v)
     var mac1: String get() = s("mac1"); set(v) = put("mac1", v)
     var mac3: String get() = s("mac3"); set(v) = put("mac3", v)
     var name1: String get() = s("name1"); set(v) = put("name1", v)

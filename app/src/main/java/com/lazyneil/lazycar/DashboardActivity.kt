@@ -37,8 +37,9 @@ class DashboardActivity : AppCompatActivity() {
         override fun run() { render(); if (++ticks % 2 == 0 && isInMultiWindowMode) TapService.checkMapsPane(); handler.postDelayed(this, 1000) }
     }
 
-    private val perms = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION,
-        Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+    // Always needed: precise location (coarse must be asked with it). Camera asks on rearview, the mic when a phone copy plays.
+    private val perms = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+    private var micAsked = false
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun click(id: Int, f: () -> Unit) = findViewById<View>(id).setOnClickListener { f() }
@@ -114,7 +115,8 @@ class DashboardActivity : AppCompatActivity() {
         // One CarApp task: each launcher pair launch starts CarApp in a new task, so drop the older ones.
         getSystemService(android.app.ActivityManager::class.java).appTasks
             .filter { it.taskInfo.taskId != taskId }.forEach { try { it.finishAndRemoveTask() } catch (_: Exception) {} }
-        if (missing().isNotEmpty()) requestPermissions(missing(), 1)
+        // Notifications are optional: asked once with location, the app works without them.
+        if (missing().isNotEmpty()) requestPermissions(missing() + Manifest.permission.POST_NOTIFICATIONS, 1)
     }
 
     override fun onResume() {
@@ -226,13 +228,16 @@ class DashboardActivity : AppCompatActivity() {
 
     private fun render() {
         renderNowPlaying()
+        // Just in time: the mic keeps the speaker copy in sync, needed only once a phone copy is arriving.
+        if (!micAsked && StreamReceiver.kbps > 0 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            micAsked = true; requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2) }
         val miss = missing()
         // The accessibility service is what turns Wi-Fi on, joins the phone hotspot and opens the Maps split.
         val a11y = (android.provider.Settings.Secure.getString(contentResolver,
             android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: "").contains("$packageName/")
         findViewById<TextView>(R.id.setupBanner).apply {
             text = when {
-                miss.isNotEmpty() -> "Precise location is off. Tap to allow"
+                miss.isNotEmpty() -> "Tap to allow permissions"
                 !a11y -> "Tap to turn on CarApp in Accessibility"
                 else -> ""
             }

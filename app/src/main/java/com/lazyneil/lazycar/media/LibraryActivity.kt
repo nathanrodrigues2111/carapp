@@ -1,5 +1,6 @@
 package com.lazyneil.lazycar.media
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Gravity
@@ -142,6 +143,8 @@ class LibraryActivity : AppCompatActivity() {
             setTextAppearance(R.style.T_Label); gravity = Gravity.CENTER; maxLines = 3; visibility = View.GONE
             setCompoundDrawablesRelativeWithIntrinsicBounds(null, getDrawable(R.drawable.ic_library)?.mutate()?.apply { setTint(Ui.attr(context, R.attr.carTextDim)) }, null, null)
             compoundDrawablePadding = dp(8)
+            // Tablet mode lists this tablet's own files: the folder is picked right here.
+            setOnClickListener { if (com.lazyneil.lazycar.Role.isTablet(context) && PhoneMedia.source == "Tablet" && !Files.has(context)) Files.pick(this@LibraryActivity) }
         }
         val empty = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
         empty.addView(status)
@@ -174,6 +177,11 @@ class LibraryActivity : AppCompatActivity() {
     // Live while visible: the playing row and the bar follow the phone. onStart / onStop, not pause,
     // because a focus change in the split pauses us and must not drop the listener.
     private val npListener: () -> Unit = { onNowPlaying() }
+    @Deprecated("startActivityForResult is enough for one folder pick")
+    override fun onActivityResult(rc: Int, res: Int, data: Intent?) {
+        super.onActivityResult(rc, res, data)
+        if (Files.picked(this, rc, data)) load()
+    }
     override fun onStart() { super.onStart(); PhoneMedia.listeners += npListener; renderBar() }
     override fun onStop() { super.onStop(); PhoneMedia.listeners -= npListener }
 
@@ -276,7 +284,7 @@ class LibraryActivity : AppCompatActivity() {
             val err = r.optString("err")
             if (err.isEmpty()) { retry.visibility = View.GONE; status.visibility = View.GONE }
             if (err.isEmpty()) show(r.optJSONArray("items") ?: JSONArray()) else if (hit != null) return@request
-            status.text = err.ifEmpty { if (items.length() == 0) (if (files) "No music files here. The ${PhoneMedia.source.lowercase()} may need the music library permission" else "Nothing here") else "" }
+            status.text = err.ifEmpty { if (items.length() == 0) (if (files) "No music files in the ${PhoneMedia.source.lowercase()}'s music folder" else "Nothing here") else "" }
             status.visibility = if (status.text.isEmpty()) View.GONE else View.VISIBLE
             retry.visibility = if (err.isNotEmpty()) View.VISIBLE else View.GONE
         }

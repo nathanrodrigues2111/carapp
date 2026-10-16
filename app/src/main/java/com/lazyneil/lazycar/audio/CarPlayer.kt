@@ -1,7 +1,6 @@
 package com.lazyneil.lazycar.audio
 
 import android.app.Notification
-import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -23,7 +22,6 @@ import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
-import android.provider.MediaStore
 import android.service.media.MediaBrowserService
 import android.util.Log
 import com.lazyneil.lazycar.R
@@ -45,7 +43,7 @@ class CarPlayer : MediaBrowserService() {
     }
 
     private lateinit var session: MediaSession
-    private val songs = mutableListOf<Long>()
+    private val songs = mutableListOf<Uri>()
     private var index = 0
     @Volatile private var playing = false
     @Volatile private var alive = true
@@ -67,7 +65,7 @@ class CarPlayer : MediaBrowserService() {
                 override fun onSkipToNext() = skip(1)
                 override fun onSkipToPrevious() = skip(if (position() > 3000) 0 else -1)
                 override fun onSeekTo(pos: Long) { seekTo = pos; state() }
-                override fun onPlayFromUri(uri: Uri, extras: Bundle?) { load(); index = songs.indexOf(ContentUris.parseId(uri)).coerceAtLeast(0); open(); play() }
+                override fun onPlayFromUri(uri: Uri, extras: Bundle?) { load(); index = songs.indexOf(uri).coerceAtLeast(0); open(); play() }
             })
             isActive = true
         }
@@ -89,13 +87,10 @@ class CarPlayer : MediaBrowserService() {
     }
 
     private fun load() {
-        if (songs.isNotEmpty()) return
-        contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Audio.Media._ID),
-            "${MediaStore.Audio.Media.IS_MUSIC} != 0", null, "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE")?.use { c ->
-            while (c.moveToNext()) songs += c.getLong(0) }
+        if (songs.isEmpty()) songs += com.lazyneil.lazycar.media.Files.songs(this).map { it.uri }
     }
 
-    private fun uri() = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, songs[index])
+    private fun uri() = songs[index]
 
     /** Metadata (and art) for the current song; the decoder restarts on it. */
     private fun open() {
@@ -174,7 +169,7 @@ class CarPlayer : MediaBrowserService() {
         var written = 0L; var seq = 0; var halAt = 0L; var hal = 200
         var sq = 0.0; var n = 0; var secAt = SystemClock.elapsedRealtime()
         val pend = ShortArray(Wire.CHUNK / 2); var pn = 0; var chunkFrame = 0L   // JBL frame index of pend[0]
-        var ex: MediaExtractor? = null; var codec: MediaCodec? = null; var rs = Cubic(); var ratio = 1.0; var ch = 2; var cur = -1L
+        var ex: MediaExtractor? = null; var codec: MediaCodec? = null; var rs = Cubic(); var ratio = 1.0; var ch = 2; var cur: Uri? = null
         val info = MediaCodec.BufferInfo()
         t.play()
         while (alive) {

@@ -237,10 +237,10 @@ class MainActivity : AppCompatActivity() {
             !a11y -> "Auto tap is off. Tap to turn it on in Accessibility" to { Ui.openAccessibility(this) }
             !perm(Manifest.permission.BLUETOOTH_CONNECT) -> "Nearby devices is off. Tap to allow" to {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1) }
-            !com.lazyneil.lazycar.media.MediaListener.granted(this) -> "Notification access is off. Tap to allow" to {
+            // Only an outside player needs it (its session, controls, Now Playing for the tablet).
+            p.playerPkg != packageName && !com.lazyneil.lazycar.media.MediaListener.granted(this) -> "Notification access is off. Tap to allow" to {
                 com.lazyneil.lazycar.media.MediaListener.openSettings(this) }
-            !perm(Manifest.permission.READ_MEDIA_AUDIO) -> "Music library is off. Tap to allow" to {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_MEDIA_AUDIO), 2) }
+            !com.lazyneil.lazycar.media.Files.has(this) -> "No music folder yet. Tap to pick one" to { com.lazyneil.lazycar.media.Files.pick(this) }
             else -> null
         }
         val card = findViewById<View>(R.id.setupCard)
@@ -260,6 +260,12 @@ class MainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(rc: Int, perms: Array<out String>, res: IntArray) {
         super.onRequestPermissionsResult(rc, perms, res)
         com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
+    }
+
+    @Deprecated("startActivityForResult is enough for one folder pick")
+    override fun onActivityResult(rc: Int, res: Int, data: Intent?) {
+        super.onActivityResult(rc, res, data)
+        if (com.lazyneil.lazycar.media.Files.picked(this, rc, data)) refreshSetup()
     }
 
     // ---- players ----
@@ -307,7 +313,9 @@ class MainActivity : AppCompatActivity() {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("Player")
-            .setAdapter(adapter) { d, which -> selPlayer = players[which].first; renderPlayer(); save(); d.dismiss() }
+            .setAdapter(adapter) { d, which -> selPlayer = players[which].first; renderPlayer(); save(); d.dismiss()
+                // Just in time: an outside player is only reachable through notification access.
+                if (selPlayer != packageName && !com.lazyneil.lazycar.media.MediaListener.granted(this)) com.lazyneil.lazycar.media.MediaListener.openSettings(this) }
             .show()
     }
 

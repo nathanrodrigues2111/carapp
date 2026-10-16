@@ -776,7 +776,7 @@ class RearActivity : AppCompatActivity() {
 
         val devices = usbManager.deviceList.values
         val cam = devices.firstOrNull { UsbDevices.isVideoDevice(it) }
-        val missing = missingPermissions()
+        val missing = missingPermissions().filter { it == Manifest.permission.CAMERA }   // the mic is asked by recording
 
         val icon: Int
         var title: String
@@ -795,9 +795,7 @@ class RearActivity : AppCompatActivity() {
             missing.isNotEmpty() -> {
                 icon = R.drawable.ic_lock
                 title = "Permissions needed"
-                body = "Camera is required. The USB camera will not open without it. " +
-                    "Microphone stops Android re-asking about the webcam's built-in mic " +
-                    "on every single plug-in."
+                body = "Camera is required. The USB camera will not open without it."
                 hint = missing.joinToString("  ") { "✗ ${it.substringAfterLast('.')}" }
                 spinner = false
                 primaryLabel = "Grant permissions"
@@ -1009,13 +1007,14 @@ class RearActivity : AppCompatActivity() {
      * CAMERA: the camera library refuses to open the UVC camera without it.
      * RECORD_AUDIO: the webcam has a mic, and without this Android shows an
      * audio-capture warning on every attach AND refuses to remember "always
-     * open RearView". Ask for both up front when the user opened the app by
+     * open RearView". Only CAMERA is asked up front when the user opened the app by
      * hand (not over the lockscreen).
      */
     private fun maybeRequestAllPermissions() {
         updateEmptyState()
         val locked = (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
-        val missing = missingPermissions().toTypedArray()
+        // Opening rearview asks the camera only; the mic is asked when a recording starts.
+        val missing = missingPermissions().filter { it == Manifest.permission.CAMERA }.toTypedArray()
         if (missing.isNotEmpty() && !locked) {
             prefs.edit().putBoolean("perms_asked", true).apply()
             ActivityCompat.requestPermissions(this, missing, REQ_ALL_PERMISSIONS)
