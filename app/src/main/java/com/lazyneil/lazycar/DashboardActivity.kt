@@ -237,7 +237,7 @@ class DashboardActivity : AppCompatActivity() {
             android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: "").contains("$packageName/")
         findViewById<TextView>(R.id.setupBanner).apply {
             text = when {
-                miss.isNotEmpty() -> "Tap to allow permissions"
+                miss.isNotEmpty() -> "Precise location is off. Tap to allow"
                 !a11y -> "Tap to turn on CarApp in Accessibility"
                 else -> ""
             }

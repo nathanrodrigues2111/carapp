@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Same set as data_extraction_rules.xml, for the adb backup path. -->
+<full-backup-content>
+    <include domain="sharedpref" path="lazycar.xml" />
+    <include domain="sharedpref" path="speaker.xml" />
+    <include domain="sharedpref" path="lazygps.xml" />
+    <include domain="sharedpref" path="prefsync.xml" />
+    <include domain="sharedpref" path="rearview.xml" />
+</full-backup-content>
