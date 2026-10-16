@@ -53,8 +53,9 @@ object Drive {
             "in Android Settings > Accessibility to have it open by itself", Toast.LENGTH_LONG).show()
     }
 
-    /** Phone GO: wake the tablet's CarApp ([SplitService] listens). A UDP broadcast once a second for 20 s, the
-     *  tablet ignores repeats. 255.255.255.255 plus each interface's subnet broadcast (hotspot or shared Wi-Fi). */
+    /** Phone GO: wake the tablet's CarApp ([SplitService] listens). Once a second for 20 s, the tablet ignores repeats.
+     *  A sleeping tablet's Wi-Fi drops broadcasts (measured), so besides the broadcasts every host of each small
+     *  subnet (hotspot or home Wi-Fi, /24 or smaller) gets a unicast copy: ~254 tiny packets a second. */
     fun wakeTablet(ctx: Context) = thread(name = "wake-send", isDaemon = true) {
         val p = Prefs(ctx); val msg = SplitService.WAKE.toByteArray()
         try { DatagramSocket().use { s ->
@@ -62,7 +63,13 @@ object Drive {
             repeat(20) {
                 if (p.shutDown) return@thread
                 val to = mutableSetOf<InetAddress>(InetAddress.getByName("255.255.255.255"))
-                try { for (ni in NetworkInterface.getNetworkInterfaces()) if (ni.isUp && !ni.isLoopback) ni.interfaceAddresses.mapNotNullTo(to) { it.broadcast } } catch (_: Exception) {}
+                try { for (ni in NetworkInterface.getNetworkInterfaces()) if (ni.isUp && !ni.isLoopback) for (ia in ni.interfaceAddresses) {
+                    val b = ia.broadcast ?: continue; to += b
+                    if (ia.networkPrefixLength !in 24..30) continue
+                    val base = java.nio.ByteBuffer.wrap(ia.address.address).int and (-1 shl (32 - ia.networkPrefixLength))
+                    for (h in 1 until (1 shl (32 - ia.networkPrefixLength)) - 1)
+                        to += InetAddress.getByAddress(java.nio.ByteBuffer.allocate(4).putInt(base or h).array())
+                } } catch (_: Exception) {}
                 for (a in to) try { s.send(DatagramPacket(msg, msg.size, a, SplitService.PORT)) } catch (_: Exception) {}
                 Thread.sleep(1000)
             }
@@ -108,13 +115,19 @@ class SplitService : AccessibilityService() {
     } catch (e: Exception) { if (self === this) Log.e("LazyCar", "wake listen: $e") } }
 
     private var wokeAt = -60_000L
-    /** Phone GO: CarApp to the front with the screen on. Like any open it ends a Shut down and starts the link; its
-     *  launcher flag asks for the split. Repeats within 30 s are the same GO. */
+    /** Phone GO: CarApp to the front with the screen on, then the split. Like any open it ends a Shut down and starts
+     *  the link. Repeats within 30 s are the same GO. */
     private fun wake() {
         val now = SystemClock.elapsedRealtime(); if (now - wokeAt < 30_000) return; wokeAt = now
         Log.e("LazyCar", "wake: phone GO")
+        GoAction.quietUntil = 0   // a GO right after a Shut down is a real open, never "back from Shut down's dialog"
+        // Screen on first: an activity's turnScreenOn does nothing when CarApp's task already exists (onNewIntent).
+        @Suppress("DEPRECATION") getSystemService(android.os.PowerManager::class.java).newWakeLock(
+            android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP, "CarApp:wake").acquire(5000)
         startActivity(Intent(this, DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .putExtra("launcher", true).putExtra("wake", true))
+            .putExtra("wake", true))
+        // The split from here, not from CarApp's resume: a CarApp already in front gets no resume.
+        main.postDelayed({ Drive.split(this) }, 1500)
     }
 
     private var busyUntil = 0L
@@ -149,7 +162,7 @@ class SplitService : AccessibilityService() {
         // Not there (another home page, never saved) or no split after it: the Recents route.
         performGlobalAction(GLOBAL_ACTION_HOME)
         main.postDelayed({
-            find("Maps + CarApp pair", { pair(mapsLabel, ours) }, tries = 4, orElse = { Log.e("LazyCar", "split: no pair icon"); recents() }) {
+            find("Maps + CarApp pair", { pair(mapsLabel, ours) }, tries = 10, orElse = { Log.e("LazyCar", "split: no pair icon"); recents() }) {
                 main.postDelayed({ if (isSplit(maps)) done() else { Log.e("LazyCar", "split: pair tap gave no split"); recents() } }, 2500)
             }
         }, 1200)
@@ -166,7 +179,9 @@ class SplitService : AccessibilityService() {
         if (n != null) {
             // A click action survives the Recents animation; a tap at the node's bounds is the fallback.
             val r = Rect().also { n.getBoundsInScreen(it) }
-            val clicked = n.isClickable && n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            // The label may sit inside the clickable icon view (the launcher's pair icon does): click that.
+            var c: AccessibilityNodeInfo? = n; while (c != null && !c.isClickable) c = c.parent
+            val clicked = c?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
             if (!clicked) tap(r.exactCenterX(), r.exactCenterY())
             Log.e("LazyCar", "split: $what at $r click=$clicked"); main.postDelayed(then, 900); return
         }

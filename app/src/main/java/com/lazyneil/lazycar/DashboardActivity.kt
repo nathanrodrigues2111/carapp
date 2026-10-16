@@ -144,11 +144,13 @@ class DashboardActivity : AppCompatActivity() {
     private var opening = true   // onCreate, onRestart, onNewIntent: the user opened CarApp
     override fun onRestart() { super.onRestart(); opening = true }
     override fun onNewIntent(i: Intent) { super.onNewIntent(i); opening = true; launcherOpen = i.getBooleanExtra("launcher", false); wake(i) }
-    /** Phone GO woke us (SplitService): screen on, past a swipe lock. A secure lock still asks the user. */
+    /** Phone GO woke us (SplitService turned the screen on): past a swipe lock. A secure lock still asks the user.
+     *  Only for the moment of the wake, so a later screen off stays off. */
     private fun wake(i: Intent) {
         if (!i.getBooleanExtra("wake", false)) return
-        setShowWhenLocked(true); setTurnScreenOn(true)
+        setShowWhenLocked(true)
         getSystemService(android.app.KeyguardManager::class.java).requestDismissKeyguard(this, null)
+        handler.postDelayed({ setShowWhenLocked(false) }, 5000)
     }
     private companion object { var splitAt = -15_000L }
 
@@ -157,7 +159,7 @@ class DashboardActivity : AppCompatActivity() {
     // Listen while visible (onStart / onStop), so a split focus change cannot drop the listener.
     private val npListener: () -> Unit = { renderNowPlaying() }
     override fun onStart() { super.onStart(); PhoneMedia.listeners += npListener }
-    override fun onStop() { super.onStop(); PhoneMedia.listeners -= npListener; setShowWhenLocked(false); setTurnScreenOn(false) }
+    override fun onStop() { super.onStop(); PhoneMedia.listeners -= npListener }
 
     private var seeking = false; private var seekAt = 0L
     private var shownArt: android.graphics.Bitmap? = null
