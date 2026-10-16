@@ -26,7 +26,7 @@ class GoService : Service() {
             "stop" -> GoAction.stop(applicationContext)
             "stopPeer" -> GoAction.stop(applicationContext, fromPeer = true)
             "volume" -> { GoAction.applyVolumesNow(applicationContext); 4000L }
-            "go" -> { com.lazyneil.lazycar.gps.GpsService.startIfIdle(this); GoAction.run(applicationContext) }
+            "go" -> { com.lazyneil.lazycar.gps.GpsService.startIfIdle(this); com.lazyneil.lazycar.media.Files.refresh(this); GoAction.run(applicationContext) }
             else -> 0L
         }
         // Live until the real end of the sequence: runSequence pushes endAt out once it knows its steps.

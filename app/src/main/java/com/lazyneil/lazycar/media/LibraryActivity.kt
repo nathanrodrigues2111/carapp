@@ -251,7 +251,7 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun open(it: JSONObject) {
         if (it.optBoolean("play")) {
-            if (files) PhoneMedia.cmd("playFile") { put("song", it.optLong("song")) }
+            if (files) PhoneMedia.cmd("playFile") { put("uri", it.optString("id").substringAfter(':')) }
             else PhoneMedia.cmd("playId") { put("id", it.optString("id")) }
             if (!it.optBoolean("browse")) {
                 tapped = it; tappedAt = SystemClock.elapsedRealtime(); refreshRows()

@@ -143,6 +143,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         if (isFinishing) return
         p.shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(this)   // opening the app ends a shut down
+        com.lazyneil.lazycar.media.Files.refresh(this)   // new music files show without a restart
         refreshSetup()
         handler.post(tick)
         refreshGoButton()

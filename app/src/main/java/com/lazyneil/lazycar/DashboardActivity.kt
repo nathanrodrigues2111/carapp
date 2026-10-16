@@ -122,6 +122,7 @@ class DashboardActivity : AppCompatActivity() {
         super.onResume()
         if (!Role.isTablet(this)) { startActivity(Intent(this, MainActivity::class.java)); finish(); return }
         Prefs(this).shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(this)   // opening the app ends a shut down
+        com.lazyneil.lazycar.media.Files.refresh(this)   // new music files show without a restart
         GpsService.startIfIdle(this)
         Drive.join(this)
         PhoneMedia.start(this)

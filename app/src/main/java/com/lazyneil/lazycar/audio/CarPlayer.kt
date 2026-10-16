@@ -43,7 +43,7 @@ class CarPlayer : MediaBrowserService() {
     }
 
     private lateinit var session: MediaSession
-    private val songs = mutableListOf<Uri>()
+    @Volatile private var songs: List<Uri> = emptyList()
     private var index = 0
     @Volatile private var playing = false
     @Volatile private var alive = true
@@ -65,7 +65,7 @@ class CarPlayer : MediaBrowserService() {
                 override fun onSkipToNext() = skip(1)
                 override fun onSkipToPrevious() = skip(if (position() > 3000) 0 else -1)
                 override fun onSeekTo(pos: Long) { seekTo = pos; state() }
-                override fun onPlayFromUri(uri: Uri, extras: Bundle?) { load(); index = songs.indexOf(uri).coerceAtLeast(0); open(); play() }
+                override fun onPlayFromUri(uri: Uri, extras: Bundle?) = load { index = songs.indexOf(uri).coerceAtLeast(0); open(); play() }
             })
             isActive = true
         }
@@ -86,9 +86,12 @@ class CarPlayer : MediaBrowserService() {
         return START_NOT_STICKY
     }
 
-    private fun load() {
-        if (songs.isEmpty()) songs += com.lazyneil.lazycar.media.Files.songs(this).map { it.uri }
-    }
+    /** Latest folder list off the main thread (a first scan can take seconds), then [then] on main. Keeps the current song. */
+    private fun load(then: () -> Unit) = com.lazyneil.lazycar.media.Files.later(this) { l -> main {
+        val cur = songs.getOrNull(index); songs = l.map { it.uri }
+        if (cur != null) index = songs.indexOf(cur).coerceAtLeast(0) else if (index >= songs.size) index = 0
+        then()
+    } }
 
     private fun uri() = songs[index]
 
@@ -110,7 +113,7 @@ class CarPlayer : MediaBrowserService() {
         } catch (e: Exception) { Log.e("LazyCar", "car player meta", e) } finally { r.release() }
     }
 
-    private fun skip(d: Int) { load(); if (songs.isEmpty()) return; index = (index + d).mod(songs.size); open(); state() }
+    private fun skip(d: Int) = load { if (songs.isNotEmpty()) { index = (index + d).mod(songs.size); open(); state() } }
 
     private fun position(): Long {
         val t = jbl ?: return trackStartMs
@@ -123,7 +126,7 @@ class CarPlayer : MediaBrowserService() {
         .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, if (seekTo >= 0) seekTo else position(), if (playing) 1f else 0f).build())
 
     private fun play() {
-        load(); if (songs.isEmpty()) { Log.e("LazyCar", "car player: no music files"); return }
+        if (songs.isEmpty()) { load { if (songs.isEmpty()) Log.e("LazyCar", "car player: no music files") else play() }; return }
         if (session.controller.metadata == null) open()
         val am = getSystemService(AudioManager::class.java)
         focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setOnAudioFocusChangeListener { if (it == AudioManager.AUDIOFOCUS_LOSS) pause() }.build()

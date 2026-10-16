@@ -295,20 +295,21 @@ class Session(val ctx: Context, private val local: Boolean) {
             "prev" -> t?.skipToPrevious() ?: if (local) key(android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS) else Unit
             "seek" -> t?.seekTo(j.optLong("pos"))
             "browse" -> browse(j, reply)
-            "playId" -> j.optString("id").let { id -> if (local && id.startsWith("song:")) playFile(id.substringAfter(':').toLong())
+            "playId" -> j.optString("id").let { id -> if (local && id.startsWith("song:")) playFile(id.substringAfter(':'))
                 else withBrowser({ reply(list(j, JSONArray(), it)) }) { b -> MediaController(ctx, b.sessionToken).transportControls.playFromMediaId(id, null) } }
             "files" -> io.execute { reply(list(j, Files.list(ctx, j.optString("id"), j.optString("q")), noFolder())) }
-            "playFile" -> main.post { playFile(j.optLong("song")) }
+            "playFile" -> main.post { playFile(j.optString("uri")) }
         }
     }
 
     /** Tablet: straight into the session when the player takes URIs (headless), else the player's open-file activity. */
-    private fun playFile(song: Long) {
+    private fun playFile(song: String) {
+        if (song.isEmpty()) return
         val t = ctl?.transportControls
         if (local && t != null && (ctl?.playbackState?.actions ?: 0L) and PlaybackState.ACTION_PLAY_FROM_URI != 0L)
-            io.execute { Files.uri(ctx, song)?.let { u -> main.post { t.playFromUri(u, null) } } }
+            t.playFromUri(Uri.parse(song), null)
         else if (local) { com.lazyneil.lazycar.audio.CarPlayer.send(ctx, "pause"); main.postDelayed({ if (ctl != null) playFile(song) }, 800) }   // starts the player, then into its session
-        else io.execute { Files.play(ctx, song, player) }
+        else Files.play(ctx, Uri.parse(song), player)
     }
 
     private fun noFolder() = if (Files.has(ctx)) "" else if (local) "No music folder yet. Tap here to pick one" else "No music folder yet. Pick one on the phone's CarApp home screen"
@@ -375,39 +376,55 @@ object Link {
 /** Audio files in the music folder the user picked (persisted tree grant, no storage permission), the fallback library for any player. */
 object Files {
     private const val PICK = 4711
-    class Song(val uri: Uri, val title: String, val artist: String, val album: String, val folder: String)
-    // ponytail: scanned once per process and folder; files added later show after an app restart or a new pick.
+    class Song(val uri: Uri, val title: String, val artist: String, val album: String, val folder: String, val modified: Long)
     @Volatile private var cache: Pair<String, List<Song>>? = null
+    /** Every scan runs here, one at a time, never on the main thread. */
+    private val scanner = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     private fun tree(ctx: Context) = com.lazyneil.lazycar.Prefs(ctx).musicTree
     fun has(ctx: Context) = tree(ctx).let { t -> t.isNotEmpty() && ctx.contentResolver.persistedUriPermissions.any { it.uri.toString() == t && it.isReadPermission } }
     fun pick(a: android.app.Activity) = try { a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), PICK) } catch (e: Exception) { Log.e("LazyCar", "pick folder", e) }
-    /** From onActivityResult: keeps the picked folder across reboots. True when it was the folder pick. */
+    /** From onActivityResult: keeps the picked folder across reboots and scans it. True when it was the folder pick. */
     fun picked(ctx: Context, rc: Int, data: Intent?): Boolean {
         if (rc != PICK) return false
         val u = data?.data ?: return true
         try { ctx.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) { Log.e("LazyCar", "keep folder", e); return true }
-        com.lazyneil.lazycar.Prefs(ctx).musicTree = u.toString(); cache = null
+        com.lazyneil.lazycar.Prefs(ctx).musicTree = u.toString(); refresh(ctx)
         return true
     }
 
-    /** Every audio file under the folder, sorted by title. Index = song id. Slow the first time (reads tags): io threads only. */
+    /** Background rescan (app open, folder pick, GO): only new or changed files have their tags read. */
+    fun refresh(ctx: Context) { val app = ctx.applicationContext; scanner.execute { try { scan(app) } catch (e: Exception) { Log.e("LazyCar", "music scan", e) } } }
+    /** The list on the scanner thread (scanning first if never scanned), so callers never block. */
+    fun later(ctx: Context, then: (List<Song>) -> Unit) { val app = ctx.applicationContext; scanner.execute { then(try { cached(app) ?: scan(app) } catch (e: Exception) { emptyList() }) } }
+    private fun cached(ctx: Context) = tree(ctx).let { t -> cache?.takeIf { it.first == t }?.second }
+
+    /** Every audio file under the folder, sorted by title. Blocks on the first scan: io or scanner threads only. */
     fun songs(ctx: Context): List<Song> {
         val t = tree(ctx); if (!has(ctx)) return emptyList()
-        cache?.takeIf { it.first == t }?.let { return it.second }
+        cached(ctx)?.let { return it }
+        return scanner.submit<List<Song>> { cached(ctx) ?: scan(ctx) }.get()   // never from the scanner thread itself
+    }
+
+    private fun scan(ctx: Context): List<Song> {
+        val t = tree(ctx); if (!has(ctx)) return emptyList<Song>().also { cache = null }
+        val old = cache?.takeIf { it.first == t }?.second?.associateBy { it.uri } ?: emptyMap()
         val root = Uri.parse(t); val out = mutableListOf<Song>()
         fun walk(doc: String, folder: String) {
-            val cols = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE)
+            val cols = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_LAST_MODIFIED)
             try { ctx.contentResolver.query(DocumentsContract.buildChildDocumentsUriUsingTree(root, doc), cols, null, null, null) } catch (e: Exception) { null }?.use { c ->
                 while (c.moveToNext()) {
-                    val id = c.getString(0); val name = c.getString(1) ?: ""; val mime = c.getString(2) ?: ""
+                    val id = c.getString(0); val name = c.getString(1) ?: ""; val mime = c.getString(2) ?: ""; val mod = c.getLong(3)
                     if (mime == DocumentsContract.Document.MIME_TYPE_DIR) walk(id, "$folder$name/")
                     else if (mime.startsWith("audio/")) {
                         val u = DocumentsContract.buildDocumentUriUsingTree(root, id)
+                        val known = old[u]?.takeIf { it.modified == mod && it.folder == folder }
+                        if (known != null) { out += known; continue }
                         val tag = try { android.media.MediaMetadataRetriever().use { r -> r.setDataSource(ctx, u)
                             listOf(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE, android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST,
                                 android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM).map { r.extractMetadata(it) ?: "" } } } catch (e: Exception) { listOf("", "", "") }
-                        out += Song(u, tag[0].ifEmpty { name.substringBeforeLast('.') }, tag[1], tag[2], folder)
+                        out += Song(u, tag[0].ifEmpty { name.substringBeforeLast('.') }, tag[1], tag[2], folder, mod)
                     }
                 }
             }
@@ -416,19 +433,17 @@ object Files {
         return out.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title }).also { cache = t to it }
     }
 
-    fun uri(ctx: Context, song: Long) = songs(ctx).getOrNull(song.toInt())?.uri
-
     /** id: "" = categories, "songs", "albums", "album:<name>", "artists", "artist:<name>", "folders", "folder:<path>". */
     fun list(ctx: Context, id: String, q: String): JSONArray {
         val a = JSONArray()
-        fun item(id: String, title: String, sub: String, play: Boolean = false, song: Long = 0) =
-            a.put(JSONObject().put("id", id).put("title", title).put("sub", sub).put("play", play).put("browse", !play).put("song", song))
+        fun item(id: String, title: String, sub: String, play: Boolean = false) =
+            a.put(JSONObject().put("id", id).put("title", title).put("sub", sub).put("play", play).put("browse", !play))
         if (id.isEmpty() && q.isEmpty()) {
             item("songs", "Songs", "All tracks"); item("albums", "Albums", ""); item("artists", "Artists", ""); item("folders", "Folders", "")
             return a
         }
         val all = songs(ctx); val k = id.substringAfter(':')
-        val rows = all.withIndex().filter { (_, s) ->
+        val rows = all.filter { s ->
             when {
                 id.startsWith("album:") -> s.album == k
                 id.startsWith("artist:") -> s.artist == k
@@ -437,8 +452,9 @@ object Files {
             } && (q.isEmpty() || s.title.contains(q, true) || s.artist.contains(q, true) || s.album.contains(q, true))
         }
         fun group(prefix: String, key: (Song) -> String, title: (String) -> String) =
-            rows.groupBy { key(it.value) }.toSortedMap(String.CASE_INSENSITIVE_ORDER).forEach { (g, v) -> item("$prefix:$g", title(g), "${v.size} songs") }
-        fun songs() = rows.take(500).forEach { (i, s) -> item("song:$i", s.title, "${s.artist}  ${s.album}", true, i.toLong()) }
+            rows.groupBy(key).toSortedMap(String.CASE_INSENSITIVE_ORDER).forEach { (g, v) -> item("$prefix:$g", title(g), "${v.size} songs") }
+        // Song id = "song:<document uri>": stable across rescans, unlike a list position.
+        fun songs() = rows.take(500).forEach { s -> item("song:${s.uri}", s.title, "${s.artist}  ${s.album}", true) }
         when {
             id == "albums" && q.isEmpty() -> group("album", { it.album }) { it }
             id == "artists" && q.isEmpty() -> group("artist", { it.artist }) { it }
@@ -449,8 +465,7 @@ object Files {
     }
 
     /** Opens the file in the active player if it takes audio files (Android may block it while CarApp is in the background). */
-    fun play(ctx: Context, song: Long, player: String) {
-        val uri = uri(ctx, song) ?: return
+    fun play(ctx: Context, uri: Uri, player: String) {
         val base = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "audio/*")
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
         val pkg = player.takeIf { it.isNotEmpty() && ctx.packageManager.queryIntentActivities(Intent(base).setPackage(it), 0).isNotEmpty() }
