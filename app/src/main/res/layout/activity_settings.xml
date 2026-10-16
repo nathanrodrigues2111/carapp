@@ -21,7 +21,7 @@
             </LinearLayout>
             <TextView style="@style/SectionHeader" android:id="@+id/driveHeader" android:text="Drive" />
             <LinearLayout style="@style/SetCard" android:id="@+id/driveCard">
-                <LinearLayout android:id="@+id/rowOpenMaps" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Open with Maps" /><TextView style="@style/SetSub" android:text="Reminds you to tap the Maps + CarApp pair on the home screen" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/openMapsSwitch" style="@style/SetSwitch" /></LinearLayout>
+                <LinearLayout android:id="@+id/rowOpenMaps" style="@style/SetRow"><LinearLayout style="@style/SetTexts"><TextView style="@style/SetTitle" android:text="Open with Maps" /><TextView style="@style/SetSub" android:text="Maps beside CarApp on GO and Drive. By itself with CarApp split on in Accessibility, else one tap on the pair icon" /></LinearLayout><com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/openMapsSwitch" style="@style/SetSwitch" /></LinearLayout>
             </LinearLayout>
             <TextView style="@style/SectionHeader" android:text="GPS" />
             <LinearLayout style="@style/SetCard">

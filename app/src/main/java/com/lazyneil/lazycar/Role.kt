@@ -33,12 +33,14 @@ object Role {
         toggle(ctx, "com.lazyneil.lazycar.rear.UsbLaunch", tablet)
         toggle(ctx, "com.lazyneil.lazycar.GoWidget", !tablet)
         toggle(ctx, "com.lazyneil.lazycar.DriveWidget", tablet)
+        toggle(ctx, "com.lazyneil.lazycar.SplitService", tablet)
     }
 
     private fun toggle(ctx: Context, cls: String, on: Boolean) {
         val pm = ctx.packageManager
         val cn = ComponentName(ctx, cls)
-        val want = if (on) PackageManager.COMPONENT_ENABLED_STATE_DEFAULT else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        // ENABLED, not DEFAULT: SplitService is off in the manifest.
+        val want = if (on) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
         if (pm.getComponentEnabledSetting(cn) != want) pm.setComponentEnabledSetting(cn, want, PackageManager.DONT_KILL_APP)
     }
 }

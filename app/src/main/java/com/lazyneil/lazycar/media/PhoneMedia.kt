@@ -180,7 +180,7 @@ object PhoneMedia {
                 // connect (an app restart, an install, a Wi-Fi drop) only records the state: a restart must never
                 // re-split, because going HOME sends navigating Maps to PiP. Boot has its own path.
                 val go = j.optBoolean("go")
-                if (go && lastGo == false && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.Drive.hint(ctx) }
+                if (go && lastGo == false && com.lazyneil.lazycar.Ui.openOnGo(ctx)) main.post { com.lazyneil.lazycar.Drive.split(ctx) }
                 lastGo = go
                 // Report our speaker level so the phone slider is live; hardware buttons included.
                 // Not while a Bluetooth sink holds the tablet's music: that level is the sink's, not the speaker's.

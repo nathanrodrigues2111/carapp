@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">CarApp</string>
+    <string name="split_service_desc">Tablet only. Opens Maps and CarApp side by side on GO or Drive (taps Recents, Split screen, CarApp for you), and opens CarApp when the phone presses GO. Nothing else.</string>
 </resources>

@@ -64,6 +64,7 @@ object GoAction {
     fun run(ctx: Context): Long {
         val p = Prefs(ctx)
         p.shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(ctx)
+        if (!Role.isTablet(ctx)) Drive.wakeTablet(ctx)   // the tablet's CarApp opens by itself (SplitService)
         // Snapshot the pre-GO music level NOW, before BT-enable / A2DP connect makes OnePlus reset it.
         p.snapMusicVol = try { (ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager)
             .getStreamVolume(AudioManager.STREAM_MUSIC) } catch (e: Exception) { -1 }
@@ -152,7 +153,7 @@ object GoAction {
 
     private var finish: () -> Unit = {}
     @Volatile private var acked = false
-    const val TABLET_ACK_MS = 5000L
+    const val TABLET_ACK_MS = 12000L   // covers a tablet woken by GO (screen on, CarApp start, link connect)
 
     /** Tablet mode: ask the tablet to play; no ack in 5 s = today's phone flow with a note. */
     private fun goTablet(ctx: Context, p: Prefs) {

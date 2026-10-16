@@ -51,6 +51,7 @@ class DashboardActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_dashboard)
         launcherOpen = savedInstanceState == null && intent.getBooleanExtra("launcher", false)
+        wake(intent)
         opening = savedInstanceState == null
         root = findViewById(R.id.root)
         Ui.edge(this, findViewById(R.id.frame))   // backdrop stays full window
@@ -135,14 +136,20 @@ class DashboardActivity : AppCompatActivity() {
         handler.post(tick)
         // A launcher (or Drive widget) open outside the split: remind the user of the Maps + CarApp pair icon.
         if (launcherOpen && !isInMultiWindowMode && SystemClock.elapsedRealtime() - splitAt > 15_000) {
-            splitAt = SystemClock.elapsedRealtime(); Drive.hint(this)
+            splitAt = SystemClock.elapsedRealtime(); Drive.split(this)
         }
         launcherOpen = false
     }
     private var launcherOpen = false
     private var opening = true   // onCreate, onRestart, onNewIntent: the user opened CarApp
     override fun onRestart() { super.onRestart(); opening = true }
-    override fun onNewIntent(i: Intent) { super.onNewIntent(i); opening = true; launcherOpen = i.getBooleanExtra("launcher", false) }
+    override fun onNewIntent(i: Intent) { super.onNewIntent(i); opening = true; launcherOpen = i.getBooleanExtra("launcher", false); wake(i) }
+    /** Phone GO woke us (SplitService): screen on, past a swipe lock. A secure lock still asks the user. */
+    private fun wake(i: Intent) {
+        if (!i.getBooleanExtra("wake", false)) return
+        setShowWhenLocked(true); setTurnScreenOn(true)
+        getSystemService(android.app.KeyguardManager::class.java).requestDismissKeyguard(this, null)
+    }
     private companion object { var splitAt = -15_000L }
 
     override fun onPause() { super.onPause(); handler.removeCallbacks(tick) }
@@ -150,7 +157,7 @@ class DashboardActivity : AppCompatActivity() {
     // Listen while visible (onStart / onStop), so a split focus change cannot drop the listener.
     private val npListener: () -> Unit = { renderNowPlaying() }
     override fun onStart() { super.onStart(); PhoneMedia.listeners += npListener }
-    override fun onStop() { super.onStop(); PhoneMedia.listeners -= npListener }
+    override fun onStop() { super.onStop(); PhoneMedia.listeners -= npListener; setShowWhenLocked(false); setTurnScreenOn(false) }
 
     private var seeking = false; private var seekAt = 0L
     private var shownArt: android.graphics.Bitmap? = null
