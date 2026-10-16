@@ -96,7 +96,7 @@ object GoAction {
             val tab = com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(ctx)
             val need1 = !tab && p.mac1.isNotEmpty() && p.mac1 !in connected
             val need3 = p.headunit && p.mac3.isNotEmpty() && p.mac3 !in connected
-            if (need1) connectA2dp(ctx, p.mac1) else if (p.mac1.isNotEmpty()) log("skipped connect ${p.mac1} (connected)")
+            if (need1) connectA2dp(ctx, p.mac1) else if (p.mac1.isNotEmpty()) log("skipped connect ${p.mac1} (${if (tab) "Tablet mode" else "connected"})")
             if (need3) main.postDelayed({ connectA2dp(ctx, p.mac3) }, 800)
 
             val settle = if (need1) 2000L else 0L
@@ -106,7 +106,7 @@ object GoAction {
             val musicActive = players.isNotEmpty()
             // Snapshot pre-GO state (connected = probe result before we connect anything) so STOP can
             // restore exactly what it found: only undo what GO turned on.
-            p.snapConn1 = p.mac1.isNotEmpty() && p.mac1 in connected
+            p.snapConn1 = tab || p.mac1.isNotEmpty() && p.mac1 in connected   // Tablet mode: the phone never touches the speaker link
             p.snapConn3 = p.mac3.isNotEmpty() && p.mac3 in connected
             p.snapMusicWasActive = musicActive
             log("snapshot: music=$musicActive ($players) conn1=${p.snapConn1} conn3=${p.snapConn3}")
@@ -147,7 +147,11 @@ object GoAction {
     /** Tablet mode: ask the tablet to play; no ack in 5 s = today's phone flow with a note. */
     private fun goTablet(ctx: Context, p: Prefs) {
         acked = false; ackP = p
-        com.lazyneil.lazycar.media.MediaListener.goTablet(true)
+        // The link may still be connecting (app just started): resend every 500 ms until the tablet answers.
+        val at = SystemClock.uptimeMillis()
+        main.post(object : Runnable { override fun run() {
+            if (acked || p.state != STARTING || SystemClock.uptimeMillis() - at > TABLET_ACK_MS) return
+            com.lazyneil.lazycar.media.MediaListener.goTablet(true); main.postDelayed(this, 500) } })
         main.postDelayed({
             if (acked || p.state != STARTING) return@postDelayed
             // CarApp on the tablet is the player: no other app is started in its place.
@@ -361,6 +365,7 @@ object GoAction {
         log("tablet shut down (from phone: $fromPeer)")
         if (!fromPeer) com.lazyneil.lazycar.media.PhoneMedia.send(org.json.JSONObject().put("c", "shutdown"))
         ctx.stopService(Intent(ctx, com.lazyneil.lazycar.audio.StreamReceiver::class.java))
+        main.postDelayed({ ctx.stopService(Intent(ctx, com.lazyneil.lazycar.audio.CarPlayer::class.java)) }, 500)   // after its pause
         com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
         com.lazyneil.lazycar.media.PhoneMedia.stop()
         p.clearSnap()

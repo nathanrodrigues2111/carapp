@@ -60,7 +60,11 @@ object PhoneMedia {
     @Volatile private var gen = 0   // bumped by stop(): the old link thread and loops end
     @Volatile private var sock: Socket? = null
     /** Shut down: end the phone link and its loops; start() runs them again. */
-    fun stop() = io.execute { synchronized(this) { started = false; gen++ }; try { sock?.close() } catch (_: Exception) {} }
+    fun stop() {
+        io.execute { synchronized(this) { started = false; gen++ }; try { sock?.close() } catch (_: Exception) {} }
+        // Let go of CarApp's player too: a bound browser keeps its service alive after Shut down.
+        main.post { sess?.let { it.ctl?.unregisterCallback(localCb); it.browser?.disconnect() }; sess = null; localKey = "" }
+    }
     private var reqSeq = 0
     private val pending = mutableMapOf<Int, (JSONObject) -> Unit>()
     /** Now Playing listeners, main thread. A list, so the player and the library can both listen. */
