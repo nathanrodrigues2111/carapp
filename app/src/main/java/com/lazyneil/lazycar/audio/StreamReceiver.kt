@@ -55,7 +55,7 @@ class StreamReceiver : Service() {
 
         fun sync(ctx: Context) {
             val i = Intent(ctx, StreamReceiver::class.java)
-            try { if (TabletSpeaker.enabled(ctx)) ctx.startForegroundService(i) else ctx.stopService(i) }
+            try { if (TabletSpeaker.enabled(ctx) && !com.lazyneil.lazycar.Prefs(ctx).shutDown) ctx.startForegroundService(i) else ctx.stopService(i) }
             catch (e: Exception) { Log.e("LazyCar", "speaker receive start", e) }
         }
 

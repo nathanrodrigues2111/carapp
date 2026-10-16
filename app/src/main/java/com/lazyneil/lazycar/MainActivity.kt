@@ -91,8 +91,7 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
             .filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (want.isNotEmpty()) ActivityCompat.requestPermissions(this, want.toTypedArray(), 1)
-        com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
-        if (Role.isTablet(this)) com.lazyneil.lazycar.audio.StreamReceiver.sync(this)
+        if (savedInstanceState == null) opened()   // a recreate (accent change) is not an open
 
         findViewById<ImageButton>(R.id.settingsBtn).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -142,7 +141,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (isFinishing) return
-        p.shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(this)   // opening the app ends a shut down
+        // Back from GoActivity (Shut down) is a resume, not an open: nothing restarts after a Shut down.
+        if (!p.shutDown) com.lazyneil.lazycar.media.MediaListener.wake(this)
         com.lazyneil.lazycar.media.Files.refresh(this)   // new music files show without a restart
         refreshSetup()
         handler.post(tick)
@@ -251,9 +251,14 @@ class MainActivity : AppCompatActivity() {
         card.setOnClickListener { item.second() }
     }
 
+    /** The user opened the app (launcher, back from another app): that ends a Shut down. GPS starts with GO. */
+    private fun opened() { p.shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(this) }
+    override fun onRestart() { super.onRestart(); opened() }
+    override fun onNewIntent(i: Intent) { super.onNewIntent(i); opened() }
+
     override fun onRequestPermissionsResult(rc: Int, perms: Array<out String>, res: IntArray) {
         super.onRequestPermissionsResult(rc, perms, res)
-        com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
+        if (GoAction.effectiveState(p) == GoAction.ON) com.lazyneil.lazycar.gps.GpsService.startIfIdle(this)
     }
 
     @Deprecated("startActivityForResult is enough for one folder pick")

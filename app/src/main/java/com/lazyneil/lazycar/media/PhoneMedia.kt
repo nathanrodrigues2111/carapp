@@ -188,7 +188,9 @@ object PhoneMedia {
             }
             "prefs" -> com.lazyneil.lazycar.SettingsSync.apply(j.optJSONArray("items"))
             "shutdown" -> main.post { com.lazyneil.lazycar.GoAction.stop(ctx, fromPeer = true) }
-            "go" -> { val on = j.optBoolean("on"); if (on) cmd("goAck"); main.post { com.lazyneil.lazycar.audio.TabletSpeaker.playHere(ctx, on) } }
+            "go" -> { val on = j.optBoolean("on"); if (on) cmd("goAck"); main.post {
+                if (on) { com.lazyneil.lazycar.Prefs(ctx).shutDown = false; com.lazyneil.lazycar.gps.GpsService.startIfIdle(ctx) }   // GO on the phone
+                com.lazyneil.lazycar.audio.TabletSpeaker.playHere(ctx, on) } }
             "list" -> synchronized(pending) { pending.remove(j.optInt("req")) }?.let { main.post { it(j) } }
             "cmd" -> main.post { if (local) here(j) { r -> send(r.put("c", "list")) } }   // the phone UI in Tablet mode
         }

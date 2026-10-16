@@ -357,6 +357,7 @@ object GoAction {
         com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
         val end = 1800L
         main.postDelayed({ setState(ctx, p, IDLE); p.clearSnap(); com.lazyneil.lazycar.media.MediaListener.sleep() }, end)
+        clearNotifications(ctx, end + 1500L)
         return end + 500L
     }
 
@@ -369,8 +370,14 @@ object GoAction {
         com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
         com.lazyneil.lazycar.media.PhoneMedia.stop()
         p.clearSnap()
-        return 11000L
+        clearNotifications(ctx, 2500L)
+        return 1500L
     }
+
+    /** After Shut down no CarApp notification stays: every service is stopped by then (GoService ends at its endAt). */
+    private fun clearNotifications(ctx: Context, at: Long) = main.postDelayed({
+        if (Prefs(ctx).shutDown) ctx.getSystemService(android.app.NotificationManager::class.java).cancelAll()
+    }, at)
 
     /** The system REQUEST_DISABLE dialog (no silent disable on Android 13+). Opens only while CarApp was just in front
      *  (app, widget, notification all go through [GoActivity]); from the tablet's Shut down Android blocks it and BT stays on. */

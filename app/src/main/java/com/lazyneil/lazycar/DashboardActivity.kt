@@ -51,6 +51,7 @@ class DashboardActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_dashboard)
         launcherOpen = savedInstanceState == null && intent.getBooleanExtra("launcher", false)
+        opening = savedInstanceState == null
         root = findViewById(R.id.root)
         Ui.edge(this, findViewById(R.id.frame))   // backdrop stays full window
         if (resources.configuration.screenWidthDp >= 840) {   // full width: rail left, art left, controls right
@@ -125,12 +126,14 @@ class DashboardActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (!Role.isTablet(this)) { startActivity(Intent(this, MainActivity::class.java)); finish(); return }
-        Prefs(this).shutDown = false; com.lazyneil.lazycar.media.MediaListener.wake(this)   // opening the app ends a shut down
+        if (opening) { opening = false; Prefs(this).shutDown = false }   // an open ends a Shut down, a resume (back from GoActivity) does not
         com.lazyneil.lazycar.media.Files.refresh(this)   // new music files show without a restart
-        GpsService.startIfIdle(this)
-        Drive.join(this)
-        PhoneMedia.start(this)
-        StreamReceiver.sync(this)
+        if (!Prefs(this).shutDown) {
+            GpsService.startIfIdle(this)
+            Drive.join(this)
+            PhoneMedia.start(this)
+            StreamReceiver.sync(this)
+        }
         handler.post(tick)
         // A launcher (or Drive widget) open outside the split: remind the user of the Maps + CarApp pair icon.
         if (launcherOpen && !isInMultiWindowMode && SystemClock.elapsedRealtime() - splitAt > 15_000) {
@@ -139,6 +142,9 @@ class DashboardActivity : AppCompatActivity() {
         launcherOpen = false
     }
     private var launcherOpen = false
+    private var opening = true   // onCreate, onRestart, onNewIntent: the user opened CarApp
+    override fun onRestart() { super.onRestart(); opening = true }
+    override fun onNewIntent(i: Intent) { super.onNewIntent(i); opening = true; launcherOpen = i.getBooleanExtra("launcher", false) }
     private companion object { var splitAt = -15_000L }
 
     override fun onPause() { super.onPause(); handler.removeCallbacks(tick) }

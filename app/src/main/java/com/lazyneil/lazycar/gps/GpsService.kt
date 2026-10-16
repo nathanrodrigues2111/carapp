@@ -79,6 +79,7 @@ class GpsService : Service(), LocationListener {
 
         fun launch(ctx: Context, m: String, save: Boolean = true) {
             if (save) prefs(ctx).edit().putString("mode", m).apply()
+            if (m != "stop" && com.lazyneil.lazycar.Prefs(ctx).shutDown) return   // nothing starts after Shut down until an open or GO
             val i = Intent(ctx, GpsService::class.java)
             // A location service without the permission would crash the whole app on startForeground.
             if (m != "stop" && ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
@@ -108,6 +109,7 @@ class GpsService : Service(), LocationListener {
     override fun onBind(intent: Intent?) = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent == null && com.lazyneil.lazycar.Prefs(this).shutDown) { stopSelf(); return START_NOT_STICKY }   // sticky restart after Shut down
         val m = intent?.getStringExtra("mode") ?: autoMode(this).takeIf { it != "stop" } ?: return START_NOT_STICKY
         Log.i("LazyGPS", "start $m")
         stopAll()
