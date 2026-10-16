@@ -216,11 +216,12 @@ object PhoneMedia {
         if (on && bonded && !has) com.lazyneil.lazycar.GoAction.connectA2dp(ctx, mac)
         else if (!on && has) com.lazyneil.lazycar.GoAction.disconnectA2dp(ctx, mac)
     }
-    /** Tablet Shut down: a speaker GO handed us goes back (dropped here, the phone reconnects it if it had it). */
+    /** Tablet Shut down: the speaker returns to its pre-GO owner (dropped if GO handed it to us, reconnected if it was ours). */
     fun speakerRestore(ctx: Context) {
         val sp = ctx.getSharedPreferences("speaker", Context.MODE_PRIVATE)
         val mac = sp.getString("spkMac", null) ?: return
         if (!sp.getBoolean("spkHad", false)) com.lazyneil.lazycar.GoAction.disconnectA2dp(ctx, mac)
+        else main.postDelayed({ com.lazyneil.lazycar.GoAction.connectA2dp(ctx, mac) }, 2500)   // ours before GO: back once the phone let go
         sp.edit().remove("spkMac").remove("spkHad").apply(); pairNeeded = ""
     }
 
