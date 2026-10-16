@@ -38,7 +38,8 @@ class DashboardActivity : AppCompatActivity() {
     }
 
     // Always needed: precise location (coarse must be asked with it). Camera asks on rearview, the mic when a phone copy plays.
-    private val perms = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+    // Nearby devices: the speaker handoff (connect or let go of the Bluetooth speaker) needs it.
+    private val perms = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_CONNECT)
     private var micAsked = false
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
@@ -268,7 +269,7 @@ class DashboardActivity : AppCompatActivity() {
         val miss = missing()
         findViewById<TextView>(R.id.setupBanner).apply {
             text = when {
-                miss.isNotEmpty() -> "Precise location is off. Tap to allow"
+                miss.isNotEmpty() -> if (Manifest.permission.BLUETOOTH_CONNECT in miss) "Nearby devices is off (speaker handoff). Tap to allow" else "Precise location is off. Tap to allow"
                 PhoneMedia.pairNeeded.isNotEmpty() -> "Pair ${PhoneMedia.pairNeeded} with the tablet (Bluetooth settings) so it can play here"
                 !com.lazyneil.lazycar.media.Files.has(this@DashboardActivity) -> "No music folder yet. Tap to pick one"
                 !com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this@DashboardActivity) && PhoneMedia.alive && PhoneMedia.np.optBoolean("spkOff") ->

@@ -105,14 +105,23 @@ class SplitService : AccessibilityService() {
 
     /** GO / Shut down opened a system dialog (screen share consent, Bluetooth on or off): its confirm button is
      *  pressed for the user while armed. Only system dialogs, only these labels, only for [ms]. */
-    fun press(texts: List<String>, ms: Long) { pressTexts = texts; pressUntil = SystemClock.uptimeMillis() + ms; main.post { pressNow() } }
+    fun press(texts: List<String>, ms: Long) {
+        // Adds to what is armed: GO arms the Bluetooth labels, then the consent screen arms its own.
+        val now = SystemClock.uptimeMillis()
+        pressTexts = (if (now < pressUntil) pressTexts else emptyList()) + texts.filter { it !in pressTexts }
+        pressUntil = maxOf(pressUntil, now + ms); main.post { pressNow() }
+    }
     @Volatile private var pressTexts = emptyList<String>()
     @Volatile private var pressUntil = 0L
     private var pressedAt = 0L
     override fun onAccessibilityEvent(e: AccessibilityEvent?) { if (pressTexts.isNotEmpty()) pressNow() }
+    /** Also polled every 500 ms while armed: a dialog that opens right after a click sends no further events. */
+    private val pressTick = Runnable { pressNow() }
     private fun pressNow() {
         val now = SystemClock.uptimeMillis()
+        main.removeCallbacks(pressTick)
         if (now >= pressUntil) { pressTexts = emptyList(); return }
+        main.postDelayed(pressTick, 500)
         if (now - pressedAt < 800) return   // one dialog at a time: the next one opens after this click
         for (w in windows) {
             val root = w.root ?: continue
