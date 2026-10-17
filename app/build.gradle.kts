@@ -14,7 +14,7 @@ android {
         minSdk = 31
         targetSdk = 35
         versionCode = (System.currentTimeMillis() / 60000L).toInt()
-        versionName = "0.6.7"
+        versionName = "0.6.8"
     }
     val signingProps = Properties().apply {
         val f = File(System.getProperty("user.home"), ".config/lazycar/signing.properties")

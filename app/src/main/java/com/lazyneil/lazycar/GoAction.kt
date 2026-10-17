@@ -425,6 +425,7 @@ object GoAction {
         com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
         com.lazyneil.lazycar.media.PhoneMedia.stop()
         p.clearSnap()
+        SplitService.self?.close()
         clearNotifications(ctx, 2500L)
         return 1500L
     }

@@ -152,15 +152,47 @@ class SplitService : AccessibilityService() {
      *  the link. Repeats within 30 s are the same GO. */
     private fun wake() {
         val now = SystemClock.elapsedRealtime(); if (now - wokeAt < 30_000) return; wokeAt = now
-        Log.e("LazyCar", "wake: phone GO")
+        val pm = getSystemService(android.os.PowerManager::class.java)
+        // A late repeat of the same GO keeps what the first one opened.
+        if (!opened) { openedMaps = false; wokeScreen = !pm.isInteractive }; opened = true
+        Log.e("LazyCar", "wake: phone GO (screen was ${if (wokeScreen) "off" else "on"})")
         GoAction.quietUntil = 0   // a GO right after a Shut down is a real open, never "back from Shut down's dialog"
         // Screen on first: an activity's turnScreenOn does nothing when CarApp's task already exists (onNewIntent).
-        @Suppress("DEPRECATION") getSystemService(android.os.PowerManager::class.java).newWakeLock(
+        @Suppress("DEPRECATION") pm.newWakeLock(
             android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP, "CarApp:wake").acquire(5000)
         startActivity(Intent(this, DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .putExtra("wake", true))
         // The split from here, not from CarApp's resume: a CarApp already in front gets no resume.
         main.postDelayed({ Drive.split(this) }, 1500)
+    }
+
+    // What the phone's GO opened here, so its Shut down closes exactly that (see [close]).
+    private var opened = false; private var openedMaps = false; private var wokeScreen = false
+    /** Phone Shut down: back to square one, only undoing what its GO opened: CarApp's screens, Maps if GO's split
+     *  opened it (swiped away in Recents, ZUI has no API to close another app), home screen, screen off if it was. */
+    fun close() {
+        if (!opened) return; opened = false; busyUntil = 0
+        Log.e("LazyCar", "close: CarApp${if (openedMaps) " + Maps" else ""}, screen off: $wokeScreen")
+        getSystemService(android.app.ActivityManager::class.java).appTasks.forEach { it.finishAndRemoveTask() }
+        val lock = wokeScreen
+        fun end() { performGlobalAction(GLOBAL_ACTION_HOME); if (lock) main.postDelayed({ performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) }, 800) }
+        if (!openedMaps) { main.postDelayed({ end() }, 500); return }
+        val maps = Prefs(this).launchA.ifEmpty { "com.google.android.apps.maps" }
+        val label = try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(maps, 0)).toString() } catch (_: Exception) { "Maps" }
+        main.postDelayed({
+            performGlobalAction(GLOBAL_ACTION_RECENTS)
+            main.postDelayed({
+                val n = node(label) { it.packageName == ZUI_LAUNCHER && it.viewIdResourceName == "$ZUI_LAUNCHER:id/icon" }
+                if (n == null) Log.e("LazyCar", "close: no Maps in Recents") else {
+                    // The tile's icon sits at its top edge: flick the tile up from below it.
+                    val r = Rect().also { n.getBoundsInScreen(it) }; val y = r.exactCenterY() + 150
+                    dispatchGesture(GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(
+                        Path().apply { moveTo(r.exactCenterX(), y); lineTo(r.exactCenterX(), 0f) }, 0, 200)).build(), null, null)
+                    Log.e("LazyCar", "close: swiped Maps at $r")
+                }
+                main.postDelayed({ end() }, 900)
+            }, 1200)
+        }, 600)
     }
 
     private var busyUntil = 0L
@@ -171,7 +203,7 @@ class SplitService : AccessibilityService() {
         val launch = packageManager.getLaunchIntentForPackage(maps) ?: return fail("$maps not installed")
         val mapsLabel = try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(maps, 0)).toString() } catch (_: Exception) { "Maps" }
         val ours = getString(R.string.app_name)
-        busyUntil = now + 20_000
+        busyUntil = now + 20_000; openedMaps = opened
         Log.e("LazyCar", "split: start")
         fun done() { busyUntil = 0; Log.e("LazyCar", "split: done split=${isSplit(maps)}") }
         // ponytail: English ZUI labels ("Split screen"); a localized ZUI needs its string here.
