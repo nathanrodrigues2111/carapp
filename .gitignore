@@ -13,3 +13,7 @@ reverse/*
 !reverse/SHARING_API.md
 # screenshots
 screenshot-*.png
+# signing secrets
+*.jks
+*.keystore
+signing.properties
