@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -14,7 +16,7 @@ android {
         versionCode = (System.currentTimeMillis() / 60000L).toInt()
         versionName = "0.6.7"
     }
-    val signingProps = java.util.Properties().apply {
+    val signingProps = Properties().apply {
         val f = File(System.getProperty("user.home"), ".config/lazycar/signing.properties")
         if (f.exists()) f.inputStream().use { load(it) }
     }
