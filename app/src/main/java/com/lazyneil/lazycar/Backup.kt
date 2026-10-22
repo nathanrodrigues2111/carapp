@@ -11,10 +11,7 @@ class Backup : BackupAgent() {
     override fun onRestore(d: BackupDataInput?, v: Int, n: ParcelFileDescriptor?) {}
     override fun onRestoreFinished() {
         Prefs(this).clearSnap()
-        // musicTree: the folder grant does not survive a reinstall, a restored folder would list nothing.
-        // tabletPlayer: legacy, the tablet's player is CarApp itself (TabletSpeaker.tabletPlayer).
-        getSharedPreferences("lazycar", MODE_PRIVATE).edit().remove("state").remove("stateTs").remove("shutDown")
-            .remove("musicTree").remove("tabletPlayer").commit()
+        getSharedPreferences("lazycar", MODE_PRIVATE).edit().remove("state").remove("stateTs").remove("shutDown").commit()
         getSharedPreferences("rearview", MODE_PRIVATE).edit().remove("perms_asked").commit()
     }
 }

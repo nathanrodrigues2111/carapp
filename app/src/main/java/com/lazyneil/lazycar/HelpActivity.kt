@@ -22,23 +22,15 @@ class HelpActivity : AppCompatActivity() {
 
     private val qa = listOf(
         "What does Start do?" to
-            "Start plays CarApp's player on the speaker and the tablet, and shares the phone GPS with the tablet. In Phone mode it connects the JBL first; if Bluetooth is off, Android asks you to allow it. Keep the phone hotspot on, the tablet joins it by itself.",
+            "On the phone Start turns on the hotspot, mobile data and location when they are off, and shares the phone GPS with the tablet. The tablet wakes, turns on Wi-Fi and Bluetooth, connects the car stereo and opens your saved app pair. With the CarApp helper off, CarApp opens each system screen for you instead.",
         "What does Shut down do?" to
-            "Shut down puts back what was on before you tapped Start and stops everything CarApp runs on both devices. Only what Start switched on gets turned off. If Start turned Bluetooth on, Android asks before turning it off.",
+            "Shut down puts back what was on before you tapped Start and stops everything CarApp runs on both devices. Only what Start switched on gets turned off.",
         "How do I set it up the first time?" to
-            "1. Pair the JBL speaker in Android's Bluetooth settings.\n2. Open CarApp on the phone and the tablet and follow the setup line.\n3. On the tablet, save a Maps + CarApp pair once on the launcher: long press Maps, Split screen, pick CarApp, save.\n4. Add the Start widget on the phone.",
+            "1. Open CarApp on the phone and the tablet and follow the setup line.\n2. On the tablet, pair the car stereo in Android's Bluetooth settings and pick it in CarApp Settings.\n3. Add the Start widget on the phone.",
         "How does the tablet open?" to
-            "Tap the Maps + CarApp pair icon on the tablet home screen: Maps on one side, the player on the other. CarApp reminds you when it opens on its own. Turn the reminder off in Settings, Drive, Open with Maps.",
-        "How do I use the player?" to
-            "Tap the art to play or pause, swipe it for the next or previous song. Drag the bar to seek. The library icon opens the music to pick what plays.",
-        "Why does the color change?" to
-            "The accent follows the album art, the same color on the phone and the tablet.",
-        "Why does the tablet speaker ask to share the screen?" to
-            "In Phone mode with another player (Poweramp, YouTube Music), Android only lets CarApp copy the music to the tablet after you tap Start in its screen share dialog. Spotify blocks the copy, so it plays on the JBL only. CarApp's own player needs no dialog.",
-        "Can I set the volume?" to
-            "Settings, Audio has a slider for the JBL speaker and one for the tablet speaker. The volume buttons keep working too.",
+            "With the CarApp helper on, the phone's Start wakes the tablet and opens the app pair chosen in Settings, Drive, Open on GO. Save a pair on the tablet home screen first (long press an app, Split screen, save), then show the home screen once so CarApp sees it.",
         "Does CarApp send any data?" to
-            "No. GPS and music only travel between your phone and tablet over the hotspot."
+            "No. GPS and settings only travel between your phone and tablet over the hotspot."
     )
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()

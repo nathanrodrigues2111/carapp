@@ -1,22 +1,19 @@
 package com.lazyneil.lazycar
 
 import android.app.Activity
-import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.os.Bundle
 
 /** No-UI trampoline for the app button, the widget and the notification's Shut down: decides the action from state,
- *  hands it to GoService, and opens the system dialogs GO needs while CarApp is still in front (Android blocks them
- *  from the background): "Turn on Bluetooth?" in Phone mode, the screen share consent for the tablet speaker copy. */
+ *  hands it to GoService. With the helper off it opens the system screens for the toggles GO or Shut down needs, while
+ *  CarApp is still in front (Android blocks them from the background). */
 class GoActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val p = Prefs(applicationContext)
         val svc = Intent(this, GoService::class.java)
         val st = GoAction.effectiveState(p)
-        if (intent?.getStringExtra("action") == "btoff") { GoAction.disableBt(applicationContext); finish(); return }   // Shut down notice tap
         when {
-            intent?.getBooleanExtra("volumeOnly", false) == true -> svc.putExtra("action", "volume")
             intent?.getStringExtra("action") == "stop" -> svc.putExtra("action", "stop")   // Shut down always restores, whatever the state
             st == GoAction.IDLE -> svc.putExtra("action", "go")
             st == GoAction.ON -> svc.putExtra("action", "stop")
@@ -24,20 +21,10 @@ class GoActivity : Activity() {
         }
         android.util.Log.e("LazyCar", "GoActivity -> service ${svc.getStringExtra("action")}")
         startForegroundService(svc)
-        if (svc.getStringExtra("action") == "go" && !com.lazyneil.lazycar.audio.TabletSpeaker.fromTablet(this)) phoneDialogs(this)
+        if (SplitService.self == null && !Role.isTablet(this)) GoAction.openScreens(this,
+            if (svc.getStringExtra("action") == "go") listOfNotNull(GoAction.HOTSPOT.takeIf { GoAction.hotspotOn(this) != true },
+                GoAction.DATA.takeIf { !GoAction.dataOn(this) }, GoAction.LOCATION.takeIf { !GoAction.locationOn(this) })
+            else GoAction.restoreList(p))
         finish()
-    }
-
-    companion object {
-        /** Phone mode needs, from an activity: the screen share consent (outside player) and Bluetooth on. The helper
-         *  presses them when it is on. Used by GO and by a switch to Phone mode while ON. */
-        fun phoneDialogs(a: android.app.Activity) {
-            val bt = a.getSystemService(BluetoothManager::class.java)?.adapter
-            val btOff = bt != null && !bt.isEnabled
-            SplitService.press("Start now", "Share screen", "Start", "Allow", "Turn on")
-            // One system dialog at a time: a second one opened on top closed the Bluetooth one. Consent first, it opens Bluetooth after.
-            if (com.lazyneil.lazycar.audio.TabletSpeaker.needsCapture(a)) com.lazyneil.lazycar.audio.StreamSender.askConsent(a, thenBt = btOff)
-            else if (btOff) Ui.openSettings(a, Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false)
-        }
     }
 }

@@ -92,23 +92,19 @@ class DebugActivity : AppCompatActivity() {
         } else {
             rows += Row("GPS", ::gpsPhone)
         }
-        if (tablet) rows += Row("Tablet Bluetooth output", {
-            St.WAITING to if (com.lazyneil.lazycar.audio.TabletSpeaker.btToo(this)) "On: also plays on a speaker paired with the tablet" else "Off" },
-            listOf("Toggle" to { com.lazyneil.lazycar.audio.TabletSpeaker.setBtToo(this, !com.lazyneil.lazycar.audio.TabletSpeaker.btToo(this)) }))
         if (tablet) rows += Row("Rear camera", ::camera,
             listOf("Open preview" to { startActivity(Intent(this, RearActivity::class.java)) }))
-        else rows += Row("Speaker and Wi-Fi stream", ::audio, listOf("Refresh" to { loadA2dp() }))
-        rows += if (tablet) Row("Phone media control", {
-            val m = com.lazyneil.lazycar.media.PhoneMedia
-            if (m.connected) St.PASS to "Connected to ${m.phone}" + (if (m.hasTrack) ", ${m.np.optString("app")}: ${m.np.optString("title")}" else ", nothing playing")
-            else St.WAITING to "Looking for the phone on Wi-Fi" })
-        else Row("Media control for the tablet", {
-            val m = com.lazyneil.lazycar.media.MediaListener
-            when {
-                !m.granted(this) -> St.FAIL to "Notification access off, the tablet cannot see or control the player"
-                !m.bound -> St.WAITING to "Granted, waiting for Android to start the listener"
-                else -> St.PASS to "Listening, ${m.clients} tablet(s), player ${m.player.ifEmpty { "none" }}"
-            } }, fix = com.lazyneil.lazycar.media.MediaListener.settingsIntent())
+        if (tablet) rows += Row("Car stereo", ::audio, listOf("Refresh" to { loadA2dp() }))
+        else rows += Row("Hotspot, data, location", {
+            val st = "hotspot ${GoAction.hotspotOn(this) ?: "unknown"}, mobile data ${GoAction.dataOn(this)}, location ${GoAction.locationOn(this)}"
+            (if (GoAction.locationOn(this)) St.PASS else St.WAITING) to st })
+        rows += if (tablet) Row("Phone link", {
+            if (PhoneLink.connected) St.PASS to "Connected to ${PhoneLink.phone}" else St.WAITING to "Looking for the phone on Wi-Fi" })
+        else Row("Tablet link", {
+            if (!LinkService.bound) St.WAITING to "Off until the app is opened or GO"
+            else St.PASS to "Listening, ${LinkService.clients} tablet(s)" })
+        rows += Row("CarApp helper", { if (Ui.helperOn(this)) St.PASS to "On" else St.WAITING to "Off, the dialogs and the pair are one tap each" },
+            fix = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         rows += Row("Battery optimisation", ::battery, fix = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         if (tablet) rows += Row("Mock location app", ::mock, fix = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
         rows += Row("Boot receiver", ::boot)
@@ -224,7 +220,7 @@ class DebugActivity : AppCompatActivity() {
         }
     }
 
-    // ---- hotspot, split, camera, audio ----
+    // ---- hotspot, camera, car stereo ----
     private fun hotspot(): Pair<St, String> {
         val target = p.hotspotSsid.trim()
         val cur = wifiSsid.takeIf { it.isNotEmpty() && it != "<unknown ssid>" }
@@ -261,14 +257,11 @@ class DebugActivity : AppCompatActivity() {
 
     private fun audio(): Pair<St, String> {
         val l = a2dp ?: return St.FAIL to a2dpNote
-        val spk = if (p.mac1.isEmpty()) "No speaker chosen" else if (l.isEmpty()) "Speaker not connected" else "Speaker: ${l.joinToString()}"
-        val wifi = com.lazyneil.lazycar.audio.TabletSpeaker.status(this)
-        return (if (p.mac1.isNotEmpty() && l.isNotEmpty()) St.PASS else St.WAITING) to "$spk. Wi-Fi stream: $wifi"
+        val spk = if (p.mac1.isEmpty()) "No car stereo chosen" else if (l.isEmpty()) "Not connected" else "Connected: ${l.joinToString()}"
+        return (if (p.mac1.isNotEmpty() && l.isNotEmpty()) St.PASS else St.WAITING) to spk
     }
 
     // ---- health ----
-
-
     private fun battery() =
         if (getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)) St.PASS to "Exempt"
         else St.FAIL to "Optimised, Android may kill background services"

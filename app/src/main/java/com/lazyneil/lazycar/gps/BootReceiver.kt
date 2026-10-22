@@ -14,7 +14,7 @@ class BootReceiver : BroadcastReceiver() {
             com.lazyneil.lazycar.Prefs(ctx).state = com.lazyneil.lazycar.GoAction.IDLE; com.lazyneil.lazycar.GoWidget.refresh(ctx)
         }
         if (com.lazyneil.lazycar.Role.isTablet(ctx)) {
-            com.lazyneil.lazycar.audio.StreamReceiver.sync(ctx); com.lazyneil.lazycar.media.PhoneMedia.start(ctx)
+            com.lazyneil.lazycar.PhoneLink.start(ctx)
         }
         val m = GpsService.autoMode(ctx)
         if (m != "stop") GpsService.launch(ctx, m)

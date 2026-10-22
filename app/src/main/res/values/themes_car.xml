@@ -44,31 +44,11 @@
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">-0.01</item>
     </style>
-    <style name="T.Headline">
-        <item name="android:textSize">@dimen/t_headline</item>
-        <item name="android:textColor">?attr/carTextDim</item>
-    </style>
     <style name="T.Display">
         <item name="android:textSize">@dimen/t_display</item>
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">-0.03</item>
         <item name="android:includeFontPadding">false</item>
-    </style>
-    <style name="T.Track">
-        <item name="android:textSize">@dimen/t_track</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:letterSpacing">-0.02</item>
-        <!-- One line, cut with an ellipsis. No marquee: it draws a second copy of the title and restarts on focus changes. -->
-        <item name="android:maxLines">1</item>
-        <item name="android:ellipsize">end</item>
-    </style>
-    <style name="T.TrackSub">
-        <item name="android:maxLines">2</item>
-        <item name="android:textSize">@dimen/t_track_sub</item>
-        <item name="android:textColor">#99F5F5F7</item>
-    </style>
-    <style name="T.Hero" parent="T.Display">
-        <item name="android:textSize">@dimen/t_hero</item>
     </style>
 
     <style name="Glass">
@@ -82,16 +62,6 @@
         <item name="android:scaleType">fitCenter</item>
         <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
         <item name="tint">?attr/carText</item>
-    </style>
-    <style name="CarIconBtn.Big">
-        <item name="android:layout_width">80dp</item>
-        <item name="android:layout_height">80dp</item>
-        <item name="android:padding">18dp</item>
-    </style>
-    <!-- Volume slider: same component as the seek bar, 0..100. -->
-    <style name="CarSlider" parent="CarSeek">
-        <item name="android:valueTo">100</item>
-        <item name="android:stepSize">1</item>
     </style>
     <!-- Neutral pill button, the only button style besides GO. -->
     <style name="CarButton" parent="Widget.Material3.Button">
@@ -115,27 +85,6 @@
         <item name="iconPadding">8dp</item>
         <item name="iconTint">?attr/carText</item>
         <item name="rippleColor">?attr/carStroke</item>
-    </style>
-    <!-- Seek: 4dp track, 16dp round white thumb, no stop dot. -->
-    <style name="CarSeek" parent="Widget.Material3.Slider">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:valueFrom">0</item>
-        <item name="android:valueTo">1</item>
-        <item name="labelBehavior">gone</item>
-        <item name="tickVisible">false</item>
-        <item name="trackHeight">4dp</item>
-        <item name="thumbWidth">16dp</item>
-        <item name="thumbHeight">16dp</item>
-        <item name="thumbTrackGapSize">0dp</item>
-        <item name="trackStopIndicatorSize">0dp</item>
-        <item name="trackInsideCornerSize">2dp</item>
-        <item name="thumbElevation">2dp</item>
-        <item name="haloRadius">14dp</item>
-        <item name="thumbColor">?attr/carText</item>
-        <item name="haloColor">#1FFFFFFF</item>
-        <item name="trackColorActive">?attr/carText</item>
-        <item name="trackColorInactive">#1FFFFFFF</item>
     </style>
     <style name="Dot">
         <item name="android:layout_width">10dp</item>
@@ -200,12 +149,6 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginStart">@dimen/sp3</item>
-    </style>
-    <style name="Caption">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">@dimen/t_body</item>
-        <item name="android:textColor">?attr/carTextDim</item>
     </style>
     <!-- Text field: filled pill, no outline. -->
     <style name="CarField" parent="Widget.Material3.TextInputLayout.FilledBox">

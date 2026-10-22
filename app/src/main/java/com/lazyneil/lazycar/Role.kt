@@ -6,7 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import com.lazyneil.lazycar.gps.GpsService
 
-/** Phone runs car audio + GPS send; the head unit tablet runs the reverse camera + GPS receive. */
+/** Phone runs GO + GPS send; the head unit tablet runs the reverse camera + GPS receive. */
 object Role {
     const val AUTO = "auto"
     const val PHONE = "phone"
@@ -33,7 +33,6 @@ object Role {
         toggle(ctx, "com.lazyneil.lazycar.rear.UsbLaunch", tablet)
         toggle(ctx, "com.lazyneil.lazycar.GoWidget", !tablet)
         toggle(ctx, "com.lazyneil.lazycar.DriveWidget", tablet)
-        toggle(ctx, "com.lazyneil.lazycar.SplitService", true)   // both roles now; an older build disabled it on the phone
     }
 
     private fun toggle(ctx: Context, cls: String, on: Boolean) {

@@ -6,24 +6,12 @@
     <dimen name="t_title">20sp</dimen>
     <dimen name="t_headline">28sp</dimen>
     <dimen name="t_display">44sp</dimen>
-    <dimen name="t_hero">64sp</dimen>
-    <!-- Track title on the tablet player (narrow / wide) and its artist line. -->
-    <dimen name="t_track">28sp</dimen>
-    <dimen name="t_track_wide">34sp</dimen>
-    <dimen name="t_track_sub">18sp</dimen>
     <dimen name="sp1">4dp</dimen>
     <dimen name="sp2">8dp</dimen>
     <dimen name="sp3">12dp</dimen>
     <dimen name="sp4">16dp</dimen>
     <dimen name="sp6">24dp</dimen>
-    <dimen name="sp8">32dp</dimen>
-    <dimen name="r_s">12dp</dimen>
     <dimen name="r_m">20dp</dimen>
-    <dimen name="r_l">28dp</dimen>
     <dimen name="row_pad">20dp</dimen>
     <dimen name="row_min">64dp</dimen>
-    <dimen name="seg_h">44dp</dimen>
-    <dimen name="swatch">44dp</dimen>
-    <dimen name="car_play">112dp</dimen>
-    <dimen name="car_rail">96dp</dimen>
 </resources>

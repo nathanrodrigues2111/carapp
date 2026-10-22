@@ -8,8 +8,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 
-/** Bonded-device enumeration shared by the output pickers (MainActivity) and the
- *  head-unit tablet picker (SettingsActivity). mac,name,iconRes triples. */
+/** Bonded-device enumeration for the car stereo picker (SettingsActivity). mac,name,iconRes triples. */
 object BtDevices {
     const val ICON = android.R.drawable.stat_sys_data_bluetooth
 
@@ -22,7 +21,6 @@ object BtDevices {
     /** note != null when the list is empty for a reason worth showing; canEnable = BT is off. */
     data class Result(
         val audio: List<Triple<String, String, Int>>,
-        val all: List<Triple<String, String, Int>>,
         val note: String?,
         val canEnable: Boolean
     )
@@ -32,16 +30,15 @@ object BtDevices {
             PackageManager.PERMISSION_GRANTED
         val adapter = (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
         return when {
-            !ok -> Result(emptyList(), emptyList(), "Bluetooth permission needed to list paired devices.", false)
-            adapter == null -> Result(emptyList(), emptyList(), "No Bluetooth on this device.", false)
-            !adapter.isEnabled -> Result(emptyList(), emptyList(), "Bluetooth is off.", true)
+            !ok -> Result(emptyList(), "Bluetooth permission needed to list paired devices.", false)
+            adapter == null -> Result(emptyList(), "No Bluetooth on this device.", false)
+            !adapter.isEnabled -> Result(emptyList(), "Bluetooth is off.", true)
             else -> {
                 val bonded = try { adapter.bondedDevices.toList() } catch (e: SecurityException) { emptyList() }
-                val all = bonded.map { Triple(it.address, it.name ?: it.address, iconFor(it)) }
                 val audio = bonded.filter { isAudio(it) }
                 val audioTriples = (if (audio.isEmpty()) bonded else audio)
                     .map { Triple(it.address, it.name ?: it.address, iconFor(it)) }
-                Result(audioTriples, all, if (bonded.isEmpty()) "No paired devices." else null, false)
+                Result(audioTriples, if (bonded.isEmpty()) "No paired devices." else null, false)
             }
         }
     }

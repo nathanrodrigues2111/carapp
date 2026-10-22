@@ -1,94 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tablet player. Narrow (split next to Maps): bar on top, art centered, then text, seek, controls.
-     Wide (>= 840dp): DashboardActivity turns the bar into a side rail and puts art left, controls right. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Tablet home: clock, speed and GPS status, the setup line, Camera and Settings. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
-    android:clipChildren="false"
-    android:clipToPadding="false"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/carBg">
+    android:background="?attr/carBg"
+    android:orientation="vertical">
 
-    <ImageView android:id="@+id/npBackdrop" android:layout_width="match_parent" android:layout_height="match_parent"
-        android:alpha="0.6" android:importantForAccessibility="no" android:scaleType="centerCrop" />
-    <View android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_scrim" />
-
-    <LinearLayout android:id="@+id/frame" android:clipChildren="false" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="match_parent"
-        android:orientation="vertical">
-
-        <!-- Bar (narrow) / rail (wide): clock, speed, status dots, then Library, Maps, Settings. -->
-        <LinearLayout android:id="@+id/rail" android:layout_width="match_parent" android:layout_height="72dp"
-            android:gravity="center" android:orientation="horizontal" android:paddingHorizontal="@dimen/sp6">
-            <TextClock style="@style/T.Title" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:format12Hour="h:mm" android:format24Hour="H:mm" />
-            <TextView android:id="@+id/speedText" style="@style/T.Label" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_margin="@dimen/sp2" android:text="-- km/h" />
-            <LinearLayout android:id="@+id/statusRow" android:layout_width="wrap_content" android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="GPS and stream status, opens settings"
-                android:gravity="center" android:paddingHorizontal="@dimen/sp2">
-                <View android:id="@+id/stGpsDot" style="@style/Dot" android:layout_width="8dp" android:layout_height="8dp" />
-                <View android:id="@+id/stStreamDot" style="@style/Dot" android:layout_width="8dp" android:layout_height="8dp"
-                    android:layout_marginStart="@dimen/sp2" />
-            </LinearLayout>
-            <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
-            <ImageButton android:id="@+id/npLibrary" style="@style/CarIconBtn" android:contentDescription="Library"
-                android:src="@drawable/ic_library" />
-            <ImageButton android:id="@+id/settingsBtn" style="@style/CarIconBtn" android:contentDescription="Settings"
-                android:src="@drawable/ic_settings" />
-        </LinearLayout>
-
-        <LinearLayout android:id="@+id/body" android:clipChildren="false" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="0dp"
-            android:layout_weight="1" android:orientation="vertical" android:paddingHorizontal="@dimen/sp6"
-            android:paddingBottom="@dimen/sp8">
-            <!-- Square art, sized to fit in code. -->
-            <FrameLayout android:id="@+id/artFrame" android:layout_width="match_parent" android:layout_height="0dp"
-                android:layout_weight="1">
-                <com.google.android.material.card.MaterialCardView android:id="@+id/npArtBox" android:layout_width="match_parent"
-                    android:layout_height="match_parent" android:layout_gravity="center"
-                    app:cardBackgroundColor="?attr/carSurfaceHigh" app:cardCornerRadius="@dimen/r_l" app:cardElevation="24dp"
-                    app:strokeColor="?attr/carSurfaceHigh" app:strokeWidth="1dp">
-                    <ImageView android:id="@+id/npArt" android:layout_width="match_parent" android:layout_height="match_parent"
-                        android:contentDescription="Album art. Tap to play or pause, swipe for next or previous"
-                        android:scaleType="centerCrop" />
-                    <!-- Shared loader while the phone's art is on its way (Ui.loader look). -->
-                    <com.google.android.material.progressindicator.CircularProgressIndicator android:id="@+id/npLoader"
-                        android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center"
-                        android:alpha="0" android:indeterminate="true" android:visibility="gone" app:indicatorSize="40dp"
-                        app:trackThickness="3dp" app:trackCornerRadius="2dp" app:trackColor="@android:color/transparent" />
-                </com.google.android.material.card.MaterialCardView>
-            </FrameLayout>
-            <LinearLayout android:id="@+id/side" android:clipChildren="false" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:gravity="center" android:orientation="vertical" android:paddingTop="@dimen/sp6">
+    <LinearLayout android:id="@+id/frame" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:gravity="center" android:orientation="vertical" android:padding="@dimen/sp6">
+        <TextClock style="@style/T.Display" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:format12Hour="h:mm" android:format24Hour="H:mm" />
+        <TextView android:id="@+id/speedText" style="@style/T.Title" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp2" android:text="-- km/h" />
+        <TextView android:id="@+id/gpsText" style="@style/T.Label" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp2" />
         <TextView android:id="@+id/setupBanner" style="@style/T.Label" android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:layout_marginBottom="@dimen/sp4" android:minHeight="48dp" android:maxLines="3" android:background="@drawable/bg_glass"
-            android:gravity="center_vertical" android:padding="@dimen/sp3" android:textColor="?attr/carText"
-            android:visibility="gone" />
-                <TextView android:id="@+id/npTitle" style="@style/T.Track" android:layout_width="match_parent"
-                    android:layout_height="wrap_content" android:text="Nothing playing" />
-                <TextView android:id="@+id/npArtist" style="@style/T.TrackSub" android:layout_width="match_parent"
-                    android:layout_height="wrap_content" android:layout_marginTop="6dp" />
-                <com.google.android.material.slider.Slider android:id="@+id/npSeek" style="@style/CarSeek"
-                    android:layout_marginHorizontal="-16dp" android:layout_marginTop="@dimen/sp6" android:contentDescription="Seek" />
-                <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content">
-                    <TextView android:id="@+id/npPos" style="@style/T.Label" android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-                    <TextView android:id="@+id/npDur" style="@style/T.Label" android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" android:layout_gravity="end" />
-                </FrameLayout>
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/sp4" android:clipChildren="false" android:gravity="center" android:orientation="horizontal">
-                    <ImageButton android:id="@+id/npPrev" style="@style/CarIconBtn.Big" android:contentDescription="Previous"
-                        android:src="@drawable/ic_skip_prev" />
-                    <ImageButton android:id="@+id/npPlay" android:layout_width="@dimen/car_play" android:layout_height="@dimen/car_play"
-                        android:layout_marginHorizontal="@dimen/sp8" android:background="@drawable/bg_circle_accent"
-                        android:contentDescription="Play or pause" android:elevation="24dp" android:padding="34dp"
-                        android:scaleType="fitCenter" android:src="@drawable/ic_play" />
-                    <ImageButton android:id="@+id/npNext" style="@style/CarIconBtn.Big" android:contentDescription="Next"
-                        android:src="@drawable/ic_skip_next" />
-                </LinearLayout>
-            </LinearLayout>
+            android:layout_height="wrap_content" android:layout_marginTop="@dimen/sp6" android:minHeight="48dp" android:maxLines="3"
+            android:background="@drawable/bg_glass" android:gravity="center_vertical" android:padding="@dimen/sp3"
+            android:textColor="?attr/carText" android:visibility="gone" />
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/sp6" android:orientation="horizontal">
+            <com.google.android.material.button.MaterialButton android:id="@+id/camBtn" style="@style/CarButton"
+                android:text="Camera" app:icon="@drawable/ic_record" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/settingsBtn" style="@style/CarButton"
+                android:layout_marginStart="@dimen/sp4" android:text="Settings" app:icon="@drawable/ic_settings"
+                />
         </LinearLayout>
     </LinearLayout>
-
-</FrameLayout>
+</LinearLayout>

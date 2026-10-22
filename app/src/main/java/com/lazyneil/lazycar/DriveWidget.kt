@@ -8,8 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
 
-/** Tablet home screen "Drive" button: opens CarApp, which starts the GPS link, suggests the phone hotspot and
- *  reminds of the Maps + CarApp pair icon. An activity PendingIntent: Android allows it from a widget tap. */
+/** Tablet home screen "Drive" button: opens CarApp, which starts the GPS link and suggests the phone hotspot.
+ *  An activity PendingIntent: Android allows it from a widget tap. */
 class DriveWidget : AppWidgetProvider() {
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
         val pi = PendingIntent.getActivity(ctx, 0, Intent(ctx, DashboardActivity::class.java).putExtra("launcher", true)

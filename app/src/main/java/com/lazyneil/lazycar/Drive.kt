@@ -14,7 +14,6 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Toast
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -23,7 +22,7 @@ import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import kotlin.concurrent.thread
 
-/** Tablet in the car: the phone hotspot as a Wi-Fi suggestion, the Maps split, and the phone's GO waking the tablet. */
+/** Tablet in the car: the phone hotspot as a Wi-Fi suggestion, and the phone's GO waking the tablet. */
 object Drive {
     /** The phone hotspot as a suggestion: Android joins it by itself when it is in range (the first time it asks once,
      *  in a notification, to allow CarApp's suggestion). Never switches Wi-Fi on. Idempotent, safe to call often. */
@@ -38,19 +37,6 @@ object Drive {
         if (old.isNotEmpty()) wm.removeNetworkSuggestions(old)
         val r = wm.addNetworkSuggestions(listOf(sug))
         Log.e("LazyCar", "hotspot suggestion '$ssid' secured=${pass.length >= 8} status=$r")
-    }
-
-    /** Maps beside CarApp: by itself when the user turned on [SplitService], else the one-tap reminder. */
-    fun split(ctx: Context) {
-        if (!Ui.openWithMaps(ctx)) return
-        SplitService.self?.split() ?: hint(ctx)
-    }
-
-    /** No split service: the launcher's own pair icon is one tap. */
-    fun hint(ctx: Context) {
-        if (!Ui.openWithMaps(ctx)) return
-        Toast.makeText(ctx, "Maps beside CarApp: tap the Maps + CarApp pair on the home screen, or turn on CarApp split " +
-            "in Android Settings > Accessibility to have it open by itself", Toast.LENGTH_LONG).show()
     }
 
     /** Phone GO: wake the tablet's CarApp ([SplitService] listens). Once a second for 20 s, the tablet ignores repeats.
@@ -78,12 +64,14 @@ object Drive {
 }
 
 /**
- * Optional: the user turns it on once in Android's Accessibility settings, CarApp never turns it on or back on. Off =
- * the dialogs and the split are one tap each for the user. Phone: presses the confirm buttons of the system dialogs GO
- * and Shut down open ([press]). Tablet: (1) wakes CarApp when the phone presses GO (system bound, so it listens with no
- * notification and no other service, also after Shut down); (2) opens the Maps + CarApp split the way a user does on ZUI, which has no
- * app API for it (LAUNCH_ADJACENT and launch windowing modes are ignored): the saved pair icon on the home screen,
- * else Recents, Maps' icon, Split screen, CarApp.
+ * Optional "CarApp helper": the user turns it on once in Android's Accessibility settings, CarApp never turns it on or
+ * back on. Off = each toggle is a system screen for the user. Apps have no API for hotspot, mobile data, location or
+ * Wi-Fi on Android 16, and Bluetooth on or off is a system dialog, so the helper taps Quick Settings tiles ([tiles]) and
+ * dialog buttons ([press]) for exactly what GO and Shut down need. Phone: hotspot, mobile data, location. Tablet: wakes
+ * CarApp when the phone presses GO (system bound, so it listens with no notification and no other service, also after
+ * Shut down), Wi-Fi and Bluetooth on, the car stereo, then taps the launcher pair chosen in Settings ([Prefs.goPair]).
+ * ZUI keeps its pairs in the launcher's own database (signature permission) and starts them through hidden task APIs,
+ * so a tap on the icon is the only route.
  */
 class SplitService : AccessibilityService() {
     companion object {
@@ -93,7 +81,10 @@ class SplitService : AccessibilityService() {
         const val PORT = 47478
         const val WAKE = "CARWAKE"
         private const val ZUI_LAUNCHER = "com.zui.launcher"
-        private const val ZUI_PICKER = "com.lenovo.screensplit"
+        // ponytail: English ZUI labels; a localized ZUI needs its pair prefix here.
+        const val PAIR = "App pair: "
+        /** "App pair: Maps and Spotify" -> "Maps/Spotify". */
+        fun label(pair: String) = pair.removePrefix(PAIR).replace(" and ", "/")
     }
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var sock: DatagramSocket? = null
@@ -103,10 +94,9 @@ class SplitService : AccessibilityService() {
         if (Role.isTablet(this)) thread(name = "wake-listen", isDaemon = true) { listen() }
     }
 
-    /** GO / Shut down opened a system dialog (screen share consent, Bluetooth on or off): its confirm button is
-     *  pressed for the user while armed. Only system dialogs, only these labels, only for [ms]. */
+    /** GO / Shut down opened a system dialog: its confirm button is pressed for the user while armed. Only system
+     *  dialogs, only these labels, only for [ms]. */
     fun press(texts: List<String>, ms: Long) {
-        // Adds to what is armed: GO arms the Bluetooth labels, then the consent screen arms its own.
         val now = SystemClock.uptimeMillis()
         pressTexts = (if (now < pressUntil) pressTexts else emptyList()) + texts.filter { it !in pressTexts }
         pressUntil = maxOf(pressUntil, now + ms); main.post { pressNow() }
@@ -114,7 +104,18 @@ class SplitService : AccessibilityService() {
     @Volatile private var pressTexts = emptyList<String>()
     @Volatile private var pressUntil = 0L
     private var pressedAt = 0L
-    override fun onAccessibilityEvent(e: AccessibilityEvent?) { if (pressTexts.isNotEmpty()) pressNow() }
+    private var pairsAt = 0L
+    override fun onAccessibilityEvent(e: AccessibilityEvent?) {
+        if (pressTexts.isNotEmpty()) pressNow()
+        // The tablet's home screen came up: remember the user's saved pairs for the "Open on GO" setting.
+        if (e?.packageName == ZUI_LAUNCHER && SystemClock.uptimeMillis() - pairsAt > 5000) { pairsAt = SystemClock.uptimeMillis(); seePairs() }
+    }
+    private fun seePairs() {
+        val seen = windows.mapNotNull { it.root }.filter { it.packageName == ZUI_LAUNCHER }
+            .flatMap { it.findAccessibilityNodeInfosByText(PAIR) }.mapNotNull { it.contentDescription?.toString() }.filter { it.startsWith(PAIR) }
+        val p = Prefs(this)
+        if (!p.pairs.containsAll(seen)) { p.pairs = p.pairs + seen; Log.e("LazyCar", "pairs: ${p.pairs}") }
+    }
     /** Also polled every 500 ms while armed: a dialog that opens right after a click sends no further events. */
     private val pressTick = Runnable { pressNow() }
     private fun pressNow() {
@@ -129,10 +130,13 @@ class SplitService : AccessibilityService() {
             if (pkg != "android" && pkg != "com.android.systemui" && pkg != "com.android.settings" && pkg != "com.android.permissioncontroller" && !pkg.startsWith("com.oplus")) continue
             for (t in pressTexts) for (n in root.findAccessibilityNodeInfosByText(t)) {
                 if (n.text?.toString()?.trim()?.equals(t, true) != true) continue
-                var c: AccessibilityNodeInfo? = n; while (c != null && !c.isClickable) c = c.parent
-                if (c?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) { pressedAt = now; Log.e("LazyCar", "pressed '$t' in $pkg"); return }
+                if (click(n)) { pressedAt = now; Log.e("LazyCar", "pressed '$t' in $pkg"); return }
             }
         }
+    }
+    private fun click(n: AccessibilityNodeInfo): Boolean {
+        var c: AccessibilityNodeInfo? = n; while (c != null && !c.isClickable) c = c.parent
+        return c?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
     }
     override fun onInterrupt() {}
     override fun onDestroy() { self = null; sock?.close(); main.removeCallbacksAndMessages(null); super.onDestroy() }
@@ -148,136 +152,127 @@ class SplitService : AccessibilityService() {
     } catch (e: Exception) { if (self === this) Log.e("LazyCar", "wake listen: $e") } }
 
     private var wokeAt = -60_000L
-    /** Phone GO: CarApp to the front with the screen on, then the split. Like any open it ends a Shut down and starts
-     *  the link. Repeats within 30 s are the same GO. */
+    /** Phone GO: CarApp to the front with the screen on (like any open it ends a Shut down and starts GPS and the link),
+     *  then the chosen pair. Repeats within 30 s are the same GO. */
     private fun wake() {
         val now = SystemClock.elapsedRealtime(); if (now - wokeAt < 30_000) return; wokeAt = now
         val pm = getSystemService(android.os.PowerManager::class.java)
-        // A late repeat of the same GO keeps what the first one opened.
-        if (!opened) { openedMaps = false; wokeScreen = !pm.isInteractive }; opened = true
+        val first = !opened   // a later GO before a Shut down keeps what the first one did and its snapshot
+        if (first) wokeScreen = !pm.isInteractive
+        opened = true
         Log.e("LazyCar", "wake: phone GO (screen was ${if (wokeScreen) "off" else "on"})")
         GoAction.quietUntil = 0   // a GO right after a Shut down is a real open, never "back from Shut down's dialog"
         // Screen on first: an activity's turnScreenOn does nothing when CarApp's task already exists (onNewIntent).
         @Suppress("DEPRECATION") pm.newWakeLock(
             android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP, "CarApp:wake").acquire(5000)
-        startActivity(Intent(this, DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .putExtra("wake", true))
-        // The split from here, not from CarApp's resume: a CarApp already in front gets no resume.
-        main.postDelayed({ Drive.split(this) }, 1500)
+        startActivity(Intent(this, DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("wake", true))
+        if (first) main.postDelayed({ tabletGo() }, 1500)   // past the keyguard CarApp dismissed
     }
 
-    // What the phone's GO opened here, so its Shut down closes exactly that (see [close]).
-    private var opened = false; private var openedMaps = false; private var wokeScreen = false
-    /** Phone Shut down: back to square one, only undoing what its GO opened: CarApp's screens, Maps if GO's split
-     *  opened it (swiped away in Recents, ZUI has no API to close another app), home screen, screen off if it was. */
+    /** Tablet side of GO, each step only when needed: Wi-Fi on, Bluetooth on, the car stereo, then the pair. */
+    private fun tabletGo() {
+        val p = Prefs(this)
+        val bt = getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
+        p.snapWifiWasOn = getSystemService(android.net.wifi.WifiManager::class.java).isWifiEnabled
+        p.snapBtWasOn = bt?.isEnabled == true
+        Log.e("LazyCar", "tablet go: wifi=${p.snapWifiWasOn} bt=${p.snapBtWasOn} stereo=${p.mac1.ifEmpty { "none" }}")
+        fun stereo(n: Int) {
+            if (bt?.isEnabled != true) { if (n > 0) main.postDelayed({ stereo(n - 1) }, 500) else { Log.e("LazyCar", "tablet go: bluetooth still off"); openPair() }; return }
+            if (p.mac1.isEmpty()) { openPair(); return }
+            GoAction.a2dpConnectedDevices(this) { c ->
+                p.snapConn1 = p.mac1 in c
+                if (!p.snapConn1) GoAction.connectA2dp(this, p.mac1)
+                Log.e("LazyCar", "tablet go: stereo ${if (p.snapConn1) "already connected" else "connect"}")
+                openPair()
+            }
+        }
+        fun bluetooth() {
+            if (bt != null && !bt.isEnabled) { press(listOf("Allow", "Turn on"), 30_000)
+                Ui.openSettings(this, Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE), fallback = false) }
+            stereo(30)
+        }
+        if (!p.snapWifiWasOn) tiles(listOf(GoAction.WIFI to true), done = { bluetooth() }) else bluetooth()
+    }
+
+    /** One Quick Settings pass: each tile whose description contains a label goes to its wanted state, [seen] gets the
+     *  state it had. Checks first, so a tile already right is left alone. Tiles not found in 6 s are logged. */
+    fun tiles(want: List<Pair<String, Boolean>>, seen: (String, Boolean) -> Unit = { _, _ -> }, done: () -> Unit = {}) {
+        val left = want.toMutableList(); val until = SystemClock.uptimeMillis() + 6000
+        performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+        fun step() {
+            val roots = windows.mapNotNull { it.root }.filter { it.packageName == "com.android.systemui" }
+            for ((label, on) in left.toList()) {
+                val n = roots.firstNotNullOfOrNull { r -> r.findAccessibilityNodeInfosByText(label).firstOrNull { it.isCheckable && it.contentDescription?.contains(label, true) == true } } ?: continue
+                seen(label, n.isChecked)
+                Log.e("LazyCar", "tile '$label' ${if (n.isChecked == on) "already $on" else "${n.isChecked} -> $on ok=${click(n)}"}")
+                left.remove(label to on)
+            }
+            if (left.isNotEmpty() && SystemClock.uptimeMillis() < until) { main.postDelayed({ step() }, 400); return }
+            left.forEach { Log.e("LazyCar", "tile '${it.first}' not found") }
+            main.postDelayed({ performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE); done() }, 500)
+        }
+        main.postDelayed({ step() }, 600)
+    }
+
+    /** The chosen saved pair: home screen, tap its icon (polls 3 s). Not on the visible home page = a hint. */
+    private fun openPair() {
+        val pair = Prefs(this).goPair; if (pair.isEmpty()) return
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        fun find(n: Int) {
+            val node = windows.mapNotNull { it.root }.filter { it.packageName == ZUI_LAUNCHER }
+                .flatMap { it.findAccessibilityNodeInfosByText(PAIR) }.firstOrNull { it.contentDescription?.toString() == pair }
+            when {
+                node != null && click(node) -> { openedPair = pair; Log.e("LazyCar", "pair: opened $pair") }
+                n > 0 -> main.postDelayed({ find(n - 1) }, 300)
+                else -> { Log.e("LazyCar", "pair: $pair not on the home screen")
+                    Toast.makeText(this, "Put the ${label(pair)} pair on the first home screen page so GO can open it", Toast.LENGTH_LONG).show() }
+            }
+        }
+        main.postDelayed({ find(10) }, 600)
+    }
+
+    // What the phone's GO did here, so its Shut down undoes exactly that (see [close]).
+    // ponytail: in memory, a helper restart between GO and Shut down forgets it (nothing is undone then).
+    private var opened = false; private var openedPair = ""; private var wokeScreen = false
+    /** Phone Shut down: back to square one, only undoing what its GO did: the car stereo, CarApp's screens, the pair
+     *  (swiped away in Recents, ZUI has no API to close another app), Wi-Fi and Bluetooth, screen off if it was. */
     fun close() {
-        if (!opened) return; opened = false; busyUntil = 0
-        Log.e("LazyCar", "close: CarApp${if (openedMaps) " + Maps" else ""}, screen off: $wokeScreen")
-        getSystemService(android.app.ActivityManager::class.java).appTasks.forEach { it.finishAndRemoveTask() }
-        val lock = wokeScreen
-        fun end() { performGlobalAction(GLOBAL_ACTION_HOME); if (lock) main.postDelayed({ performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) }, 800) }
-        if (!openedMaps) { main.postDelayed({ end() }, 500); return }
-        val maps = Prefs(this).launchA.ifEmpty { "com.google.android.apps.maps" }
-        val label = try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(maps, 0)).toString() } catch (_: Exception) { "Maps" }
-        main.postDelayed({
+        val p = Prefs(this)
+        if (!opened) { p.clearSnap(); return }; opened = false
+        val pair = openedPair; openedPair = ""
+        val lock = wokeScreen; val wifiOff = !p.snapWifiWasOn; val btOff = !p.snapBtWasOn
+        Log.e("LazyCar", "close: CarApp${if (pair.isNotEmpty()) " + $pair" else ""}, stereo off: ${!p.snapConn1}, wifi off: $wifiOff, bt off: $btOff, screen off: $wokeScreen")
+        if (p.mac1.isNotEmpty() && !p.snapConn1) GoAction.disconnectA2dp(this, p.mac1)
+        p.clearSnap()
+        fun end() {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+            if (wifiOff) tiles(listOf(GoAction.WIFI to false), done = { if (lock) performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) })
+            else if (lock) main.postDelayed({ performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) }, 800)
+        }
+        // Both apps of the pair, each swiped up from below its icon in Recents (the tile's icon sits at its top edge).
+        fun swipe(apps: List<String>) {
+            if (apps.isEmpty()) { main.postDelayed({ end() }, 600); return }
             performGlobalAction(GLOBAL_ACTION_RECENTS)
             main.postDelayed({
-                val n = node(label) { it.packageName == ZUI_LAUNCHER && it.viewIdResourceName == "$ZUI_LAUNCHER:id/icon" }
-                if (n == null) Log.e("LazyCar", "close: no Maps in Recents") else {
-                    // The tile's icon sits at its top edge: flick the tile up from below it.
+                val n = windows.mapNotNull { it.root }.firstNotNullOfOrNull { r -> r.findAccessibilityNodeInfosByText(apps[0])
+                    .firstOrNull { it.packageName == ZUI_LAUNCHER && it.viewIdResourceName == "$ZUI_LAUNCHER:id/icon" } }
+                if (n == null) Log.e("LazyCar", "close: no ${apps[0]} in Recents") else {
                     val r = Rect().also { n.getBoundsInScreen(it) }; val y = r.exactCenterY() + 150
                     dispatchGesture(GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(
                         Path().apply { moveTo(r.exactCenterX(), y); lineTo(r.exactCenterX(), 0f) }, 0, 200)).build(), null, null)
-                    Log.e("LazyCar", "close: swiped Maps at $r")
+                    Log.e("LazyCar", "close: swiped ${apps[0]} at $r")
                 }
-                main.postDelayed({ end() }, 900)
+                main.postDelayed({ swipe(apps.drop(1)) }, 900)
             }, 1200)
-        }, 600)
-    }
-
-    private var busyUntil = 0L
-    fun split() {
-        val now = SystemClock.elapsedRealtime(); if (now < busyUntil) return
-        val maps = Prefs(this).launchA.ifEmpty { "com.google.android.apps.maps" }
-        if (isSplit(maps)) return
-        val launch = packageManager.getLaunchIntentForPackage(maps) ?: return fail("$maps not installed")
-        val mapsLabel = try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(maps, 0)).toString() } catch (_: Exception) { "Maps" }
-        val ours = getString(R.string.app_name)
-        busyUntil = now + 20_000; openedMaps = opened
-        Log.e("LazyCar", "split: start")
-        fun done() { busyUntil = 0; Log.e("LazyCar", "split: done split=${isSplit(maps)}") }
-        // ponytail: English ZUI labels ("Split screen"); a localized ZUI needs its string here.
-        fun recents() {
-            // Maps first in front, so its task tile is in Recents; ZUI puts the app picked in Recents on the left.
-            startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            main.postDelayed({
-                performGlobalAction(GLOBAL_ACTION_RECENTS)
-                main.postDelayed({
-                    find("Maps icon in Recents", { node(mapsLabel) { it.packageName == ZUI_LAUNCHER && it.viewIdResourceName == "$ZUI_LAUNCHER:id/icon" } }) {
-                        find("Split screen menu", { node("Split screen") { it.packageName == ZUI_LAUNCHER } }) {
-                            find("CarApp in the picker", { node(ours) { it.packageName == ZUI_PICKER && it.viewIdResourceName == "$ZUI_PICKER:id/appname_tv" } }) {
-                                main.postDelayed({ ratio(); main.postDelayed({ done() }, 800) }, 1200)
-                            }
-                        }
-                    }
-                }, 1000)   // Recents settled
-            }, 1500)
         }
-        // The user's saved Maps + CarApp pair on the home screen or dock: one tap, its own sides and ratio.
-        // Not there (another home page, never saved) or no split after it: the Recents route.
-        performGlobalAction(GLOBAL_ACTION_HOME)
-        main.postDelayed({
-            find("Maps + CarApp pair", { pair(mapsLabel, ours) }, tries = 10, orElse = { Log.e("LazyCar", "split: no pair icon"); recents() }) {
-                main.postDelayed({ if (isSplit(maps)) done() else { Log.e("LazyCar", "split: pair tap gave no split"); recents() } }, 2500)
-            }
-        }, 1200)
-    }
-
-    /** A launcher icon whose label names both apps (ZUI app pairs are labelled with both names). */
-    private fun pair(a: String, b: String): AccessibilityNodeInfo? = windows.mapNotNull { it.root }.firstNotNullOfOrNull { root ->
-        root.findAccessibilityNodeInfosByText(a).firstOrNull { n -> n.packageName == ZUI_LAUNCHER &&
-            listOfNotNull(n.text, n.contentDescription).any { it.contains(a, true) && it.contains(b, true) } } }
-
-    /** Polls up to 4 s for a node, taps its center, then [then]. */
-    private fun find(what: String, get: () -> AccessibilityNodeInfo?, tries: Int = 14, orElse: () -> Unit = { fail("no $what") }, then: () -> Unit) {
-        val n = get()
-        if (n != null) {
-            // A click action survives the Recents animation; a tap at the node's bounds is the fallback.
-            val r = Rect().also { n.getBoundsInScreen(it) }
-            // The label may sit inside the clickable icon view (the launcher's pair icon does): click that.
-            var c: AccessibilityNodeInfo? = n; while (c != null && !c.isClickable) c = c.parent
-            val clicked = c?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
-            if (!clicked) tap(r.exactCenterX(), r.exactCenterY())
-            Log.e("LazyCar", "split: $what at $r click=$clicked"); main.postDelayed(then, 900); return
+        fun ui() {
+            getSystemService(android.app.ActivityManager::class.java).appTasks.forEach { it.finishAndRemoveTask() }
+            main.postDelayed({ swipe(if (pair.isEmpty()) emptyList() else pair.removePrefix(PAIR).split(" and ")) }, 600)
         }
-        if (tries <= 0) return orElse()
-        main.postDelayed({ find(what, get, tries - 1, orElse, then) }, 300)
+        // Bluetooth off is a dialog Android opens only for an app in front: CarApp first, the dialog, then the rest.
+        if (!btOff) { ui(); return }
+        startActivity(Intent(this, DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        main.postDelayed({ GoAction.disableBt(this) }, 800)
+        main.postDelayed({ ui() }, 4000)
     }
-
-    private fun node(text: String, ok: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? =
-        windows.mapNotNull { it.root }.ifEmpty { listOfNotNull(rootInActiveWindow) }.firstNotNullOfOrNull { root ->
-            root.findAccessibilityNodeInfosByText(text).firstOrNull { (it.text?.toString() == text || it.contentDescription?.toString() == text) && ok(it) } }
-
-    private fun tap(x: Float, y: Float) = dispatchGesture(GestureDescription.Builder()
-        .addStroke(GestureDescription.StrokeDescription(Path().apply { moveTo(x, y) }, 0, 60)).build(), null, null)
-
-    /** The divider to the user's saved share for the left app (the launcher pairs use 65 %). */
-    private fun ratio() {
-        val b = windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_SPLIT_SCREEN_DIVIDER }?.let { Rect().also(it::getBoundsInScreen) }
-            ?: run { Log.e("LazyCar", "split: no divider window"); return }
-        val w = resources.displayMetrics.widthPixels
-        val to = w * Prefs(this).splitRatio / 100f
-        dispatchGesture(GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(
-            Path().apply { moveTo(b.exactCenterX(), b.exactCenterY()); lineTo(to, b.exactCenterY()) }, 0, 500)).build(), null, null)
-    }
-
-    /** Maps and CarApp both visible side by side (not PiP, not full width). */
-    private fun isSplit(maps: String): Boolean {
-        val w = resources.displayMetrics.widthPixels
-        val side = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && !it.isInPictureInPictureMode &&
-            Rect().also(it::getBoundsInScreen).width() < w }.mapNotNull { it.root?.packageName?.toString() }
-        return maps in side && packageName in side
-    }
-
-    private fun fail(why: String) { Log.e("LazyCar", "split: $why"); busyUntil = 0; Drive.hint(this) }
 }

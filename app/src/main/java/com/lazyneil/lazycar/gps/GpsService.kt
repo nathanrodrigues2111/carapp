@@ -145,7 +145,7 @@ class GpsService : Service(), LocationListener {
     // Refresh the notification text at most every 5 s.
     private fun gotFix() {
         lastAt = SystemClock.elapsedRealtime()
-        // No notify(): the id is shared, GO and the speaker own its text.
+        // No notify(): the id is shared, GO owns its text.
     }
 
     private var gpsAt = 0L
@@ -158,13 +158,10 @@ class GpsService : Service(), LocationListener {
         override fun run() {
             val now = SystemClock.elapsedRealtime()
             if (mode == "send") active(com.lazyneil.lazycar.GoAction.effectiveState(com.lazyneil.lazycar.Prefs(this@GpsService)) == com.lazyneil.lazycar.GoAction.ON
-                || com.lazyneil.lazycar.media.MediaListener.clients > 0)
+                || com.lazyneil.lazycar.LinkService.clients > 0)
             val onSats = now - gpsAt <= 10000
-            // Zero drops: every fused HIGH_ACCURACY fix is a Wi-Fi scan that stalls the stream, so never while streaming.
-            val streaming = com.lazyneil.lazycar.audio.StreamSender.running && com.lazyneil.lazycar.audio.StreamSender.tablet.isNotEmpty()
-                && getSystemService(android.media.AudioManager::class.java).isMusicActive
             val precise = lastLoc?.let { it.accuracy <= PRECISE_M } == true
-            val holding = precise && (streaming || !needFix && now - preciseAt < REFRESH_MS)
+            val holding = precise && !needFix && now - preciseAt < REFRESH_MS
             // Tunnel: the last satellite fix was moving, dead-reckon along it for up to 30 s, then stand there.
             val reckon = !onSats && lastLoc != null && lastLoc === gpsLoc && gpsLoc!!.speed > 1f
             if (now - sentAt > 900) when {
@@ -178,14 +175,13 @@ class GpsService : Service(), LocationListener {
                 // A registration made while the service had no location capability stays unpermitted ("{na}") and never
                 // delivers: re-register when nothing arrived for 60 s.
                 if (fusedOn && now - maxOf(fixAt, fusedAt) > 60000) fused(false)
-                // Not streaming: one fused fix at Start, on significant motion or after 10 min, then 30 s off.
-                val want = !onSats && !streaming && !holding && now - fusedFixAt > 30000
+                // One fused fix at Start, on significant motion or after 10 min, then 30 s off.
+                val want = !onSats && !holding && now - fusedFixAt > 30000
                 val why = when {
                     onSats -> "gps: satellites, fused off"
                     reckon -> "gps: no satellites, dead reckoning, fused off"
-                    streaming -> "gps: streaming, fused off, holding fix acc=${lastLoc?.accuracy?.toInt()}m"
                     holding -> "gps: still, holding precise fix acc=${lastLoc?.accuracy?.toInt()}m"
-                    want -> "gps: not streaming, high accuracy"
+                    want -> "gps: high accuracy"
                     else -> "gps: fused fix, off for 30 s"
                 }
                 if (why != lastWhy) { Log.e("LazyCar", "$why age=${(now - lastFixAt) / 1000}s"); lastWhy = why }
@@ -218,7 +214,7 @@ class GpsService : Service(), LocationListener {
     }
 
     // Fused only after 10 s without a GNSS fix, HIGH_ACCURACY (Wi-Fi based, ~10 to 20 m indoors; BALANCED is 100 m).
-    // 10 s interval: GMS Wi-Fi scans follow it (1 s interval scanned ~7 times a minute and stalled the audio up to 1 s).
+    // 10 s interval: GMS Wi-Fi scans follow it (1 s interval scanned ~7 times a minute).
     // In the car GNSS works, so no scanning at all.
     // Motion: TYPE_SIGNIFICANT_MOTION (walking or driving, ignores the phone in a hand) or a precise fix older than
     // REFRESH_MS asks fused HIGH_ACCURACY for one new fix of PRECISE_M or better, then it holds again.

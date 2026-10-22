@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Over the blurred art backdrop: light in the middle, vignette to black at the edges. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <gradient android:type="radial" android:gradientRadius="80%p" android:centerX="0.4" android:centerY="0.45"
-        android:startColor="#66000000" android:centerColor="#B3000000" android:endColor="#F0000000" />
-</shape>

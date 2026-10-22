@@ -5,10 +5,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <!-- Tablet speaker over Wi-Fi (audio/) -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Phone GO: mobile data state (TelephonyManager.isDataEnabled) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- GPS link (phone sends, tablet receives and mocks) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -30,27 +28,6 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
-    <queries>
-        <intent>
-            <action android:name="android.media.browse.MediaBrowserService" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:mimeType="audio/*" />
-        </intent>
-        <package android:name="com.andrerinas.wirelesshelper" />
-        <package android:name="com.andrerinas.headunitrevived" />
-        <package android:name="com.google.android.projection.gearhead" />
-        <intent>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.APP_MUSIC" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent>
-    </queries>
 
     <application
         android:name=".App"
@@ -112,7 +89,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="one-tap car audio + bluetooth setup automation" />
+                android:value="one-tap car setup: hotspot, mobile data, location, tablet" />
         </service>
 
         <!-- Tablet "Drive" widget. Role.applyComponents disables it on the phone. -->
@@ -132,7 +109,7 @@
             android:name=".DashboardActivity"
             android:exported="false" />
 
-        <!-- Optional helper (Drive.kt): tablet split + GO wake, phone GO / Shut down dialogs. -->
+        <!-- Optional helper (Drive.kt): phone GO / Shut down toggles, tablet GO wake, stereo, saved pair. -->
         <service
             android:name=".SplitService"
             android:exported="true"
@@ -213,54 +190,10 @@
             </intent-filter>
         </receiver>
 
-        <!-- Tablet controls the phone player: listener grant = access to every media session -->
-        <service
-            android:name=".media.MediaListener"
-            android:exported="true"
-            android:label="CarApp media control"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
         <!-- Phone side of the phone-tablet link (runs between app open or GO and Shut down) -->
         <service
-            android:name=".media.MediaLink"
+            android:name=".LinkService"
             android:exported="false" />
-        <receiver
-            android:name=".media.PhoneMedia$Button"
-            android:exported="false" />
-        <activity
-            android:name=".media.LibraryActivity"
-            android:exported="false"
-            android:parentActivityName=".DashboardActivity" />
-
-        <!-- Tablet player "CarApp (both speakers)": JBL + built-in speaker from one decode -->
-        <service
-            android:name=".audio.CarPlayer"
-            android:exported="true"
-            android:foregroundServiceType="mediaPlayback|microphone">
-            <intent-filter><action android:name="android.media.browse.MediaBrowserService" /></intent-filter>
-        </service>
-
-        <!-- Tablet speaker over Wi-Fi: phone captures media audio, tablet plays it -->
-        <activity
-            android:name=".audio.StreamSender$Consent"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:theme="@style/Theme.Translucent" />
-        <service
-            android:name=".audio.StreamSender"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
-        <service
-            android:name=".audio.StreamReceiver"
-            android:exported="false"
-            android:foregroundServiceType="specialUse|microphone">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="plays the phone's media audio on the head unit speaker" />
-        </service>
 
     </application>
 </manifest>

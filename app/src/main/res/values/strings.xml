@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">CarApp</string>
-    <string name="split_service_desc">Presses for you only what CarApp itself opens: the screen share and Bluetooth dialogs of Start and Shut down on the phone; on the tablet it opens CarApp when the phone starts and puts Maps and CarApp side by side. Nothing else.</string>
+    <string name="split_service_desc">Presses for you only what CarApp itself opens: the Bluetooth dialogs of Start and Shut down on the phone; on the tablet it opens CarApp when the phone starts and taps the app pair you chose in CarApp settings. Nothing else.</string>
 </resources>

@@ -19,72 +19,16 @@
     </style>
 
 
-    <!-- AMOLED: only the window/background turn pure black; cards stay @color/card. -->
-    <style name="ThemeOverlay.LazyCar.Amoled" parent="">
-        <item name="android:colorBackground">@color/bgAmoled</item>
-        <item name="android:windowBackground">@color/bgAmoled</item>
-    </style>
 
     <!-- No-UI GoActivity: framework translucent, no Material widgets used -->
     <style name="Theme.Translucent" parent="@android:style/Theme.Translucent.NoTitleBar" />
 
-    <!-- Card section label: "PLAYER", "OUTPUT" -->
-    <style name="CardLabel">
-        <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">12sp</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:letterSpacing">0.1</item>
-        <item name="android:textColor">@color/secondaryText</item>
-    </style>
 
-    <!-- 56dp tappable row -->
-    <style name="Row56">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">64dp</item>
-        <item name="android:orientation">horizontal</item>
-        <item name="android:gravity">center_vertical</item>
-        <item name="android:background">?attr/selectableItemBackground</item>
-        <item name="android:clickable">true</item>
-        <item name="android:focusable">true</item>
-    </style>
 
-    <!-- 40dp icon circle (FrameLayout, centres a 24dp icon) -->
-    <style name="IconCircle">
-        <item name="android:layout_width">40dp</item>
-        <item name="android:layout_height">40dp</item>
-        <item name="android:background">@drawable/circle_icon_bg</item>
-    </style>
 
-    <style name="RowIcon">
-        <item name="android:layout_width">24dp</item>
-        <item name="android:layout_height">24dp</item>
-        <item name="android:layout_gravity">center</item>
-    </style>
 
-    <style name="RowTitle">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_weight">1</item>
-        <item name="android:layout_marginStart">12dp</item>
-        <item name="android:textSize">@dimen/t_title</item>
-        <item name="android:textColor">?attr/carText</item>
-    </style>
 
-    <style name="NpButton" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
-        <item name="android:layout_width">64dp</item>
-        <item name="android:layout_height">64dp</item>
-        <item name="android:layout_marginHorizontal">4dp</item>
-        <item name="iconSize">32dp</item>
-    </style>
 
-    <style name="CardBox">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="cardCornerRadius">24dp</item>
-        <item name="cardElevation">0dp</item>
-        <item name="cardBackgroundColor">@color/card</item>
-    </style>
 
     <style name="ChevronIcon">
         <item name="android:layout_width">24dp</item>

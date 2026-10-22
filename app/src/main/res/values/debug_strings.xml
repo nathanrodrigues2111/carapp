@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="debug_title">Debug</string>
     <string name="debug_copy">Copy report</string>
     <string name="debug_copied">Report copied</string>
 </resources>

@@ -4,7 +4,7 @@
 
 # CarApp
 
-**One app for the phone and the dash tablet.** One tap on the phone starts car mode: Bluetooth speaker, tablet speaker over Wi-Fi, hotspot, music. The tablet gets the phone's GPS and turns into a reverse camera when the car is in reverse.
+**One app for the phone and the dash tablet.** One tap on the phone starts car mode: hotspot, mobile data, location, and the tablet wakes, connects the car stereo and opens your saved app pair. The tablet gets the phone's GPS and turns into a reverse camera when the car is in reverse.
 
 [![Release](https://img.shields.io/github/v/release/nathanrodrigues2111/lazycar?sort=semver&color=3DDC84)](https://github.com/nathanrodrigues2111/lazycar/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-Android%2012%2B-3DDC84?logo=android&logoColor=white)
@@ -28,23 +28,22 @@ The same APK goes on both devices. The role is detected from the device model (t
 
 | Phone | Tablet |
 | --- | --- |
-| GO / STOP car mode and the GO widget | Drive widget (split screen launch) |
-| Plays to one Bluetooth speaker | Plays the phone's audio over Wi-Fi |
+| GO / Shut down and the GO widget | Drive widget (opens CarApp) |
+| Turns on hotspot, mobile data, location | Wi-Fi and Bluetooth on, connects the car stereo |
 | Sends GPS over the hotspot | Receives GPS and feeds it to Maps as a mock location |
-| Runs the hotspot | Auto-joins the phone's hotspot |
+| | Opens the saved launcher app pair chosen in Settings |
 | | Reverse camera from a USB webcam |
 
-## GO and STOP
+## GO and Shut down
 
-One tap on the phone runs the full sequence, a second tap stops and restores. STOP only undoes what GO turned on.
+One tap on the phone runs the full sequence, a second tap shuts down and restores. Every step checks first and skips what is already on; Shut down only undoes what GO turned on.
 
-| GO does | STOP does |
+| GO does | Shut down does |
 | --- | --- |
-| Turns Bluetooth on and connects the chosen speaker | Restores the Bluetooth state from before GO |
-| Optionally turns on hotspot and mobile data | Reverts hotspot and mobile data it changed |
-| Streams audio to the tablet over Wi-Fi | Stops the stream |
-| Sets an optional start volume | Leaves already-on features untouched |
-| Launches your music player and presses play | |
+| Phone: hotspot, mobile data, location on | Turns off only those GO turned on |
+| Tablet: wakes, Wi-Fi and Bluetooth on, connects the car stereo | Disconnects the stereo, Wi-Fi and Bluetooth back as before |
+| Tablet: opens the saved app pair | Closes CarApp and the pair, screen off if it was |
+| Shares GPS with the tablet | Stops GPS and the link |
 
 ## Features
 
@@ -52,35 +51,29 @@ One tap on the phone runs the full sequence, a second tap stops and restores. ST
 | --- | --- |
 | **GPS sharing** | The phone sends its location over the hotspot (UDP 47474), the tablet replays it as a mock location. For tablets without working GPS. |
 | **Rear camera** | A USB webcam powered from the reverse light. Reverse on, the camera appears full screen, even over the lockscreen. Reverse off, it closes. |
-| **Tablet speaker** | The phone's audio plays on the tablet over Wi-Fi, auto synced to the Bluetooth speaker using the measured Bluetooth latency and clock offset. |
-| **Bluetooth speaker** | One Bluetooth speaker on the phone. |
-| **Tablet player** | Maps on the left, the player on the right. Big art, title, seek bar, previous, play and next. Full width it shows a side rail with art left and controls right. |
-| **Accent from art** | The accent color follows the album art on every screen, the same on the phone and the tablet. |
-| **Library** | Browse the phone's player library or its music files from the tablet, with the playing song highlighted. |
-| **Split screen** | The tablet opens Maps + CarApp side by side on start, on GO and when CarApp opens (Settings, Drive, Open with Maps). |
+| **Saved app pair** | On GO the tablet taps the launcher pair you chose (Settings, Drive, Open on GO), for example Maps/Spotify. CarApp never builds a split itself. |
 | **Hotspot auto-join** | The tablet joins the phone's hotspot on its own. |
 | **Boot autostart** | GPS and the receivers start on boot. |
-| **Debug screen** | A check per part (permissions, accessibility, mock location, GPS, hotspot join, rear camera, boot receiver) with Fix and test buttons. |
+| **Debug screen** | A check per part (helper, mock location, GPS, hotspot join, car stereo, rear camera, boot receiver) with Fix and test buttons. |
 
 ## Known limits
 
-- Spotify blocks audio capture on its tracks, so it cannot play on the tablet speaker. The default player is YouTube Music.
-- OxygenOS 16.0.10.601 removed classic dual audio (the old two speaker Audio sharing), so the phone drives one Bluetooth speaker and the tablet is the second one over Wi-Fi.
-- ZUI on the Lenovo tablet ignores the standard split screen launch. Split screen works only by tapping a saved Maps + CarApp pair on the launcher, so save that pair first.
-- The auto-tap depends on SystemUI element ids. A system update can move them and break the tapping until CarApp is updated.
-- Reinstalling via `adb install -r` (or `am force-stop`) unbinds the Accessibility service on OnePlus. Re-enable it in Settings > Accessibility.
+- Android 16 has no app API for hotspot, mobile data, location or Wi-Fi, and Bluetooth on or off is a system dialog. The optional CarApp helper (Accessibility) taps the Quick Settings tiles and dialog buttons; with it off, CarApp opens each system screen for you.
+- ZUI keeps app pairs inside its launcher and starts them through hidden APIs, so the helper taps the pair icon. Keep the pair on the first home screen page.
+- The helper matches English tile labels. A system update can move them and break the tapping until CarApp is updated.
+- `am force-stop` unbinds the Accessibility service on OnePlus. Re-enable it in Settings > Accessibility.
 
 ## Setup
 
 1. Install the APK on both the phone and the tablet.
-2. Open CarApp on each and grant the one-time permissions it asks for (location including background, nearby devices, notifications, camera, microphone and screen capture for the audio stream, battery optimisation exemption).
-3. Enable CarApp in Settings > Accessibility on both devices.
+2. Open CarApp on each and grant the one-time permissions it asks for (location, nearby devices on the tablet, notifications, camera and microphone for the webcam, battery optimisation exemption on the tablet).
+3. Turn on CarApp helper in Settings > Accessibility on both devices.
 4. On the tablet, set CarApp as the mock location app in Developer options > Select mock location app.
 5. On the tablet, plug in the webcam once and pick "Always open CarApp" for that USB device.
-6. On the tablet, save a Maps + CarApp pair once on the launcher (for split screen).
-7. Add the GO widget on the phone. Pick the speaker and the player. Settings save themselves.
+6. On the tablet, save an app pair on the launcher (long press an app, Split screen), show the home screen once, then pick it in Settings, Drive, Open on GO. Pick the car stereo in Settings.
+7. Add the GO widget on the phone.
 
-Settings sections: Audio (speaker volumes, tablet speaker, sync trim), Drive (Open with Maps), GPS, Camera, Connection (hotspot), Advanced (device role, widget, help, debug).
+Settings sections: Car stereo and Drive (tablet), GPS, Camera, Connection (hotspot), Advanced (device role, shut down, help, debug).
 
 ## Rear camera hardware
 
@@ -117,7 +110,7 @@ Download the APK from the [Releases page](https://github.com/nathanrodrigues2111
 
 ## Privacy
 
-CarApp makes no internet requests and collects no data. GPS and audio only travel between the phone and the tablet on the phone's hotspot. The Accessibility service is used only to operate system panels: the Bluetooth prompts, the hotspot and mobile data Quick Settings tiles, the screen capture consent, and the launcher's app pair icon.
+CarApp makes no internet requests and collects no data. GPS and settings only travel between the phone and the tablet on the phone's hotspot. The Accessibility service is used only to operate system panels: the Bluetooth prompts, the hotspot, mobile data, location and Wi-Fi Quick Settings tiles, and the launcher's app pair icon.
 
 <details>
 <summary><b>Testing notes</b></summary>

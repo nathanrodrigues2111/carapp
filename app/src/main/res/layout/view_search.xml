@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Library search: the shared filled field with a search icon. -->
-<com.google.android.material.textfield.TextInputLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    style="@style/CarField" app:hintEnabled="false" app:startIconDrawable="@drawable/ic_search" app:startIconTint="?attr/carTextDim">
-    <com.google.android.material.textfield.TextInputEditText android:id="@+id/searchField" style="@style/CarFieldText"
-        android:hint="Search" android:singleLine="true" android:paddingTop="@dimen/sp3" android:paddingBottom="@dimen/sp3" />
-</com.google.android.material.textfield.TextInputLayout>

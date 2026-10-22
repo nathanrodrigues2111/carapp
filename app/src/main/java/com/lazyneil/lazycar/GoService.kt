@@ -25,8 +25,7 @@ class GoService : Service() {
         val dur = when (action) {
             "stop" -> GoAction.stop(applicationContext)
             "stopPeer" -> GoAction.stop(applicationContext, fromPeer = true)
-            "volume" -> { GoAction.applyVolumesNow(applicationContext); 4000L }
-            "go" -> { Prefs(this).shutDown = false; com.lazyneil.lazycar.gps.GpsService.startIfIdle(this); com.lazyneil.lazycar.media.Files.refresh(this); GoAction.run(applicationContext) }
+            "go" -> { Prefs(this).shutDown = false; com.lazyneil.lazycar.gps.GpsService.startIfIdle(this); GoAction.run(applicationContext) }
             else -> 0L
         }
         // Live until the real end of the sequence: runSequence pushes endAt out once it knows its steps.
@@ -42,7 +41,6 @@ class GoService : Service() {
     companion object {
         /** Every CarApp service shows this one notification id, so the shade holds one CarApp entry. */
         const val NOTIF_ID = 47475
-        /** One silent channel for it: no sound, no status bar icon, swipeable (never setOngoing). */
         /** "Shut down" on every CarApp notification: restores the pre-GO state on both devices and stops everything. */
         fun shutAction(ctx: Context): Notification.Action = Notification.Action.Builder(
             android.graphics.drawable.Icon.createWithResource(ctx, R.drawable.ic_power), "Shut down",
