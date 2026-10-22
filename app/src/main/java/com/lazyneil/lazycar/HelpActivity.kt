@@ -22,11 +22,11 @@ class HelpActivity : AppCompatActivity() {
 
     private val qa = listOf(
         "What does Start do?" to
-            "On the phone Start turns on the hotspot, mobile data and location when they are off, and shares the phone GPS with the tablet. The tablet wakes, turns on Wi-Fi and Bluetooth, connects the car stereo and opens your saved app pair. With the CarApp helper off, CarApp opens each system screen for you instead.",
+            "On the phone Start asks for what is off: location (the system dialog), mobile data and hotspot (each opens its settings screen). Then it shares the phone GPS with the tablet. With the CarApp helper on, the tablet wakes, turns on Wi-Fi and Bluetooth, connects the car stereo and opens your saved app pair.",
         "What does Shut down do?" to
-            "Shut down puts back what was on before you tapped Start and stops everything CarApp runs on both devices. Only what Start switched on gets turned off.",
+            "Shut down stops everything CarApp runs on both devices. On the phone it leaves data and location as they are and offers to turn off the hotspot if Start turned it on. The tablet puts back Bluetooth, Wi-Fi and the car stereo as they were and closes the app pair.",
         "How do I set it up the first time?" to
-            "1. Open CarApp on the phone and the tablet and follow the setup line.\n2. On the tablet, pair the car stereo in Android's Bluetooth settings and pick it in CarApp Settings.\n3. Add the Start widget on the phone.",
+            "1. Open CarApp on the phone and the tablet and follow the setup line.\n2. On the tablet, turn on CarApp helper in Accessibility, pair the car stereo in Android's Bluetooth settings and pick it in CarApp Settings.\n3. Add the Start widget on the phone.",
         "How does the tablet open?" to
             "With the CarApp helper on, the phone's Start wakes the tablet and opens the app pair chosen in Settings, Drive, Open on GO. Save a pair on the tablet home screen first (long press an app, Split screen, save), then show the home screen once so CarApp sees it.",
         "Does CarApp send any data?" to

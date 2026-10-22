@@ -184,7 +184,6 @@ class MainActivity : AppCompatActivity() {
         val item: Pair<String, () -> Unit>? = when {
             !perm(Manifest.permission.ACCESS_FINE_LOCATION) -> "Precise location is off. Tap to allow" to {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 1) }
-            Ui.offerHelper(this) -> "Let CarApp turn on hotspot, mobile data and location for you: tap, then Downloaded apps, CarApp helper, turn on" to { Ui.openHelper(this) }
             else -> null
         }
         val card = findViewById<View>(R.id.setupCard)

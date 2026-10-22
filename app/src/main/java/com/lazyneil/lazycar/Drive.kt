@@ -65,11 +65,10 @@ object Drive {
 
 /**
  * Optional "CarApp helper": the user turns it on once in Android's Accessibility settings, CarApp never turns it on or
- * back on. Off = each toggle is a system screen for the user. Apps have no API for hotspot, mobile data, location or
- * Wi-Fi on Android 16, and Bluetooth on or off is a system dialog, so the helper taps Quick Settings tiles ([tiles]) and
- * dialog buttons ([press]) for exactly what GO and Shut down need. Phone: hotspot, mobile data, location. Tablet: wakes
- * CarApp when the phone presses GO (system bound, so it listens with no notification and no other service, also after
- * Shut down), Wi-Fi and Bluetooth on, the car stereo, then taps the launcher pair chosen in Settings ([Prefs.goPair]).
+ * back on. Tablet only (Role disables it on the phone). It wakes CarApp when the phone presses GO (system bound, so it
+ * listens with no notification and no other service, also after Shut down), then: Wi-Fi on (a Quick Settings tile,
+ * [tiles]; apps have no Wi-Fi API on Android 16), Bluetooth on (the system dialog, [press]), the car stereo, and a tap
+ * on the launcher pair chosen in Settings ([Prefs.goPair]).
  * ZUI keeps its pairs in the launcher's own database (signature permission) and starts them through hidden task APIs,
  * so a tap on the icon is the only route.
  */
@@ -94,8 +93,8 @@ class SplitService : AccessibilityService() {
         if (Role.isTablet(this)) thread(name = "wake-listen", isDaemon = true) { listen() }
     }
 
-    /** GO / Shut down opened a system dialog: its confirm button is pressed for the user while armed. Only system
-     *  dialogs, only these labels, only for [ms]. */
+    /** GO / Shut down opened a system dialog: its confirm button is pressed while armed. Only system dialogs, only these
+     *  labels, only for [ms]. Unarmed the helper does nothing but listen for the phone and note the saved pairs. */
     fun press(texts: List<String>, ms: Long) {
         val now = SystemClock.uptimeMillis()
         pressTexts = (if (now < pressUntil) pressTexts else emptyList()) + texts.filter { it !in pressTexts }
@@ -194,16 +193,15 @@ class SplitService : AccessibilityService() {
         if (!p.snapWifiWasOn) tiles(listOf(GoAction.WIFI to true), done = { bluetooth() }) else bluetooth()
     }
 
-    /** One Quick Settings pass: each tile whose description contains a label goes to its wanted state, [seen] gets the
-     *  state it had. Checks first, so a tile already right is left alone. Tiles not found in 6 s are logged. */
-    fun tiles(want: List<Pair<String, Boolean>>, seen: (String, Boolean) -> Unit = { _, _ -> }, done: () -> Unit = {}) {
+    /** One Quick Settings pass: each tile whose description contains a label goes to its wanted state. Checks first, so
+     *  a tile already right is left alone. Tiles not found in 6 s are logged. */
+    private fun tiles(want: List<Pair<String, Boolean>>, done: () -> Unit) {
         val left = want.toMutableList(); val until = SystemClock.uptimeMillis() + 6000
         performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
         fun step() {
             val roots = windows.mapNotNull { it.root }.filter { it.packageName == "com.android.systemui" }
             for ((label, on) in left.toList()) {
                 val n = roots.firstNotNullOfOrNull { r -> r.findAccessibilityNodeInfosByText(label).firstOrNull { it.isCheckable && it.contentDescription?.contains(label, true) == true } } ?: continue
-                seen(label, n.isChecked)
                 Log.e("LazyCar", "tile '$label' ${if (n.isChecked == on) "already $on" else "${n.isChecked} -> $on ok=${click(n)}"}")
                 left.remove(label to on)
             }
@@ -245,34 +243,33 @@ class SplitService : AccessibilityService() {
         if (p.mac1.isNotEmpty() && !p.snapConn1) GoAction.disconnectA2dp(this, p.mac1)
         p.clearSnap()
         fun end() {
+            fun done() { getSystemService(android.app.ActivityManager::class.java).appTasks.forEach { it.finishAndRemoveTask() }
+                performGlobalAction(GLOBAL_ACTION_HOME); if (lock) main.postDelayed({ performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) }, 800) }
+            // Bluetooth off is a dialog Android opens only for an app in front: CarApp first, then the dialog.
+            fun bt() { if (!btOff) { done(); return }
+                startActivity(Intent(this, DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                main.postDelayed({ GoAction.disableBt(this) }, 800); main.postDelayed({ done() }, 4000) }
             performGlobalAction(GLOBAL_ACTION_HOME)
-            if (wifiOff) tiles(listOf(GoAction.WIFI to false), done = { if (lock) performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) })
-            else if (lock) main.postDelayed({ performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) }, 800)
+            if (wifiOff) tiles(listOf(GoAction.WIFI to false), done = { bt() }) else bt()
         }
-        // Both apps of the pair, each swiped up from below its icon in Recents (the tile's icon sits at its top edge).
-        fun swipe(apps: List<String>) {
-            if (apps.isEmpty()) { main.postDelayed({ end() }, 600); return }
+        // The pair is one Recents tile titled "Maps/Spotify": flick it up.
+        getSystemService(android.app.ActivityManager::class.java).appTasks.forEach { it.finishAndRemoveTask() }
+        if (pair.isEmpty()) { main.postDelayed({ end() }, 600); return }
+        main.postDelayed({
             performGlobalAction(GLOBAL_ACTION_RECENTS)
             main.postDelayed({
-                val n = windows.mapNotNull { it.root }.firstNotNullOfOrNull { r -> r.findAccessibilityNodeInfosByText(apps[0])
-                    .firstOrNull { it.packageName == ZUI_LAUNCHER && it.viewIdResourceName == "$ZUI_LAUNCHER:id/icon" } }
-                if (n == null) Log.e("LazyCar", "close: no ${apps[0]} in Recents") else {
-                    val r = Rect().also { n.getBoundsInScreen(it) }; val y = r.exactCenterY() + 150
+                val title = label(pair)
+                val n = windows.mapNotNull { it.root }.firstNotNullOfOrNull { r -> r.findAccessibilityNodeInfosByText(title)
+                    .firstOrNull { it.packageName == ZUI_LAUNCHER && it.viewIdResourceName == "$ZUI_LAUNCHER:id/task_title" } }
+                if (n == null) Log.e("LazyCar", "close: no $title in Recents") else {
+                    // The title is the tile's top strip: flick from the snapshot below it, a long way up.
+                    val r = Rect().also { n.getBoundsInScreen(it) }; val y = r.exactCenterY() + 200
                     dispatchGesture(GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(
                         Path().apply { moveTo(r.exactCenterX(), y); lineTo(r.exactCenterX(), 0f) }, 0, 200)).build(), null, null)
-                    Log.e("LazyCar", "close: swiped ${apps[0]} at $r")
+                    Log.e("LazyCar", "close: swiped $title at $r")
                 }
-                main.postDelayed({ swipe(apps.drop(1)) }, 900)
+                main.postDelayed({ end() }, 900)
             }, 1200)
-        }
-        fun ui() {
-            getSystemService(android.app.ActivityManager::class.java).appTasks.forEach { it.finishAndRemoveTask() }
-            main.postDelayed({ swipe(if (pair.isEmpty()) emptyList() else pair.removePrefix(PAIR).split(" and ")) }, 600)
-        }
-        // Bluetooth off is a dialog Android opens only for an app in front: CarApp first, the dialog, then the rest.
-        if (!btOff) { ui(); return }
-        startActivity(Intent(this, DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        main.postDelayed({ GoAction.disableBt(this) }, 800)
-        main.postDelayed({ ui() }, 4000)
+        }, 600)
     }
 }

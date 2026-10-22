@@ -33,6 +33,7 @@ object Role {
         toggle(ctx, "com.lazyneil.lazycar.rear.UsbLaunch", tablet)
         toggle(ctx, "com.lazyneil.lazycar.GoWidget", !tablet)
         toggle(ctx, "com.lazyneil.lazycar.DriveWidget", tablet)
+        toggle(ctx, "com.lazyneil.lazycar.SplitService", tablet)   // the phone uses no accessibility at all
     }
 
     private fun toggle(ctx: Context, cls: String, on: Boolean) {

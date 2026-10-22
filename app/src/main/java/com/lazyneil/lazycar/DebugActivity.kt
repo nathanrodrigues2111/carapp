@@ -103,7 +103,7 @@ class DebugActivity : AppCompatActivity() {
         else Row("Tablet link", {
             if (!LinkService.bound) St.WAITING to "Off until the app is opened or GO"
             else St.PASS to "Listening, ${LinkService.clients} tablet(s)" })
-        rows += Row("CarApp helper", { if (Ui.helperOn(this)) St.PASS to "On" else St.WAITING to "Off, the dialogs and the pair are one tap each" },
+        if (tablet) rows += Row("CarApp helper", { if (Ui.helperOn(this)) St.PASS to "On" else St.WAITING to "Off, the phone's GO cannot wake this tablet" },
             fix = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         rows += Row("Battery optimisation", ::battery, fix = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         if (tablet) rows += Row("Mock location app", ::mock, fix = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))

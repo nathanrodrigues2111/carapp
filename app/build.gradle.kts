@@ -53,6 +53,8 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("com.google.android.material:material:1.14.0")
+    // Phone GO: the one-tap "Turn on location" dialog (SettingsClient resolution); no public API besides it.
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     // UVC webcam (reverse camera). 3.3.x is broken on JitPack; immersionbar and webpdecoder are dead JCenter deps.
     implementation("com.github.jiangdongguo.AndroidUSBCamera:libausbc:3.2.7") {
         exclude(group = "com.gyf.immersionbar")

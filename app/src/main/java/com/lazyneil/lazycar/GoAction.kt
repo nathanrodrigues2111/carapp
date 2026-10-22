@@ -14,8 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The phone's "get in car" sequence, and its undo (Shut down). Runs from a foreground GoService so the postDelayed chain
- * survives independent of any activity. Every step checks first: anything already on is left alone, and Shut down
- * only turns off what GO turned on. Bluetooth helpers here serve the tablet's side (car stereo, see [SplitService]).
+ * survives independent of any activity. [GoActivity] asks first for what is off (location, mobile data, hotspot). Bluetooth helpers here serve the tablet's side (car stereo, see [SplitService]).
  */
 object GoAction {
     const val IDLE = 0; const val STARTING = 1; const val ON = 2; const val STOPPING = 3
@@ -48,38 +47,30 @@ object GoAction {
         }, STUCK_MS + 500L)
     }
 
-    /** Entry for GO (phone). Hotspot, mobile data and location on, each only when off; Bluetooth is the tablet's. Returns ms alive. */
+    /** Entry for GO (phone), after [GoActivity] walked through the system screens: link, tablet wake, ON. */
     fun run(ctx: Context): Long {
         val p = Prefs(ctx)
         p.shutDown = false; LinkService.wake(ctx)
         Drive.wakeTablet(ctx)   // the tablet's helper does its side
         setState(ctx, p, STARTING)
-        val ap = hotspotOn(ctx); val loc = locationOn(ctx); val data = dataOn(ctx)
-        p.snapApWasOn = ap ?: true; p.snapLocWasOn = loc; p.snapDataWasOn = data   // hotspot unknown: the tile tells
-        log("snapshot: hotspot=$ap data=$data location=$loc")
-        val want = listOfNotNull(HOTSPOT.takeIf { ap != true }, DATA.takeIf { !data }, LOCATION.takeIf { !loc })
-        if (want.isNotEmpty()) SplitService.self?.tiles(want.map { it to true }, seen = { l, was -> if (l == HOTSPOT) p.snapApWasOn = was })
-            ?: log("helper off: GoActivity opened the screens for $want")
-        endAt = SystemClock.uptimeMillis() + 8000L
+        endAt = SystemClock.uptimeMillis() + 1000L
         main.postDelayed({ if (p.state == STARTING) setState(ctx, p, ON) }, 300L)
-        return 8000L
+        return 1000L
     }
 
-    // QS tile labels (contains, any case): OxygenOS "Personal hotspot", "SIM1, Mobile data off" (its on state names only
-    // the SIM), "Location reporting on."; ZUI "Wi-Fi". ponytail: English labels and SIM1 only.
-    const val HOTSPOT = "hotspot"; const val DATA = "SIM1"; const val LOCATION = "Location"; const val WIFI = "Wi-Fi"
+    const val HOTSPOT = "hotspot"; const val DATA = "data"; const val LOCATION = "location"
+    const val WIFI = "Wi-Fi"   // the tablet's Quick Settings tile (ZUI), any case
     fun locationOn(ctx: Context) = ctx.getSystemService(android.location.LocationManager::class.java).isLocationEnabled
     fun dataOn(ctx: Context) = try { ctx.getSystemService(android.telephony.TelephonyManager::class.java).isDataEnabled } catch (e: Exception) { true }
     /** Hidden WifiManager.isWifiApEnabled; null when this ROM blocks it. */
     fun hotspotOn(ctx: Context): Boolean? = try {
         android.net.wifi.WifiManager::class.java.getMethod("isWifiApEnabled").invoke(ctx.getSystemService(android.net.wifi.WifiManager::class.java)) as Boolean
     } catch (e: Exception) { null }
-    /** Helper off: the system screen for each toggle, the user flips it (from an activity: Android blocks it otherwise). */
-    fun openScreens(ctx: Context, labels: List<String>) = labels.forEach {
-        if (it == HOTSPOT) Ui.openSettings(ctx, Intent().setClassName("com.android.settings", "com.android.settings.Settings\$TetherSettingsActivity"),
-            Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS), fallback = false)
-        else if (it == DATA) Ui.openSettings(ctx, Intent(android.provider.Settings.Panel.ACTION_INTERNET_CONNECTIVITY), fallback = false)
-        else Ui.openSettings(ctx, Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS), fallback = false)
+    /** The system screen where the user flips [item]. */
+    fun screen(item: String): Intent = when (item) {
+        HOTSPOT -> Intent("com.android.settings.WIFI_TETHER_SETTINGS")
+        DATA -> Intent(android.provider.Settings.Panel.ACTION_INTERNET_CONNECTIVITY)
+        else -> Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
     }
 
     // ---- Bluetooth profile-proxy helper (connect / disconnect / getConnected) ----
@@ -133,7 +124,7 @@ object GoAction {
     @Volatile var quietUntil = 0L
     const val BT_WAIT_MS = 30000L
 
-    /** Undo GO by restoring the pre-GO snapshot: only turn off what GO itself turned on. Returns ms alive. */
+    /** Stop GPS, the link and the tablet side. Returns ms alive. */
     fun stop(ctx: Context, fromPeer: Boolean = false): Long {
         val p = Prefs(ctx)
         p.shutDown = true; quietUntil = SystemClock.uptimeMillis() + BT_WAIT_MS
@@ -141,18 +132,14 @@ object GoAction {
         // First, while the hotspot still carries the link: the tablet restores its own side.
         if (!fromPeer) LinkService.shutDownTablets()
         setState(ctx, p, STOPPING)
-        val off = restoreList(p)
-        log("restore: turn off $off")
         com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
-        // The hotspot goes last: the shutdown line to the tablet rides on it.
-        if (off.isNotEmpty()) main.postDelayed({ SplitService.self?.tiles(off.map { it to false }) ?: log("helper off: GoActivity opened the screens for $off") }, 1000L)
         val end = 1800L
         main.postDelayed({ setState(ctx, p, IDLE); p.clearSnap(); LinkService.sleep() }, end)
         clearNotifications(ctx, end + 1500L)
         return end + 6000L
     }
-    /** What phone GO turned on, to turn off again. */
-    fun restoreList(p: Prefs) = listOfNotNull(LOCATION.takeIf { !p.snapLocWasOn }, DATA.takeIf { !p.snapDataWasOn }, HOTSPOT.takeIf { !p.snapApWasOn })
+    /** Shut down leaves data and location as they are; it offers to turn off a hotspot GO turned on. */
+    fun hotspotByGo(ctx: Context, p: Prefs) = !p.snapApWasOn && hotspotOn(ctx) != false
 
     /** Tablet side of Shut down: stop its services and the phone link; the helper undoes what the phone's GO did here. */
     private fun stopTablet(ctx: Context, p: Prefs, fromPeer: Boolean): Long {

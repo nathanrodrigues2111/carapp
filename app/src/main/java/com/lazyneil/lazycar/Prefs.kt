@@ -30,15 +30,13 @@ class Prefs(ctx: Context) {
 
     // ---- GO-time snapshot, restored by Shut down. Defaults are "was on/connected" so a Shut down with no prior GO
     //      tears nothing down. ----
-    // Phone: hotspot, mobile data and location. Tablet: Wi-Fi, Bluetooth and the car stereo link.
+    // Phone: the hotspot. Tablet: Wi-Fi, Bluetooth and the car stereo link.
     var snapApWasOn: Boolean get() = b("snapAp", true); set(v) = putB("snapAp", v)
-    var snapLocWasOn: Boolean get() = b("snapLoc", true); set(v) = putB("snapLoc", v)
-    var snapDataWasOn: Boolean get() = b("snapData", true); set(v) = putB("snapData", v)
     var snapWifiWasOn: Boolean get() = b("snapWifi", true); set(v) = putB("snapWifi", v)
     var snapBtWasOn: Boolean get() = b("snapBt", true); set(v) = putB("snapBt", v)
     var snapConn1: Boolean get() = b("snapC1", true); set(v) = putB("snapC1", v)
     /** After a restore the snapshot is spent: a later Shut down without GO must not undo the user's own changes. */
-    fun clearSnap() = sp.edit().apply { listOf("snapAp", "snapLoc", "snapData", "snapWifi", "snapBt", "snapC1").forEach { remove(it) } }.apply()
+    fun clearSnap() = sp.edit().apply { listOf("snapAp", "snapWifi", "snapBt", "snapC1").forEach { remove(it) } }.apply()
     /** Shut down: nothing of CarApp runs (boot, hotspot join, link) until the app is opened or GO is pressed. */
     var shutDown: Boolean get() = b("shutDown", false); set(v) = putB("shutDown", v)
 }

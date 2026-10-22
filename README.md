@@ -4,7 +4,7 @@
 
 # CarApp
 
-**One app for the phone and the dash tablet.** One tap on the phone starts car mode: hotspot, mobile data, location, and the tablet wakes, connects the car stereo and opens your saved app pair. The tablet gets the phone's GPS and turns into a reverse camera when the car is in reverse.
+**One app for the phone and the dash tablet.** One tap on the phone starts car mode: it asks for location, mobile data and hotspot if they are off, and the tablet wakes, connects the car stereo and opens your saved app pair. The tablet gets the phone's GPS and turns into a reverse camera when the car is in reverse.
 
 [![Release](https://img.shields.io/github/v/release/nathanrodrigues2111/lazycar?sort=semver&color=3DDC84)](https://github.com/nathanrodrigues2111/lazycar/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-Android%2012%2B-3DDC84?logo=android&logoColor=white)
@@ -29,20 +29,20 @@ The same APK goes on both devices. The role is detected from the device model (t
 | Phone | Tablet |
 | --- | --- |
 | GO / Shut down and the GO widget | Drive widget (opens CarApp) |
-| Turns on hotspot, mobile data, location | Wi-Fi and Bluetooth on, connects the car stereo |
+| Asks for location, mobile data, hotspot when off | Wi-Fi and Bluetooth on, connects the car stereo |
 | Sends GPS over the hotspot | Receives GPS and feeds it to Maps as a mock location |
 | | Opens the saved launcher app pair chosen in Settings |
 | | Reverse camera from a USB webcam |
 
 ## GO and Shut down
 
-One tap on the phone runs the full sequence, a second tap shuts down and restores. Every step checks first and skips what is already on; Shut down only undoes what GO turned on.
+One tap on the phone runs the sequence, a second tap shuts down. Every step checks first and skips what is already right.
 
 | GO does | Shut down does |
 | --- | --- |
-| Phone: hotspot, mobile data, location on | Turns off only those GO turned on |
-| Tablet: wakes, Wi-Fi and Bluetooth on, connects the car stereo | Disconnects the stereo, Wi-Fi and Bluetooth back as before |
-| Tablet: opens the saved app pair | Closes CarApp and the pair, screen off if it was |
+| Phone: location off = the system "Turn on location" dialog; mobile data or hotspot off = a CarApp dialog that opens its settings screen | Phone: leaves data and location; offers to turn off a hotspot GO turned on |
+| Tablet: wakes, Wi-Fi and Bluetooth on, connects the car stereo | Tablet: disconnects the stereo, Wi-Fi and Bluetooth back as before |
+| Tablet: opens the saved app pair | Tablet: closes CarApp and the pair, screen off if it was |
 | Shares GPS with the tablet | Stops GPS and the link |
 
 ## Features
@@ -58,16 +58,15 @@ One tap on the phone runs the full sequence, a second tap shuts down and restore
 
 ## Known limits
 
-- Android 16 has no app API for hotspot, mobile data, location or Wi-Fi, and Bluetooth on or off is a system dialog. The optional CarApp helper (Accessibility) taps the Quick Settings tiles and dialog buttons; with it off, CarApp opens each system screen for you.
-- ZUI keeps app pairs inside its launcher and starts them through hidden APIs, so the helper taps the pair icon. Keep the pair on the first home screen page.
-- The helper matches English tile labels. A system update can move them and break the tapping until CarApp is updated.
-- `am force-stop` unbinds the Accessibility service on OnePlus. Re-enable it in Settings > Accessibility.
+- Android 16 has no app API for hotspot, mobile data or location, so the phone asks the user the standard way. The phone uses no Accessibility at all.
+- On the tablet the optional CarApp helper (Accessibility) hears the phone's GO, taps the Wi-Fi tile and the Bluetooth dialog (no app API either), and taps the pair icon: ZUI keeps app pairs inside its launcher and starts them through hidden APIs. Keep the pair on the first home screen page.
+- The helper matches English labels. A system update can move them and break the tapping until CarApp is updated.
 
 ## Setup
 
 1. Install the APK on both the phone and the tablet.
 2. Open CarApp on each and grant the one-time permissions it asks for (location, nearby devices on the tablet, notifications, camera and microphone for the webcam, battery optimisation exemption on the tablet).
-3. Turn on CarApp helper in Settings > Accessibility on both devices.
+3. On the tablet, turn on CarApp helper in Settings > Accessibility.
 4. On the tablet, set CarApp as the mock location app in Developer options > Select mock location app.
 5. On the tablet, plug in the webcam once and pick "Always open CarApp" for that USB device.
 6. On the tablet, save an app pair on the launcher (long press an app, Split screen), show the home screen once, then pick it in Settings, Drive, Open on GO. Pick the car stereo in Settings.
@@ -110,7 +109,7 @@ Download the APK from the [Releases page](https://github.com/nathanrodrigues2111
 
 ## Privacy
 
-CarApp makes no internet requests and collects no data. GPS and settings only travel between the phone and the tablet on the phone's hotspot. The Accessibility service is used only to operate system panels: the Bluetooth prompts, the hotspot, mobile data, location and Wi-Fi Quick Settings tiles, and the launcher's app pair icon.
+CarApp makes no internet requests and collects no data. GPS and settings only travel between the phone and the tablet on the phone's hotspot. The Accessibility service runs on the tablet only and is used only to operate system panels: the Bluetooth prompts, the Wi-Fi Quick Settings tile, and the launcher's app pair icon.
 
 <details>
 <summary><b>Testing notes</b></summary>
@@ -127,4 +126,4 @@ MIT. See [`LICENSE`](LICENSE).
 
 ---
 
-<div align="center"><sub>Built with Kotlin, Material 3, and one Accessibility service.</sub></div>
+<div align="center"><sub>Built with Kotlin, Material 3, and one Accessibility service on the tablet.</sub></div>
