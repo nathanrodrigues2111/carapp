@@ -1,129 +1,120 @@
 <div align="center">
-
 <img src="shots/logo.png" width="96" alt="CarApp icon">
 
 # CarApp
 
-**One app for the phone and the dash tablet.** One tap on the phone starts car mode: it asks for location, mobile data and hotspot if they are off, and the tablet wakes, connects the car stereo and opens your saved app pair. The tablet gets the phone's GPS and turns into a reverse camera when the car is in reverse.
+**One tap on the phone sets up the car dash on the tablet.**
 
 [![Release](https://img.shields.io/github/v/release/nathanrodrigues2111/lazycar?sort=semver&color=3DDC84)](https://github.com/nathanrodrigues2111/lazycar/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-Android%2012%2B-3DDC84?logo=android&logoColor=white)
-![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?logo=kotlin&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Tested](https://img.shields.io/badge/tested%20on-OnePlus%2015%20%2B%20Lenovo%20Tab%20Plus-EB0028?logo=android&logoColor=white)
 
-[![Download APK](https://img.shields.io/badge/Download%20APK-15171C?style=for-the-badge&logo=android&logoColor=3DDC84)](https://github.com/nathanrodrigues2111/lazycar/releases/latest)
-
-<img src="shots/main.png" width="200" alt="Main screen">
-<img src="shots/settings.png" width="200" alt="Settings">
-<img src="shots/help.png" width="200" alt="Help">
-
-<sub>GO screen &nbsp;&bull;&nbsp; Settings &nbsp;&bull;&nbsp; Help</sub>
-
+<img src="shots/main.png" width="200" alt="Main screen"> <img src="shots/settings.png" width="200" alt="Settings"> <img src="shots/help.png" width="200" alt="Help">
 </div>
 
-## Device roles
+CarApp runs on two devices: an Android phone and an Android tablet used as a car dash. The same APK goes on both. The role is detected from the device model (Lenovo Tab Plus TB351FU is the tablet, anything else is the phone) and can be overridden in Settings. The phone is locked to portrait.
 
-The same APK goes on both devices. The role is detected from the device model (the Lenovo Tab Plus TB351FU is the tablet, anything else is the phone) and can be overridden in Settings.
+## What it does
 
 | Phone | Tablet |
 | --- | --- |
-| GO / Shut down and the GO widget | Drive widget (opens CarApp) |
-| Asks for location, mobile data, hotspot when off | Wi-Fi and Bluetooth on, connects the car stereo |
-| Sends GPS over the hotspot | Receives GPS and feeds it to Maps as a mock location |
-| | Opens the saved launcher app pair chosen in Settings |
-| | Reverse camera from a USB webcam |
+| GO and Shut down, in the app and as a widget | GO runs by itself when the phone calls |
+| Turns on only what is off: mobile data, hotspot, precise location (standard Android prompts) | Turns on Wi-Fi and Bluetooth, joins the phone hotspot |
+| Wakes the tablet | Connects the car stereo you chose |
+| Sends GPS to the tablet | Opens the app pair you saved in the Lenovo launcher |
+| | Uses the phone GPS as a mock location |
+| | Shows a rearview USB camera |
 
-## GO and Shut down
-
-One tap on the phone runs the sequence, a second tap shuts down. Every step checks first and skips what is already right.
-
-| GO does | Shut down does |
-| --- | --- |
-| Phone: location off = the system "Turn on location" dialog; mobile data or hotspot off = a CarApp dialog that opens its settings screen | Phone: leaves data and location; offers to turn off a hotspot GO turned on |
-| Tablet: wakes, Wi-Fi and Bluetooth on, connects the car stereo | Tablet: disconnects the stereo, Wi-Fi and Bluetooth back as before |
-| Tablet: opens the saved app pair | Tablet: closes CarApp and the pair, screen off if it was |
-| Shares GPS with the tablet | Stops GPS and the link |
-
-## Features
-
-| | |
-| --- | --- |
-| **GPS sharing** | The phone sends its location over the hotspot (UDP 47474), the tablet replays it as a mock location. For tablets without working GPS. |
-| **Rear camera** | A USB webcam powered from the reverse light. Reverse on, the camera appears full screen, even over the lockscreen. Reverse off, it closes. |
-| **Saved app pair** | On GO the tablet taps the launcher pair you chose (Settings, Drive, Open on GO), for example Maps/Spotify. CarApp never builds a split itself. |
-| **Hotspot auto-join** | The tablet joins the phone's hotspot on its own. |
-| **Boot autostart** | GPS and the receivers start on boot. |
-| **Debug screen** | A check per part (helper, mock location, GPS, hotspot join, car stereo, rear camera, boot receiver) with Fix and test buttons. |
-
-## Known limits
-
-- Android 16 has no app API for hotspot, mobile data or location, so the phone asks the user the standard way. The phone uses no Accessibility at all.
-- On the tablet the optional CarApp helper (Accessibility) hears the phone's GO, taps the Wi-Fi tile and the Bluetooth dialog (no app API either), and taps the pair icon: ZUI keeps app pairs inside its launcher and starts them through hidden APIs. Keep the pair on the first home screen page.
-- The helper matches English labels. A system update can move them and break the tapping until CarApp is updated.
+```mermaid
+sequenceDiagram
+    participant P as Phone
+    participant T as Tablet
+    P->>P: data, hotspot, location (only if off)
+    P->>T: wake packet, then GPS
+    T->>T: Wi-Fi + Bluetooth on, join hotspot
+    T->>T: connect car stereo
+    T->>T: open saved split pair directly
+```
 
 ## Setup
 
-1. Install the APK on both the phone and the tablet.
-2. Open CarApp on each and grant the one-time permissions it asks for (location, nearby devices on the tablet, notifications, camera and microphone for the webcam, battery optimisation exemption on the tablet).
-3. On the tablet, turn on CarApp helper in Settings > Accessibility.
-4. On the tablet, set CarApp as the mock location app in Developer options > Select mock location app.
-5. On the tablet, plug in the webcam once and pick "Always open CarApp" for that USB device.
-6. On the tablet, save an app pair on the launcher (long press an app, Split screen), show the home screen once, then pick it in Settings, Drive, Open on GO. Pick the car stereo in Settings.
-7. Add the GO widget on the phone.
+1. Install the APK from [Releases](https://github.com/nathanrodrigues2111/lazycar/releases/latest) on both devices.
+2. Open CarApp on each device and grant the one-time permissions it asks for.
+3. Tablet: enable the CarApp helper once in Settings > Accessibility. It is what lets GO run without touching the tablet.
+4. Tablet: choose CarApp as the mock location app in Developer options.
+5. Tablet: in the Lenovo launcher, save your split pair (for example Maps and a music app) and keep it on the first home page. In CarApp Settings, Drive, set "Open on GO" to that pair.
+6. Tablet: pick your car stereo in Settings.
+7. Phone: add the GO widget if you want one-tap from the home screen.
 
-Settings sections: Car stereo and Drive (tablet), GPS, Camera, Connection (hotspot), Advanced (device role, shut down, help, debug).
+## How GO and Shut down work
 
-## Rear camera hardware
+Every step checks first and skips what is already right. The button toggles between GO and Shut down.
 
-The app does not detect reverse gear. The webcam's USB power is cut by a relay driven by the reverse lamp, so reverse plugs the camera in and Android auto-launches CarApp on `USB_DEVICE_ATTACHED`.
+| GO | Shut down |
+| --- | --- |
+| Phone: turns on data, hotspot, location only if off, using standard Android prompts | Phone: turns off only what GO turned on |
+| Phone: wakes the tablet, starts sending GPS | Phone: stops GPS |
+| Tablet: Wi-Fi and Bluetooth on, joins the hotspot, connects the stereo | Tablet: disconnects the stereo, restores Wi-Fi and Bluetooth to how they were |
+| Tablet: opens the saved pair directly, without showing the CarApp screen (fix in progress) | Tablet: closes what GO opened, screen off |
 
-Parts: a UVC USB webcam, a USB 2.0 extension (5 m passive max, use an active one for longer), a 12 V relay or relay module, a USB-C OTG adapter, an add-a-fuse tap.
+Shut down never touches anything GO did not change.
+
+## Rear camera
+
+The app does not detect reverse gear. A relay driven by the reverse lamp powers a UVC USB webcam, so Android launches CarApp on `USB_DEVICE_ATTACHED` when you reverse. In the tablet USB prompt choose "Always open CarApp".
+
+Parts: UVC webcam, USB 2.0 extension (5 m passive max), 12 V relay or relay module, USB-C OTG adapter, add-a-fuse tap.
 
 ```
  Reverse lamp +12V ──────────┐
- Reverse lamp GND ────────┐  │
-                          │  │  (coil)
+ Reverse lamp GND ────────┐  │   (coil)
                        ┌──┴──┴──┐
                        │ RELAY  │
                        └──┬───┬─┘
-                          │   │  (contacts, normally open)
  USB extension red (+5V) ─┘   └─ USB extension red (+5V) continues
-        the other 3 USB wires (D+, D-, GND) pass through uncut
+   D+, D-, GND pass through uncut
 
- TABLET ──[USB-C OTG]──[USB extension, +5V through relay]──[WEBCAM]
+ TABLET ──[USB-C OTG]──[USB extension, +5V via relay]──[WEBCAM]
 ```
 
-- Cut only the red +5 V wire of the extension and route it through the relay's normally open contacts.
-- A bare relay needs a 1N4007 across the coil. Relay modules have it built in.
-- Use a Swipe lockscreen on the tablet. Showing over the lockscreen does not work over PIN or pattern.
-- Most tablets cannot charge while hosting USB. Use a powered USB-C hub with PD if the tablet supports host plus charge.
+- Cut only the red +5 V wire and route it through the relay's normally open contacts.
+- A bare relay needs a 1N4007 across the coil. Modules have it built in.
+- Use a Swipe lockscreen on the tablet. Showing over the lockscreen does not work with PIN or pattern.
+- Most tablets cannot charge while hosting USB. Use a powered USB-C hub if yours supports host plus charge.
 
-## Install
+## Permissions
 
-Download the APK from the [Releases page](https://github.com/nathanrodrigues2111/lazycar/releases/latest) and install it on both devices, or build from source:
-
-- Install JDK 17 and the Android SDK.
-- Run `./gradlew assembleDebug`.
-- The APK lands at `app/build/outputs/apk/debug/CarApp.apk`.
+| Permission | Why |
+| --- | --- |
+| Location (fine, coarse) | Phone GPS source, and Android requires it for hotspot and Wi-Fi |
+| Mock location app (Developer options) | Tablet replays the phone GPS to Maps |
+| Bluetooth connect | Tablet connects the car stereo |
+| Wi-Fi state, Wi-Fi multicast | Join the hotspot, receive GPS packets |
+| Network state, internet | Local socket between phone and tablet (no internet traffic) |
+| Accessibility (tablet, CarApp helper) | Wake on the phone packet, switch Wi-Fi and Bluetooth, open the saved pair |
+| Camera, microphone | Rearview USB webcam |
+| Notifications, foreground service | Keep GPS running, show its status |
+| Boot completed | Restart GPS on boot |
+| Ignore battery optimisation | Keep the tablet receiver alive |
 
 ## Privacy
 
-CarApp makes no internet requests and collects no data. GPS and settings only travel between the phone and the tablet on the phone's hotspot. The Accessibility service runs on the tablet only and is used only to operate system panels: the Bluetooth prompts, the Wi-Fi Quick Settings tile, and the launcher's app pair icon.
+CarApp makes no internet requests and collects no data. GPS and settings travel only between the phone and tablet over the phone hotspot.
 
-<details>
-<summary><b>Testing notes</b></summary>
+## Build from source
 
-<br>
+Needs JDK 17 and the Android SDK.
 
-Watch live logs with `adb logcat -d | grep " E LazyCar"` (the app logs at error level).
+```
+./gradlew assembleRelease
+```
 
-</details>
+Release builds are signed with a private local keystore. Without it, use `./gradlew assembleDebug`.
+
+## Removed in 0.7.0
+
+Music player and library, tablet audio streaming (sync, calibration, speaker handoff), CarApp-built split screen, and the phone accessibility service. The phone now uses standard Android prompts only.
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
-
----
-
-<div align="center"><sub>Built with Kotlin, Material 3, and one Accessibility service on the tablet.</sub></div>
+MIT. See [LICENSE](LICENSE).
