@@ -65,6 +65,13 @@
             android:parentActivityName=".MainActivity" />
 
         <activity
+            android:name=".UnlockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.Translucent" />
+
+        <activity
             android:name=".GoActivity"
             android:exported="true"
             android:excludeFromRecents="true"

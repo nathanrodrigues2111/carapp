@@ -21,6 +21,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import kotlin.concurrent.thread
+import com.lazyneil.lazycar.gps.GpsService
 
 /** Tablet in the car: the phone hotspot as a Wi-Fi suggestion, and the phone's GO waking the tablet. */
 object Drive {
@@ -164,7 +165,12 @@ class SplitService : AccessibilityService() {
         // Screen on first: an activity's turnScreenOn does nothing when CarApp's task already exists (onNewIntent).
         @Suppress("DEPRECATION") pm.newWakeLock(
             android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP, "CarApp:wake").acquire(5000)
-        startActivity(Intent(this, DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("wake", true))
+        if (Prefs(this).goPair.isEmpty()) startActivity(Intent(this, DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("wake", true))
+        else {   // a saved pair opens straight away: no CarApp screen, what its open starts runs from here
+            Prefs(this).shutDown = false
+            GpsService.startIfIdle(this); Drive.join(this); PhoneLink.start(this)
+            if (getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked) startActivity(Intent(this, UnlockActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
         if (first) main.postDelayed({ tabletGo() }, 1500)   // past the keyguard CarApp dismissed
     }
 
@@ -271,5 +277,18 @@ class SplitService : AccessibilityService() {
                 main.postDelayed({ end() }, 900)
             }, 1200)
         }, 600)
+    }
+}
+
+/** No UI: past a swipe lock for GO's pair, then gone. A secure lock still asks the user. */
+class UnlockActivity : android.app.Activity() {
+    override fun onCreate(b: android.os.Bundle?) {
+        super.onCreate(b)
+        setShowWhenLocked(true); setTurnScreenOn(true)
+        getSystemService(android.app.KeyguardManager::class.java).requestDismissKeyguard(this, object : android.app.KeyguardManager.KeyguardDismissCallback() {
+            override fun onDismissSucceeded() { finish() }
+            override fun onDismissCancelled() { finish() }
+            override fun onDismissError() { finish() }
+        })
     }
 }
