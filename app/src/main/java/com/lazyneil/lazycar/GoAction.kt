@@ -130,7 +130,7 @@ object GoAction {
         p.shutDown = true; quietUntil = SystemClock.uptimeMillis() + BT_WAIT_MS
         if (Role.isTablet(ctx)) return stopTablet(ctx, p, fromPeer)
         // First, while the hotspot still carries the link: the tablet restores its own side.
-        if (!fromPeer) LinkService.shutDownTablets()
+        if (!fromPeer) { LinkService.shutDownTablets(); Drive.wakeTablet(ctx, stop = true) }
         setState(ctx, p, STOPPING)
         com.lazyneil.lazycar.gps.GpsService.launch(ctx, "stop", save = false)
         val end = 1800L

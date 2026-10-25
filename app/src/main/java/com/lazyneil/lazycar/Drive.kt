@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
@@ -41,14 +42,15 @@ object Drive {
     }
 
     /** Phone GO: wake the tablet's CarApp ([SplitService] listens). Once a second for 20 s, the tablet ignores repeats.
+     *  Phone Shut down ([stop]): the same way for 5 s, so the tablet closes its side also when the link is down.
      *  A sleeping tablet's Wi-Fi drops broadcasts (measured), so besides the broadcasts every host of each small
      *  subnet (hotspot or home Wi-Fi, /24 or smaller) gets a unicast copy: ~254 tiny packets a second. */
-    fun wakeTablet(ctx: Context) = thread(name = "wake-send", isDaemon = true) {
-        val p = Prefs(ctx); val msg = SplitService.WAKE.toByteArray()
+    fun wakeTablet(ctx: Context, stop: Boolean = false) = thread(name = "wake-send", isDaemon = true) {
+        val p = Prefs(ctx); val msg = (if (stop) SplitService.STOP else SplitService.WAKE).toByteArray()
         try { DatagramSocket().use { s ->
             s.broadcast = true
-            repeat(20) {
-                if (p.shutDown) return@thread
+            repeat(if (stop) 5 else 20) {
+                if (p.shutDown != stop) return@thread
                 val to = mutableSetOf<InetAddress>(InetAddress.getByName("255.255.255.255"))
                 try { for (ni in NetworkInterface.getNetworkInterfaces()) if (ni.isUp && !ni.isLoopback) for (ia in ni.interfaceAddresses) {
                     val b = ia.broadcast ?: continue; to += b
@@ -80,6 +82,7 @@ class SplitService : AccessibilityService() {
         fun press(vararg texts: String, ms: Long = 30_000) { self?.press(texts.toList(), ms) }
         const val PORT = 47478
         const val WAKE = "CARWAKE"
+        const val STOP = "CARSTOP"
         private const val ZUI_LAUNCHER = "com.zui.launcher"
         // ponytail: English ZUI labels; a localized ZUI needs its pair prefix here.
         const val PAIR = "App pair: "
@@ -146,7 +149,10 @@ class SplitService : AccessibilityService() {
             sock = s; val buf = ByteArray(16)
             while (self === this) {
                 val p = DatagramPacket(buf, buf.size); s.receive(p)
-                if (String(buf, 0, p.length) == WAKE) main.post { wake() }
+                when (String(buf, 0, p.length)) {
+                    WAKE -> main.post { wake() }
+                    STOP -> main.post { if (!Prefs(this).shutDown) GoAction.stop(applicationContext, fromPeer = true) }
+                }
             }
         }
     } catch (e: Exception) { if (self === this) Log.e("LazyCar", "wake listen: $e") } }
@@ -161,6 +167,7 @@ class SplitService : AccessibilityService() {
         if (first) wokeScreen = !pm.isInteractive
         opened = true
         Log.e("LazyCar", "wake: phone GO (screen was ${if (wokeScreen) "off" else "on"})")
+        closedAt = -60_000L
         GoAction.quietUntil = 0   // a GO right after a Shut down is a real open, never "back from Shut down's dialog"
         // Screen on first: an activity's turnScreenOn does nothing when CarApp's task already exists (onNewIntent).
         @Suppress("DEPRECATION") pm.newWakeLock(
@@ -236,21 +243,30 @@ class SplitService : AccessibilityService() {
     }
 
     // What the phone's GO did here, so its Shut down undoes exactly that (see [close]).
-    // ponytail: in memory, a helper restart between GO and Shut down forgets it (nothing is undone then).
+    // ponytail: in memory, a helper restart between GO and Shut down forgets it (then only the pair and the screen).
     private var opened = false; private var openedPair = ""; private var wokeScreen = false
-    /** Phone Shut down: back to square one, only undoing what its GO did: the car stereo, CarApp's screens, the pair
-     *  (swiped away in Recents, ZUI has no API to close another app), Wi-Fi and Bluetooth, screen off if it was. */
+    private var closedAt = -60_000L   // the link's and the broadcast's Shut down are one
+    /** Shut down: back to square one. Always: music paused, Maps navigation ended, the saved pair swiped away in Recents
+     *  (ZUI has no API to close another app), its media player hidden in the shade, home, screen off. Only what the
+     *  phone's GO did: the car stereo, Wi-Fi and Bluetooth back off. */
     fun close() {
+        val now = SystemClock.elapsedRealtime(); if (now - closedAt < 30_000) return; closedAt = now
         val p = Prefs(this)
-        if (!opened) { p.clearSnap(); return }; opened = false
-        val pair = openedPair; openedPair = ""
-        val lock = wokeScreen; val wifiOff = !p.snapWifiWasOn; val btOff = !p.snapBtWasOn
-        Log.e("LazyCar", "close: CarApp${if (pair.isNotEmpty()) " + $pair" else ""}, stereo off: ${!p.snapConn1}, wifi off: $wifiOff, bt off: $btOff, screen off: $wokeScreen")
-        if (p.mac1.isNotEmpty() && !p.snapConn1) GoAction.disconnectA2dp(this, p.mac1)
+        val was = opened; opened = false
+        val pair = openedPair.ifEmpty { p.goPair }; openedPair = ""
+        val wifiOff = was && !p.snapWifiWasOn; val btOff = was && !p.snapBtWasOn
+        Log.e("LazyCar", "close: CarApp${if (pair.isNotEmpty()) " + $pair" else ""}, after GO: $was, wifi off: $wifiOff, bt off: $btOff")
+        if (was && p.mac1.isNotEmpty() && !p.snapConn1) GoAction.disconnectA2dp(this, p.mac1)
         p.clearSnap()
+        getSystemService(android.media.AudioManager::class.java).apply { if (isMusicActive) for (a in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP))
+            dispatchMediaKeyEvent(KeyEvent(a, KeyEvent.KEYCODE_MEDIA_PAUSE)) }
+        // A removed Maps task ends navigation too, but going to Recents may first shrink it to picture in picture.
+        windows.mapNotNull { it.root }.filter { it.packageName == "com.google.android.apps.maps" }
+            .flatMap { it.findAccessibilityNodeInfosByText("Close navigation") }.firstOrNull()?.let { Log.e("LazyCar", "close: navigation ended ${click(it)}") }
         fun end() {
             fun done() { getSystemService(android.app.ActivityManager::class.java).appTasks.forEach { it.finishAndRemoveTask() }
-                performGlobalAction(GLOBAL_ACTION_HOME); if (lock) main.postDelayed({ performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) }, 800) }
+                performGlobalAction(GLOBAL_ACTION_HOME)
+                main.postDelayed({ hideMedia(pair) { performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) } }, 800) }
             // Bluetooth off is a dialog Android opens only for an app in front: CarApp first, then the dialog.
             fun bt() { if (!btOff) { done(); return }
                 startActivity(Intent(this, DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -277,6 +293,21 @@ class SplitService : AccessibilityService() {
                 main.postDelayed({ end() }, 900)
             }, 1200)
         }, 600)
+    }
+
+    /** A paused player outlives its removed task in the shade (Spotify keeps its session): long-press its card, Hide. */
+    private fun hideMedia(pair: String, then: () -> Unit) {
+        val apps = label(pair).split("/").filter { it.isNotBlank() }
+        fun ui(id: String) = windows.mapNotNull { it.root }.filter { it.packageName == "com.android.systemui" }
+            .flatMap { it.findAccessibilityNodeInfosByViewId("com.android.systemui:id/$id") }
+        fun shut() { performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE); main.postDelayed(then, 500) }
+        if (apps.isEmpty()) { then(); return }
+        performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+        main.postDelayed({
+            val card = ui("qs_media_controls").firstOrNull { c -> apps.any { c.contentDescription?.endsWith("from $it") == true } }
+            if (card?.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) != true) { shut(); return@postDelayed }
+            main.postDelayed({ Log.e("LazyCar", "close: media player hidden ${ui("dismiss_text").firstOrNull()?.let { click(it) }}"); shut() }, 700)
+        }, 900)
     }
 }
 
