@@ -41,7 +41,8 @@ object Drive {
         Log.e("LazyCar", "hotspot suggestion '$ssid' secured=${pass.length >= 8} status=$r")
     }
 
-    /** Phone GO: wake the tablet's CarApp ([SplitService] listens). Once a second for 20 s, the tablet ignores repeats.
+    /** Phone GO: wake the tablet's CarApp ([SplitService] listens). Once a second for 90 s, the tablet ignores repeats:
+     *  a sleeping tablet can take a minute to rejoin the hotspot GO just turned on.
      *  Phone Shut down ([stop]): the same way for 5 s, so the tablet closes its side also when the link is down.
      *  A sleeping tablet's Wi-Fi drops broadcasts (measured), so besides the broadcasts every host of each small
      *  subnet (hotspot or home Wi-Fi, /24 or smaller) gets a unicast copy: ~254 tiny packets a second. */
@@ -49,7 +50,7 @@ object Drive {
         val p = Prefs(ctx); val msg = (if (stop) SplitService.STOP else SplitService.WAKE).toByteArray()
         try { DatagramSocket().use { s ->
             s.broadcast = true
-            repeat(if (stop) 5 else 20) {
+            repeat(if (stop) 5 else 90) {
                 if (p.shutDown != stop) return@thread
                 val to = mutableSetOf<InetAddress>(InetAddress.getByName("255.255.255.255"))
                 try { for (ni in NetworkInterface.getNetworkInterfaces()) if (ni.isUp && !ni.isLoopback) for (ia in ni.interfaceAddresses) {
@@ -157,17 +158,17 @@ class SplitService : AccessibilityService() {
         }
     } catch (e: Exception) { if (self === this) Log.e("LazyCar", "wake listen: $e") } }
 
-    private var wokeAt = -60_000L
+    private var wokeAt = -120_000L
     /** Phone GO: CarApp to the front with the screen on (like any open it ends a Shut down and starts GPS and the link),
-     *  then the chosen pair. Repeats within 30 s are the same GO. */
+     *  then the chosen pair. Repeats within 100 s (until a Shut down) are the same GO. */
     private fun wake() {
-        val now = SystemClock.elapsedRealtime(); if (now - wokeAt < 30_000) return; wokeAt = now
+        val now = SystemClock.elapsedRealtime(); if (now - wokeAt < 100_000) return; wokeAt = now
+        closedAt = -60_000L
         val pm = getSystemService(android.os.PowerManager::class.java)
         val first = !opened   // a later GO before a Shut down keeps what the first one did and its snapshot
         if (first) wokeScreen = !pm.isInteractive
         opened = true
         Log.e("LazyCar", "wake: phone GO (screen was ${if (wokeScreen) "off" else "on"})")
-        closedAt = -60_000L
         GoAction.quietUntil = 0   // a GO right after a Shut down is a real open, never "back from Shut down's dialog"
         // Screen on first: an activity's turnScreenOn does nothing when CarApp's task already exists (onNewIntent).
         @Suppress("DEPRECATION") pm.newWakeLock(
@@ -250,7 +251,7 @@ class SplitService : AccessibilityService() {
      *  (ZUI has no API to close another app), its media player hidden in the shade, home, screen off. Only what the
      *  phone's GO did: the car stereo, Wi-Fi and Bluetooth back off. */
     fun close() {
-        val now = SystemClock.elapsedRealtime(); if (now - closedAt < 30_000) return; closedAt = now
+        val now = SystemClock.elapsedRealtime(); if (now - closedAt < 30_000) return; closedAt = now; wokeAt = -120_000L   // the next GO is a new one
         val p = Prefs(this)
         val was = opened; opened = false
         val pair = openedPair.ifEmpty { p.goPair }; openedPair = ""
